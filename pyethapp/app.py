@@ -18,6 +18,7 @@ import ethereum.slogging as slogging
 import config as konfig
 from db_service import DBService
 from jsonrpc import JSONRPCServer
+from pow_service import PoWService
 from accounts import AccountsService
 from pyethapp import __version__
 import utils
@@ -26,9 +27,8 @@ slogging.configure(config_string=':debug')
 log = slogging.get_logger('app')
 
 
-services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService,
+services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
             JSONRPCServer, Console]
-services += utils.load_contrib_services()
 
 
 class EthApp(BaseApp):
@@ -50,8 +50,10 @@ class EthApp(BaseApp):
               help='log as structured json output')
 @click.option('bootstrap_node', '--bootstrap_node', '-b', multiple=False, type=str,
               help='single bootstrap_node as enode://pubkey@host:port')
+@click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
+              help='pct cpu used for mining')
 @click.pass_context
-def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json):
+def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json, mining_pct):
 
     # configure logging
     log_config = log_config or ':info'
@@ -85,6 +87,10 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
                                '(example: "-c jsonrpc.port=5000")')
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
+
+    if mining_pct > 0:
+        config['pow']['activated'] = True
+        config['pow']['cpu_pct'] = int(min(100, mining_pct))
 
     ctx.obj = {'config': config}
 
