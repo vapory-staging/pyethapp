@@ -33,7 +33,8 @@ install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
     'https://github.com/ethereum/pyrlp/tarball/develop': 'rlp>=0.3.8',
     'https://github.com/ethereum/pydevp2p/tarball/master': 'devp2p>=0.4.0',
-    'https://github.com/ethereum/pyethereum/tarball/develop': 'ethereum>=0.9.65'}
+    'https://github.com/ethereum/pyethereum/tarball/develop': 'ethereum>=0.9.65',
+    'https://github.com/ethereum/ethash/tarball/master': 'pyethash'}
 
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 

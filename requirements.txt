@@ -10,4 +10,5 @@ ipython
 gipc
 https://github.com/ethereum/pyrlp/tarball/develop
 https://github.com/ethereum/pydevp2p/tarball/master
+https://github.com/ethereum/ethash/tarball/master
 https://github.com/ethereum/pyethereum/tarball/develop
