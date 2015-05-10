@@ -176,7 +176,11 @@ class ChainService(WiredService):
                     continue
 
                 if self.chain.add_block(block):
-                    log.info('added', block=block, ts=time.time())
+                    now = time.time()
+                    total = now - t_block.newblock_timestamp if t_block.newblock_timestamp else 0
+                    log.info('added', block=block, ts=now, total_elapsed=total)
+                else:
+                    log.warn('could not add', block=block)
                 self.block_queue.get()  # remove block from queue (we peeked only)
                 gevent.sleep(0.001)
         finally:

@@ -1024,8 +1024,11 @@ class NewBlockFilter(object):
         self.pending = pending
         self.latest = latest
         self.new_block_event = gevent.event.Event()
-        self._new_block_cb = lambda b: self.new_block_event.set()
-        self.chainservice.on_new_head_cbs.append(self._new_block_cb)
+
+        def _new_block_cb(b):
+            log.debug('newblock cb called', filter=self, ts=time.time())
+            self.new_block_event.set()
+        self.chainservice.on_new_head_cbs.append(_new_block_cb)
 
     def __repr__(self):
         return '<NewBlockFilter(latest=%r, pending=%r)>' % (self.latest, self.pending)
@@ -1046,9 +1049,10 @@ class NewBlockFilter(object):
         if self.new_block_event.is_set():
             self.new_block_event.clear()
         log.debug('NewBlockFilter, waiting for event', ts=time.time())
-        if self.new_block_event.wait(timeout=0.9):
+        if self.new_block_event.wait(timeout=0.95):
             log.debug('NewBlockFilter, got new_block event', ts=time.time())
             return self.check()
+        log.debug('event timeout', ts=time.time())
 
 
 class FilterManager(Subdispatcher):

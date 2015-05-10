@@ -3,6 +3,7 @@ from ethereum.transactions import Transaction
 from ethereum.blocks import Block, BlockHeader
 import rlp
 import gevent
+import time
 from ethereum import slogging
 log = slogging.get_logger('protocol.eth')
 
@@ -158,7 +159,7 @@ class ETHProtocol(BaseProtocol):
             # print rlp_data.encode('hex')
             ll = rlp.decode_lazy(rlp_data)
             assert len(ll) == 2
-            transient_block = TransientBlock(ll[0])
+            transient_block = TransientBlock(ll[0], time.time())
             difficulty = rlp.sedes.big_endian_int.deserialize(ll[1])
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
@@ -174,7 +175,8 @@ class TransientBlock(rlp.Serializable):
         ('uncles', rlp.sedes.CountableList(BlockHeader))
     ]
 
-    def __init__(self, block_data):
+    def __init__(self, block_data, newblock_timestamp=0):
+        self.newblock_timestamp = newblock_timestamp
         self.header = BlockHeader.deserialize(block_data[0])
         self.transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
         self.uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
