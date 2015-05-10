@@ -30,19 +30,19 @@ class Miner(gevent.Greenlet):
     def _run(self):
         nonce = random.randint(0, TT64M1)
         while not self.is_stopped:
-            log_sub.debug('starting mining round')
+            log_sub.trace('starting mining round')
             st = time.time()
             bin_nonce, mixhash = mine(self.block_number, self.difficulty, self.mining_hash,
                                       start_nonce=nonce, rounds=self.rounds)
             elapsed = time.time() - st
             if bin_nonce:
-                log_sub.debug('nonce found')
+                log_sub.info('nonce found')
                 self.nonce_callback(bin_nonce, mixhash, self.mining_hash)
                 break
             delay = elapsed * (1 - self.cpu_pct / 100.)
             hashrate = int(self.rounds // (elapsed + delay))
             self.hashrate_callback(hashrate)
-            log_sub.debug('sleeping', delay=delay, elapsed=elapsed, rounds=self.rounds)
+            log_sub.trace('sleeping', delay=delay, elapsed=elapsed, rounds=self.rounds)
             gevent.sleep(delay + 0.001)
             nonce += self.rounds
             # adjust
@@ -68,12 +68,12 @@ class PoWWorker(object):
         self.cpu_pct = cpu_pct
 
     def send_found_nonce(self, bin_nonce, mixhash, mining_hash):
-        log_sub.debug('sending nonce')
+        log_sub.info('sending nonce')
         self.cpipe.put(('found_nonce', dict(bin_nonce=bin_nonce, mixhash=mixhash,
                                             mining_hash=mining_hash)))
 
     def send_hashrate(self, hashrate):
-        log_sub.debug('sending hashrate')
+        log_sub.trace('sending hashrate')
         self.cpipe.put(('hashrate', dict(hashrate=hashrate)))
 
     def recv_set_cpu_pct(self, cpu_pct):
@@ -83,7 +83,7 @@ class PoWWorker(object):
 
     def recv_mine(self, mining_hash, block_number, difficulty):
         "restarts the miner"
-        log_sub.debug('received new new mining task')
+        log_sub.debug('received new mining task', difficulty=difficulty)
         assert isinstance(block_number, int)
         if self.miner:
             self.miner.stop()
@@ -132,18 +132,18 @@ class PoWService(BaseService):
                                          block_number=block.number, difficulty=block.difficulty)))
 
     def recv_hashrate(self, hashrate):
-        log.debug('hashrate updated', hashrate=hashrate)
+        log.trace('hashrate updated', hashrate=hashrate)
         self.hashrate = hashrate
 
     def recv_found_nonce(self, bin_nonce, mixhash, mining_hash):
-        log.debug('nonce found', mining_hash=mining_hash.encode('hex'))
-        blk = app.services.chain.chain.head_candidate
+        log.info('nonce found', mining_hash=mining_hash.encode('hex'))
+        blk = self.app.services.chain.chain.head_candidate
         if blk.mining_hash != mining_hash:
-            log.debug('mining_hash does not match')
+            log.warn('mining_hash does not match')
             return
         blk.mixhash = mixhash
         blk.nonce = bin_nonce
-        app.services.chain.add_mined_block(blk)
+        self.app.services.chain.add_mined_block(blk)
 
     def _run(self):
         self.on_new_head_candidate(self.app.services.chain.chain.head_candidate)

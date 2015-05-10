@@ -53,7 +53,8 @@ class EthApp(BaseApp):
 @click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
 @click.pass_context
-def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json, mining_pct):
+def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
+        mining_pct):
 
     # configure logging
     log_config = log_config or ':info'
@@ -87,7 +88,6 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
                                '(example: "-c jsonrpc.port=5000")')
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
-
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
@@ -99,9 +99,24 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
 
 @app.command()
 @click.option('--dev/--nodev', default=False, help='Exit at unhandled exceptions')
+@click.option('--nodial/--dial',  default=False, help='do not dial nodes')
+@click.option('--fake/--nofake',  default=False, help='fake genesis difficulty')
 @click.pass_context
-def run(ctx, dev):
+def run(ctx, dev, nodial, fake):
     """Start the client ( --dev to stop on error)"""
+    config = ctx.obj['config']
+    if nodial:
+        # config['deactivated_services'].append(PeerManager.name)
+        # config['deactivated_services'].append(NodeDiscovery.name)
+        config['discovery']['bootstrap_nodes'] = []
+        config['discovery']['listen_port'] = 29873
+        config['p2p']['listen_port'] = 29873
+        config['p2p']['min_peers'] = 0
+
+    if fake:
+        from ethereum import blocks
+        blocks.GENESIS_DIFFICULTY = 1024
+        blocks.BLOCK_DIFF_FACTOR = 16
     # create app
     app = EthApp(ctx.obj['config'])
 

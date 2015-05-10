@@ -123,7 +123,8 @@ class ChainService(WiredService):
 
     def add_mined_block(self, block):
         log.debug('adding mined block', block=block)
-        assert block.check_pow()
+        assert isinstance(block, Block)
+        assert block.header.check_pow()
         if self.chain.add_block(block):
             log.info('added', block=block, ts=time.time())
             assert block == self.chain.head
