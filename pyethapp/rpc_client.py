@@ -89,7 +89,7 @@ def tx_example():
         print 'tx hash', res.encode('hex')
 
 
-def signed_tx_example():
+def signed_tx_example(to=z_address, value=100):
     from ethereum.transactions import Transaction
     from pyethapp.accounts import mk_privkey, privtoaddr
     secret_seed = 'wow'
@@ -99,7 +99,7 @@ def signed_tx_example():
     nonce = quantity_decoder(
         JSONRPCClient().call('eth_getTransactionCount', address_encoder(sender), 'pending'))
     # create transaction
-    tx = Transaction(nonce, default_gasprice, default_startgas, to=z_address, value=100, data='')
+    tx = Transaction(nonce, default_gasprice, default_startgas, to=z_address, value=value, data='')
     tx.sign(privkey)
     tx_dict = tx.to_dict()
     tx_dict.pop('hash')
