@@ -91,6 +91,8 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
+    else:
+        config['deactivated_services'].append(PoWService.name)
 
     ctx.obj = {'config': config}
 
