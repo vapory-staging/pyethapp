@@ -13,6 +13,8 @@ from devp2p.service import WiredService
 import eth_protocol
 import gevent
 import gevent.lock
+import statistics
+from collections import deque
 from gevent.queue import Queue
 log = get_logger('eth.chainservice')
 
@@ -48,6 +50,21 @@ class DuplicatesFilter(object):
         else:
             self.filter.append(self.filter.pop(0))
             return True
+
+
+def update_watcher(chainservice):
+    timeout = 180
+    d = dict(head=chainservice.chain.head)
+
+    def up(b):
+        log.debug('watcher head updated')
+        d['head'] = b
+    chainservice.on_new_head_cbs.append(lambda b: up(b))
+
+    while True:
+        last = d['head']
+        gevent.sleep(timeout)
+        assert last != d['head'], 'no updates for %d secs' % timeout
 
 
 class ChainService(WiredService):
@@ -90,6 +107,8 @@ class ChainService(WiredService):
         self.broadcast_filter = DuplicatesFilter()
         self.on_new_head_cbs = []
         self.on_new_head_candidate_cbs = []
+        self.newblock_processing_times = deque(maxlen=1000)
+        # gevent.spawn(update_watcher, self)
 
     @property
     def is_syncing(self):
@@ -178,8 +197,16 @@ class ChainService(WiredService):
 
                 if self.chain.add_block(block):
                     now = time.time()
-                    total = now - t_block.newblock_timestamp if t_block.newblock_timestamp else 0
-                    log.info('added', block=block, ts=now, total_elapsed=total)
+                    log.info('added', block=block, ts=now)
+                    if t_block.newblock_timestamp:
+                        total = now - t_block.newblock_timestamp
+                        self.newblock_processing_times.append(total)
+                        avg = statistics.mean(self.newblock_processing_times)
+                        med = statistics.median(self.newblock_processing_times)
+                        max_ = max(self.newblock_processing_times)
+                        min_ = min(self.newblock_processing_times)
+                        log.info('processing time', last=total, avg=avg, max=max_, min=min_,
+                                 median=med)
                 else:
                     log.warn('could not add', block=block)
                 self.block_queue.get()  # remove block from queue (we peeked only)
