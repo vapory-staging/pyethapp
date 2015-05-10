@@ -224,6 +224,7 @@ class ChainService(WiredService):
         proto.receive_getblocks_callbacks.append(self.on_receive_getblocks)
         proto.receive_blocks_callbacks.append(self.on_receive_blocks)
         proto.receive_newblock_callbacks.append(self.on_receive_newblock)
+        proto.receive_newblockhashes_callbacks.append(self.on_newblockhashes)
 
         # send status
         head = self.chain.head
@@ -267,6 +268,14 @@ class ChainService(WiredService):
             self.add_transaction(tx, origin=proto)
 
     # blockhashes ###########
+
+    def on_newblockhashes(self, proto, newblockhashes):
+        """
+        msg sent out if not the full block is propagated
+        chances are high, that we get the newblock, though.
+        """
+        log.debug("recv newnewblockhashes", num=len(newblockhashes), remote_id=proto)
+        self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
     def on_receive_getblockhashes(self, proto, child_block_hash, count):
         log.debug("handle_get_blockhashes", count=count, block_hash=encode_hex(child_block_hash))

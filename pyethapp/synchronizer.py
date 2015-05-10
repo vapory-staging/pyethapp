@@ -30,11 +30,12 @@ class SyncTask(object):
     blocks_request_timeout = 8.  # 256 * ~2KB = 512KB
     blockhashes_request_timeout = 8.  # 32 * 2048 = 65KB
 
-    def __init__(self, synchronizer, proto, blockhash, chain_difficulty):
+    def __init__(self, synchronizer, proto, blockhash, chain_difficulty=0, originator_only=False):
         self.synchronizer = synchronizer
         self.chain = synchronizer.chain
         self.chainservice = synchronizer.chainservice
-        self.initiator_proto = proto
+        self.originating_proto = proto
+        self.originator_only = originator_only
         self.blockhash = blockhash
         self.chain_difficulty = chain_difficulty
         self.requests = dict()  # proto: Event
@@ -55,6 +56,12 @@ class SyncTask(object):
             log_st.debug('successfully synced')
         self.synchronizer.synctask_exited(success)
 
+    @property
+    def protocols(self):
+        if self.originator_only:
+            return [self.originating_proto]
+        return self.synchronizer.protocols
+
     def fetch_hashchain(self):
         log_st.debug('fetching hashchain')
         blockhashes_chain = [self.blockhash]  # youngest to oldest
@@ -69,7 +76,7 @@ class SyncTask(object):
             blockhashes_batch = []
 
             # try with protos
-            protocols = self.synchronizer.protocols
+            protocols = self.protocols
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -128,7 +135,7 @@ class SyncTask(object):
             t_blocks = []
 
             # try with protos
-            protocols = self.synchronizer.protocols
+            protocols = self.protocols
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -309,17 +316,34 @@ class Synchronizer(object):
         # memorize proto with difficulty
         self._protocols[proto] = chain_difficulty
 
-        if self.force_sync and not self.synctask:
+        if self.chainservice.knows_block(blockhash) or self.synctask:
+            log.debug('existing task or known hash, discarding')
+            return
+
+        if self.force_sync:
             blockhash, chain_difficulty = self.force_sync
             log.debug('starting forced syctask', blockhash=blockhash.encode('hex'))
             self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
 
         elif chain_difficulty > self.chain.head.chain_difficulty():
             log.debug('sufficient difficulty')
-            if blockhash not in self.chain and not self.synctask:
-                self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
-            else:
-                log.debug('existing task, discarding')
+            self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
+
+    def receive_newblockhashes(self, proto, newblockhashes):
+        """
+        no way to check if this really an interesting block at this point.
+        might lead to an amplification attack, need to track this proto and judge usefullness
+        """
+        log.debug('received newblockhashes', num=len(newblockhashes), proto=proto)
+        newblockhashes = [h for h in newblockhashes if not self.chainservice.knows_block(h)]
+        if (proto not in self.protocols) or (not newblockhashes) or self.synctask:
+            log.debug('discarding', known=bool(not newblockhashes), synctask=bool(self.synctask))
+            return
+        if len(newblockhashes) != 1:
+            log.warn('supporting only one newblockhash', num=len(newblockhashes))
+        blockhash = newblockhashes[0]
+        log.debug('starting synctask for newblockhashes', blockhash=blockhash.encode('hex'))
+        self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
 
     def receive_blocks(self, proto, t_blocks):
         log.debug('blocks received', proto=proto, num=len(t_blocks))
