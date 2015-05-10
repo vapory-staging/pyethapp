@@ -271,6 +271,9 @@ class Synchronizer(object):
         log.debug('newblock', proto=proto, block=t_block, chain_difficulty=chain_difficulty,
                   client=proto.peer.remote_client_version)
 
+        if t_block.header.hash in self.chain:
+            assert chain_difficulty == self.chain.get(t_block.header.hash).chain_difficulty()
+
         # memorize proto with difficulty
         self._protocols[proto] = chain_difficulty
 
@@ -287,14 +290,18 @@ class Synchronizer(object):
         if chain_difficulty >= self.chain.head.chain_difficulty():
             # broadcast duplicates filtering is done in eth_service
             log.debug('sufficient difficulty, broadcasting',
-                      client=proto.peer.remote_client_version, chain_difficulty=chain_difficulty,
-                      expected_difficulty=expected_difficulty)
+                      client=proto.peer.remote_client_version)
             self.chainservice.broadcast_newblock(t_block, chain_difficulty, origin=proto)
         else:
             # any criteria for which blocks/chains not to add?
-            log.debug('insufficient difficulty, dropping', client=proto.peer.remote_client_version,
-                      chain_difficulty=chain_difficulty, expected_difficulty=expected_difficulty)
-            return
+            max_age = 5
+            age = self.chain.head.number - t_block.header.number
+            log.debug('low difficulty', client=proto.peer.remote_client_version,
+                      chain_difficulty=chain_difficulty, expected_difficulty=expected_difficulty,
+                      block_age=age)
+            if age > max_age:
+                log.debug('newblock is too old, not adding', block_age=age, max_age=max_age)
+                return
 
         # unknown and pow check and highest difficulty
 
