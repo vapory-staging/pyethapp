@@ -82,6 +82,7 @@ class SyncTask(object):
                 return self.exit(success=False)
 
             for proto in protocols:
+                log.debug('syncing with', proto=proto)
                 if proto.is_stopped:
                     continue
 
@@ -109,6 +110,10 @@ class SyncTask(object):
                                 received=type(blockhashes_batch[0]))
                     continue
                 break
+
+            if not blockhashes_batch:
+                log_st.warn('syncing failed with all peers', num_protos=len(protocols))
+                return self.exit(success=False)
 
             for blockhash in blockhashes_batch:  # youngest to oldest
                 assert isinstance(blockhash, bytes)
