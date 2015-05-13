@@ -140,13 +140,17 @@ class PoWService(BaseService):
         blk = self.app.services.chain.chain.head_candidate
         if blk.mining_hash != mining_hash:
             log.warn('mining_hash does not match')
+            self.mine_head_candidate()
             return
         blk.mixhash = mixhash
         blk.nonce = bin_nonce
         self.app.services.chain.add_mined_block(blk)
 
-    def _run(self):
+    def mine_head_candidate(self):
         self.on_new_head_candidate(self.app.services.chain.chain.head_candidate)
+
+    def _run(self):
+        self.mine_head_candidate()
         while True:
             cmd, kargs = self.ppipe.get()
             assert isinstance(kargs, dict)
