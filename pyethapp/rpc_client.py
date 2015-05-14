@@ -111,6 +111,12 @@ def signed_tx_example(to=z_address, value=100):
         print 'tx hash', res.encode('hex')
 
 
+def get_balance(account):
+    b = quantity_decoder(
+        JSONRPCClient().call('eth_getBalance', address_encoder(account), 'pending'))
+    return b
+
+
 if __name__ == '__main__':
     call = JSONRPCClient()
     # signed_tx_example()
