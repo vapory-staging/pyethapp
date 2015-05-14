@@ -36,6 +36,7 @@ class EthApp(BaseApp):
                                              'py%d.%d.%d' % sys.version_info[:3])
     default_config = dict(BaseApp.default_config)
     default_config['client_version'] = client_version
+    default_config['post_app_start_callback'] = None
 
 
 @click.group(help='Welcome to ethapp version:{}'.format(EthApp.client_version))
@@ -91,7 +92,7 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
-    else:
+    if not config['pow']['activated']:
         config['deactivated_services'].append(PoWService.name)
 
     ctx.obj = {'config': config}
@@ -118,19 +119,19 @@ def run(ctx, dev, nodial, fake):
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
     # create app
-    app = EthApp(ctx.obj['config'])
+    app = EthApp(config)
 
     # development mode
     if dev:
         gevent.get_hub().SYSTEM_ERROR = BaseException
         try:
-            ctx.obj['config']['client_version'] += '/' + os.getlogin()
+            config['client_version'] += '/' + os.getlogin()
         except:
             log.warn("can't get and add login name to client_version")
             pass
 
     # dump config
-    konfig.dump_config(ctx.obj['config'])
+    konfig.dump_config(config)
 
     # register services
     for service in services:
@@ -142,6 +143,9 @@ def run(ctx, dev, nodial, fake):
 
     # start app
     app.start()
+
+    if config['post_app_start_callback'] is not None:
+        config['post_app_start_callback'](app)
 
     # wait for interrupt
     evt = Event()
