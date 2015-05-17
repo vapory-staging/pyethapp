@@ -249,6 +249,7 @@ class ChainService(WiredService):
     # wire protocol receivers ###########
 
     def on_wire_protocol_start(self, proto):
+        log.debug('----------------------------------')
         log.debug('on_wire_protocol_start', proto=proto)
         assert isinstance(proto, self.wire_protocol)
         # register callbacks
@@ -268,11 +269,12 @@ class ChainService(WiredService):
 
     def on_wire_protocol_stop(self, proto):
         assert isinstance(proto, self.wire_protocol)
+        log.debug('----------------------------------')
         log.debug('on_wire_protocol_stop', proto=proto)
 
     def on_receive_status(self, proto, eth_version, network_id, chain_difficulty, chain_head_hash,
                           genesis_hash):
-
+        log.debug('----------------------------------')
         log.debug('status received', proto=proto, eth_version=eth_version)
         assert eth_version == proto.version, (eth_version, proto.version)
         if network_id != self.config['eth'].get('network_id', proto.network_id):
@@ -298,6 +300,7 @@ class ChainService(WiredService):
 
     def on_receive_transactions(self, proto, transactions):
         "receives rlp.decoded serialized"
+        log.debug('----------------------------------')
         log.debug('remote_transactions_received', count=len(transactions), remote_id=proto)
         for tx in transactions:
             self.add_transaction(tx, origin=proto)
@@ -309,10 +312,12 @@ class ChainService(WiredService):
         msg sent out if not the full block is propagated
         chances are high, that we get the newblock, though.
         """
+        log.debug('----------------------------------')
         log.debug("recv newnewblockhashes", num=len(newblockhashes), remote_id=proto)
         self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
     def on_receive_getblockhashes(self, proto, child_block_hash, count):
+        log.debug('----------------------------------')
         log.debug("handle_get_blockhashes", count=count, block_hash=encode_hex(child_block_hash))
         max_hashes = min(count, self.wire_protocol.max_getblockhashes_count)
         found = []
@@ -339,6 +344,7 @@ class ChainService(WiredService):
         proto.send_blockhashes(*found)
 
     def on_receive_blockhashes(self, proto, blockhashes):
+        log.debug('----------------------------------')
         if blockhashes:
             log.debug("on_receive_blockhashes", count=len(blockhashes), remote_id=proto,
                       first=encode_hex(blockhashes[0]), last=encode_hex(blockhashes[-1]))
@@ -349,6 +355,7 @@ class ChainService(WiredService):
     # blocks ################
 
     def on_receive_getblocks(self, proto, blockhashes):
+        log.debug('----------------------------------')
         log.debug("on_receive_getblocks", count=len(blockhashes))
         found = []
         for bh in blockhashes[:self.wire_protocol.max_getblocks_count]:
@@ -361,6 +368,7 @@ class ChainService(WiredService):
             proto.send_blocks(*found)
 
     def on_receive_blocks(self, proto, transient_blocks):
+        log.debug('----------------------------------')
         blk_number = max(x.header.number for x in transient_blocks) if transient_blocks else 0
         log.debug("recv blocks", count=len(transient_blocks), remote_id=proto,
                   highest_number=blk_number)
@@ -368,5 +376,6 @@ class ChainService(WiredService):
             self.synchronizer.receive_blocks(proto, transient_blocks)
 
     def on_receive_newblock(self, proto, block, chain_difficulty):
+        log.debug('----------------------------------')
         log.debug("recv newblock", block=block, remote_id=proto)
         self.synchronizer.receive_newblock(proto, block, chain_difficulty)
