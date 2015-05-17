@@ -16,6 +16,7 @@ import gevent.lock
 import statistics
 from collections import deque
 from gevent.queue import Queue
+
 log = get_logger('eth.chainservice')
 
 
@@ -114,6 +115,12 @@ class ChainService(WiredService):
     def is_syncing(self):
         return self.synchronizer.synctask is not None
 
+    @property
+    def is_mining(self):
+        if 'pow' in self.app.services:
+            return self.app.services.pow.active
+        return False
+
     def _on_new_head(self, block):
         for cb in self.on_new_head_cbs:
             cb(block)
@@ -198,7 +205,7 @@ class ChainService(WiredService):
                     self.block_queue.get()
                     continue
                 log.info('adding', block=block, ts=time.time())
-                if self.chain.add_block(block):
+                if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
                     log.info('added', block=block, ts=now, txs=len(block.get_transactions()))
                     if t_block.newblock_timestamp:
