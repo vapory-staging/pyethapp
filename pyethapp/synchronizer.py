@@ -347,8 +347,8 @@ class Synchronizer(object):
         might lead to an amplification attack, need to track this proto and judge usefullness
         """
         log.debug('received newblockhashes', num=len(newblockhashes), proto=proto)
-        log.debug('DISABLED')
-        return
+        # log.debug('DISABLED')
+        # return
         newblockhashes = [h for h in newblockhashes if not self.chainservice.knows_block(h)]
         if (proto not in self.protocols) or (not newblockhashes) or self.synctask:
             log.debug('discarding', known=bool(not newblockhashes), synctask=bool(self.synctask))

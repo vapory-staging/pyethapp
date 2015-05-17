@@ -26,7 +26,7 @@ processblock_apply_transaction = processblock.apply_transaction
 def apply_transaction(block, tx):
     # import traceback
     # print traceback.print_stack()
-    log.debug('apply_transaction ctx switch', at=time.time())
+    log.debug('apply_transaction ctx switch', tx=tx.hash.encode('hex')[:8])
     gevent.sleep(0.001)
     return processblock_apply_transaction(block, tx)
 processblock.apply_transaction = apply_transaction
@@ -126,6 +126,9 @@ class ChainService(WiredService):
     def add_transaction(self, tx, origin=None):
         assert isinstance(tx, Transaction)
         log.debug('add_transaction', locked=self.add_transaction_lock.locked())
+        if not origin and self.is_syncing:
+            log.debug('syncing, discarding tx')
+            return
         self.add_transaction_lock.acquire()
         success = self.chain.add_transaction(tx)
         self.add_transaction_lock.release()
@@ -184,7 +187,7 @@ class ChainService(WiredService):
                     st = time.time()
                     block = t_block.to_block(db=self.chain.db)
                     elapsed = time.time() - st
-                    log.debug('deserialized', elapsed='%.4fs' % elapsed,
+                    log.debug('deserialized', elapsed='%.4fs' % elapsed, ts=time.time(),
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
                 except processblock.InvalidTransaction as e:
                     log.warn('invalid transaction', block=t_block, error=e, FIXME='ban node')
@@ -194,10 +197,10 @@ class ChainService(WiredService):
                     log.warn('verification failed', error=e, FIXME='ban node')
                     self.block_queue.get()
                     continue
-
+                log.info('adding', block=block, ts=time.time())
                 if self.chain.add_block(block):
                     now = time.time()
-                    log.info('added', block=block, ts=now)
+                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()))
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
                         self.newblock_processing_times.append(total)
@@ -321,7 +324,7 @@ class ChainService(WiredService):
         last = child_block_hash
         while len(found) < max_hashes:
             try:
-                last = rlp.decode_lazy(self.chain.db.get(last))[0][0]
+                last = rlp.decode_lazy(self.chain.db.get(last))[0][0]  # [head][prevhash]
             except KeyError:
                 # this can happen if we started a chain download, which did not complete
                 # should not happen if the hash is part of the canonical chain
