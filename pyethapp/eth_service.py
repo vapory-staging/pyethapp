@@ -6,10 +6,13 @@ from rlp.utils import encode_hex
 from ethereum import processblock
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
+from ethereum.processblock import validate_transaction
+from ethereum.exceptions import InvalidTransaction
 from ethereum.chain import Chain
 from ethereum.blocks import Block, VerificationFailed
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
+from devp2p.protocol import BaseProtocol
 import eth_protocol
 import gevent
 import gevent.lock
@@ -42,15 +45,19 @@ class DuplicatesFilter(object):
         self.max_items = max_items
         self.filter = list()
 
-    def known(self, data):
+    def update(self, data):
+        "returns True if unknown"
         if data not in self.filter:
             self.filter.append(data)
             if len(self.filter) > self.max_items:
                 self.filter.pop(0)
-            return False
+            return True
         else:
             self.filter.append(self.filter.pop(0))
-            return True
+            return False
+
+    def __contains__(self, v):
+        return v in self.filter
 
 
 def update_watcher(chainservice):
@@ -131,17 +138,34 @@ class ChainService(WiredService):
             cb(self.chain.head_candidate)
 
     def add_transaction(self, tx, origin=None):
+        log.debug('add_transaction', locked=self.add_transaction_lock.locked(), tx=tx)
         assert isinstance(tx, Transaction)
-        log.debug('add_transaction', locked=self.add_transaction_lock.locked())
-        if not origin and self.is_syncing:
-            log.debug('syncing, discarding tx')
+        assert origin is None or isinstance(origin, BaseProtocol)
+
+        if tx.hash in self.broadcast_filter:
+            log.debug('discarding known tx')  # discard early
             return
+
+        # validate transaction
+        try:
+            validate_transaction(self.chain.head_candidate, tx)
+            log.debug('valid tx, broadcasting')
+            self.broadcast_transaction(tx, origin=origin)  # asap
+        except InvalidTransaction as e:
+            log.debug('invalid tx', error=e)
+            return
+
+        if origin is not None:  # not locally added via jsonrpc
+            if not self.is_mining or self.is_syncing:
+                log.debug('discarding tx', syncing=self.is_syncing, mining=self.is_mining)
+                return
+
         self.add_transaction_lock.acquire()
         success = self.chain.add_transaction(tx)
         self.add_transaction_lock.release()
         if success:
             self._on_new_head_candidate()
-            self.broadcast_transaction(tx, origin=origin)  # asap
+
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
@@ -235,23 +259,23 @@ class ChainService(WiredService):
             assert block.hash in self.chain
             chain_difficulty = block.chain_difficulty()
         assert isinstance(block, (eth_protocol.TransientBlock, Block))
-        if self.broadcast_filter.known(block.header.hash):
-            log.debug('already broadcasted block')
-        else:
+        if self.broadcast_filter.update(block.header.hash):
             log.debug('broadcasting newblock', origin=origin)
             bcast = self.app.services.peermanager.broadcast
             bcast(eth_protocol.ETHProtocol, 'newblock', args=(block, chain_difficulty),
                   exclude_peers=[origin.peer] if origin else [])
+        else:
+            log.debug('already broadcasted block')
 
     def broadcast_transaction(self, tx, origin=None):
         assert isinstance(tx, Transaction)
-        if self.broadcast_filter.known(tx.hash):
-            log.debug('already broadcasted tx')
-        else:
+        if self.broadcast_filter.update(tx.hash):
             log.debug('broadcasting tx', origin=origin)
             bcast = self.app.services.peermanager.broadcast
             bcast(eth_protocol.ETHProtocol, 'transactions', args=(tx,),
                   exclude_peers=[origin.peer] if origin else [])
+        else:
+            log.debug('already broadcasted tx')
 
     # wire protocol receivers ###########
 
