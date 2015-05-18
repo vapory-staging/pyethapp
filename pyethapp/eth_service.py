@@ -250,8 +250,9 @@ class ChainService(WiredService):
             self.add_transaction_lock.release()
 
     def gpsec(self, gas_spent=0, elapsed=0):
-        self.processed_gas += gas_spent
-        self.processed_elapsed += elapsed
+        if gas_spent:
+            self.processed_gas += gas_spent
+            self.processed_elapsed += elapsed
         return int(self.processed_gas / (0.001 + self.processed_elapsed))
 
     def broadcast_newblock(self, block, chain_difficulty=None, origin=None):

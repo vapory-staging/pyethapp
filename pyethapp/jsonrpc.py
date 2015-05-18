@@ -94,6 +94,7 @@ class LoggingDispatcher(RPCDispatcher):
         else:
             request_list = [request]
         for req in request_list:
+            self.logger('------------------------------')
             self.logger('RPC call', method=req.method, args=req.args, kwargs=req.kwargs,
                         id=req.unique_id)
         response = super(LoggingDispatcher, self).dispatch(request)
@@ -562,7 +563,7 @@ class Miner(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def gasPrice(self):
-        return 1
+        return 1  # FIXME (check latest txs)
 
     @public
     def accounts(self):
@@ -642,7 +643,7 @@ class Chain(Subdispatcher):
     @decode_arg('address', address_decoder)
     @decode_arg('block_id', block_id_decoder)
     @encode_res(quantity_encoder)
-    def getTransactionCount(self, address, block_id=None):
+    def getTransactionCount(self, address, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
         return block.get_nonce(address)
 
@@ -783,6 +784,11 @@ class Chain(Subdispatcher):
         return nonce
 
     @public
+    @encode_res(quantity_encoder)
+    def gasLimit(self):
+        return self.json_rpc_server.get_block('latest').gas_limit
+
+    @public
     @decode_arg('nonce', data_decoder)
     @decode_arg('mining_hash', data_decoder)
     @decode_arg('mix_digest', data_decoder)
@@ -826,8 +832,10 @@ class Chain(Subdispatcher):
             return default
 
         to = get_data_default('to', address_decoder, b'')
-        startgas = get_data_default('gas', quantity_decoder, default_startgas)
-        gasprice = get_data_default('gasPrice', quantity_decoder, default_gasprice)
+        gas_key = 'gas' if 'gas' in data else 'startgas'
+        startgas = get_data_default(gas_key, quantity_decoder, default_startgas)
+        gasprice_key = 'gasPrice' if 'gasPrice' in data else 'gasprice'
+        gasprice = get_data_default(gasprice_key, quantity_decoder, default_gasprice)
         value = get_data_default('value', quantity_decoder, 0)
         data_ = get_data_default('data', data_decoder, b'')
         v = signed = get_data_default('v', quantity_decoder, 0)
@@ -844,12 +852,15 @@ class Chain(Subdispatcher):
             nonce = self.app.services.chain.chain.head_candidate.get_nonce(sender)
 
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
+        tx._sender = None
+        print tx.log_dict()
+        print 'sender', tx.sender.encode('hex')
         if not signed:
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
         self.app.services.chain.add_transaction(tx, origin=None)
 
-        log.debug('decoded tx', tx=tx.to_dict())
+        log.debug('decoded tx', tx=tx.log_dict())
 
         if to == b'':  # create
             return address_encoder(processblock.mk_contract_address(tx.sender, nonce))
