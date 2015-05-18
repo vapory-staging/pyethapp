@@ -29,7 +29,7 @@ slogging.configure(config_string=':debug')
 
 # defaults
 default_startgas = 100 * 1000
-default_gasprice = 200 * denoms.wei
+default_gasprice = 10 * denoms.szabo
 
 
 def _fail_on_error_dispatch(self, request):

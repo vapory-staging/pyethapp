@@ -187,7 +187,9 @@ class SyncTask(object):
             ts = time.time()
             log_st.debug('adding blocks', qsize=self.chainservice.block_queue.qsize())
             for t_block in t_blocks:
-                assert t_block.header.hash == blockhashes_chain.pop(0)
+                b = blockhashes_chain.pop(0)
+                assert t_block.header.hash == b
+                assert t_block.header.hash not in blockhashes_chain
                 self.chainservice.add_block(t_block, proto)  # this blocks if the queue is full
             log_st.debug('adding blocks done', took=time.time() - ts)
 
