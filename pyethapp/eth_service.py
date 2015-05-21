@@ -179,7 +179,7 @@ class ChainService(WiredService):
         assert isinstance(block, Block)
         assert block.header.check_pow()
         if self.chain.add_block(block):
-            log.info('added', block=block, ts=time.time())
+            log.debug('added', block=block, ts=time.time())
             assert block == self.chain.head
             self.broadcast_newblock(block, chain_difficulty=block.chain_difficulty())
 

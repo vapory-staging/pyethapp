@@ -8,6 +8,7 @@ from pyethapp.jsonrpc import default_gasprice, default_startgas
 from ethereum.transactions import Transaction
 from pyethapp.accounts import mk_privkey, privtoaddr
 from ethereum import abi
+from ethereum.utils import denoms
 
 z_address = '\x00' * 20
 
@@ -15,18 +16,27 @@ z_address = '\x00' * 20
 class JSONRPCClient(object):
     protocol = JSONRPCProtocol()
 
-    def __init__(self, port=4000, print_communication=True, privkey=None):
+    def __init__(self, port=4000, print_communication=True, privkey=None, sender=None):
+        "specify privkey for local signing"
         self.transport = HttpPostClientTransport('http://127.0.0.1:{}'.format(port))
         self.print_communication = print_communication
         self.privkey = privkey
+        self._sender = sender
+
+    @property
+    def sender(self):
+        if self.privkey:
+            return privtoaddr(self.privkey)
+        if self._sender is None:
+            self._sender = self.coinbase
+        return self._sender
+
 
     def call(self, method, *args, **kwargs):
         request = self.protocol.create_request(method, args, kwargs)
         reply = self.transport.send_message(request.serialize())
         if self.print_communication:
-            print "Request:"
             print json.dumps(json.loads(request.serialize()), indent=2)
-            print "Reply:"
             print reply
         return self.protocol.parse_reply(reply).result
 
@@ -57,90 +67,117 @@ class JSONRPCClient(object):
         res = self.call('eth_sendTransaction', data)
         return data_decoder(res)
 
+    def blocknumber(self):
+        return quantity_decoder(self.call('eth_blockNumber'))
+
     def nonce(self, address):
         if len(address) == 40:
             address = address.decode('hex')
         return quantity_decoder(
             self.call('eth_getTransactionCount', address_encoder(address), 'pending'))
 
-    def blocknumber(self):
-        return quantity_decoder(self.call('eth_blockNumber'))
 
-    def send_transaction(self, to, value=0, data='', startgas=0):
-        assert self.privkey
-        sender = privtoaddr(self.privkey)
+    @property
+    def coinbase(self):
+        return address_decoder(self.call('eth_coinbase'))
+
+    def balance(self, account):
+        b = quantity_decoder(
+            self.call('eth_getBalance', address_encoder(account), 'pending'))
+        return b
+
+    def send_transaction(self, sender, to, value=0, data='', startgas=0, gasprice=10*denoms.szabo):
+        "can send a locally signed transaction if privkey is given"
+        assert self.privkey or sender
+        if self.privkey:
+            _sender = sender
+            sender = privtoaddr(self.privkey)
+            assert sender == _sender
         # fetch nonce
         nonce = self.nonce(sender)
         if not startgas:
             startgas = quantity_decoder(self.call('eth_gasLimit')) - 1
 
         # create transaction
-        default_gasprice = 10000000000042
-        tx = Transaction(nonce, default_gasprice, startgas, to=to, value=value, data=data)
-        tx.sign(self.privkey)
+        tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
+        if self.privkey:
+            tx.sign(self.privkey)
         tx_dict = tx.to_dict()
         tx_dict.pop('hash')
         for k, v in dict(gasprice='gasPrice', startgas='gas').items():
             tx_dict[v] = tx_dict.pop(k)
         res = self.eth_sendTransaction(**tx_dict)
-        if len(res) == 20:
-            print 'contract created @', res.encode('hex')
-        else:
-            assert len(res) == 32
-            print 'tx hash', res.encode('hex')
+        assert len(res) in (20,32)
         return res.encode('hex')
 
+    def eth_call(self, sender='', to='', value=0, data='', gasPrice=default_gasprice,
+                gas=default_startgas):
+        "call on pending block"
+        encoders = dict(sender=address_encoder, to=data_encoder,
+                        value=quantity_encoder, gasPrice=quantity_encoder,
+                        gas=quantity_encoder, data=data_encoder)
+        data = {k: encoders[k](v) for k, v in locals().items()
+                if k not in ('self', 'encoders') and v is not None}
+        data['from'] = data.pop('sender')
+        res = self.call('eth_call', data)
+        return data_decoder(res)
 
-    def send_abi_transaction(self, to, abi, method, value=0, *args):
-        pass
+    def new_abi_contract(self, _abi, address):
+        return ABIContract(self, _abi, address)
 
+def address20(address):
+    if len(address) == '42':
+        address = address[2:]
+    if len(address) == 40:
+        address = address.decode('hex')
+    assert len(address) == 20
+    return address
 
-def tx_example():
+class ABIContract():
     """
-    unsigned txs is signed on the server which needs to know
-    the secret key associated with the sending account
-    it can be added in the config
+    proxy for a contract
     """
-    from pyethapp.accounts import mk_privkey, privtoaddr
-    secret_seed = 'wow'
-    sender = privtoaddr(mk_privkey(secret_seed))
-    res = JSONRPCClient().eth_sendTransaction(sender=sender, to=z_address, value=1000)
-    if len(res) == 20:
-        print 'contract created @', res.encode('hex')
-    else:
-        assert len(res) == 32
-        print 'tx hash', res.encode('hex')
 
+    def __init__(self, rpc_client, _abi, address):
+        self._translator = abi.ContractTranslator(_abi)
+        self.abi = _abi
+        address = address20(address)
 
-def signed_tx_example(to=z_address, value=100):
-    from ethereum.transactions import Transaction
-    from pyethapp.accounts import mk_privkey, privtoaddr
-    secret_seed = 'wow'
-    privkey = mk_privkey(secret_seed)
-    sender = privtoaddr(privkey)
-    # fetch nonce
-    nonce = quantity_decoder(
-        JSONRPCClient().call('eth_getTransactionCount', address_encoder(sender), 'pending'))
-    # create transaction
-    tx = Transaction(nonce, default_gasprice, default_startgas, to=z_address, value=value, data='')
-    tx.sign(privkey)
-    tx_dict = tx.to_dict()
-    tx_dict.pop('hash')
-    res = JSONRPCClient().eth_sendTransaction(**tx_dict)
-    if len(res) == 20:
-        print 'contract created @', res.encode('hex')
-    else:
-        assert len(res) == 32
-        print 'tx hash', res.encode('hex')
+        class abi_method(object):
 
+            def __init__(this, f):
+                this.f = f
 
-def get_balance(account):
-    b = quantity_decoder(
-        JSONRPCClient().call('eth_getBalance', address_encoder(account), 'pending'))
-    return b
+            def transact(this, *args):
+                data = self._translator.encode(this.f, args)
+                txhash = rpc_client.send_transaction(
+                            sender=address20(rpc_client.sender),
+                            to=address,
+                            value=0,
+                            data=data)
+                return txhash
+
+            def call(this, *args):
+                data = self._translator.encode(this.f, args)
+                res = rpc_client.eth_call(
+                            sender=address20(rpc_client.sender),
+                            to=address,
+                            value=0,
+                            data=data)
+                if res:
+                    res = self._translator.decode(this.f, res)
+                    res = res[0] if len(res) == 1 else res
+                return res
+
+            def __call__(this, *args):
+                if self._translator.function_data[this.f]['is_constant']:
+                    return this.call(*args)
+                else:
+                    return this.transact(*args)
+
+        for f in self._translator.function_data:
+            setattr(self, f, abi_method(f))
 
 
 if __name__ == '__main__':
-    call = JSONRPCClient()
-    # signed_tx_example()
-    # tx_example()
+    pass
