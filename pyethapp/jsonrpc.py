@@ -24,6 +24,10 @@ from devp2p.service import BaseService
 from eth_protocol import ETHProtocol
 from ethereum.utils import denoms
 
+from ethereum.utils import DEBUG
+
+DEBUG("DEBUG TEST")
+
 logger = log = slogging.get_logger('jsonrpc')
 slogging.configure(config_string=':debug')
 
@@ -403,21 +407,21 @@ def tx_encoder(transaction, block, i, pending):
 
 def loglist_encoder(loglist):
     """Encode a list of log"""
-    l = []
-    if len(loglist) > 0 and loglist[0] is None:
-        assert all(element is None for element in l)
-        return l
+    # l = []
+    # if len(loglist) > 0 and loglist[0] is None:
+    #     assert all(element is None for element in l)
+    #     return l
     result = []
-    for log, index, block in loglist:
+    for l in loglist:
         result.append({
-            'logIndex': quantity_encoder(index),
-            'transactionIndex': None,
-            'transactionHash': None,
-            'blockHash': data_encoder(block.hash),
-            'blockNumber': quantity_encoder(block.number),
-            'address': address_encoder(log.address),
-            'data': data_encoder(log.data),
-            'topics': [data_encoder(int_to_big_endian(topic), 32) for topic in log.topics]
+            'logIndex': quantity_encoder(l['log_idx']),
+            'transactionIndex': quantity_encoder(l['tx_idx']),
+            'transactionHash': data_encoder(l['txhash']),
+            'blockHash': data_encoder(l['block'].hash),
+            'blockNumber': quantity_encoder(l['block'].number),
+            'address': address_encoder(l['log'].address),
+            'data': data_encoder(l['log'].data),
+            'topics': [data_encoder(int_to_big_endian(topic), 32) for topic in l['log'].topics]
         })
     return result
 
@@ -843,6 +847,7 @@ class Chain(Subdispatcher):
         s = get_data_default('s', quantity_decoder, 0)
         nonce = get_data_default('nonce', quantity_decoder, None)
         sender = get_data_default('from', address_decoder, self.app.services.accounts.coinbase)
+        assert len(sender) == 20
 
         # create transaction
         if signed:
@@ -854,7 +859,6 @@ class Chain(Subdispatcher):
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
         tx._sender = None
         print tx.log_dict()
-        print 'sender', tx.sender.encode('hex')
         if not signed:
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
@@ -867,11 +871,15 @@ class Chain(Subdispatcher):
         else:
             return data_encoder(tx.hash)
 
+
+
+
     @public
     @decode_arg('block_id', block_id_decoder)
     @encode_res(data_encoder)
-    def call(self, data, block_id=None):
+    def call(self, data, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
+        block = self.chain.chain.head_candidate
         state_root_before = block.state_root
 
         # rebuild block state before finalization
@@ -887,6 +895,11 @@ class Chain(Subdispatcher):
             original['journal'] = deepcopy(original['journal'])  # do not alter original journal
             test_block = ethereum.blocks.genesis(block.db)
             test_block.revert(original)
+
+        DEBUG('block is', test_block)
+        DEBUG('pending is', self.chain.chain.head_candidate)
+
+
 
         # validate transaction
         if not isinstance(data, dict):
@@ -964,6 +977,7 @@ class Filter(object):
         self.blocks_done = set()
         self._logs = {}
         self._new_logs = {}
+        log.debug('new filter', filter=self, topics=self.topics)
 
     def __repr__(self):
         return '<Filter(addresses=%r, topics=%r)>' % (self.addresses, self.topics)
@@ -978,13 +992,15 @@ class Filter(object):
         # go through all receipts of all blocks
         logger.debug('blocks to check', blocks=blocks_to_check)
         for block in blocks_to_check:
+            logger.debug('-')
+            logger.debug('with block', block=block )
             if block in self.blocks_done:
                 continue
             receipts = block.get_receipts()
             logger.debug('receipts', block=block, receipts=receipts)
-            for receipt in receipts:
-                for i, log in enumerate(receipt.logs):
-                    logger.debug('log', log=log, topics=self.topics)
+            for r_idx, receipt in enumerate(receipts):  # one receipt per tx
+                for l_idx, log in enumerate(receipt.logs):
+                    logger.debug('log', log=log)
                     if self.topics is not None:
                         # compare topics one by one
                         topic_match = True
@@ -992,6 +1008,7 @@ class Filter(object):
                             topic_match = False
                         for filter_topic, log_topic in zip(self.topics, log.topics):
                             if filter_topic is not None and filter_topic != log_topic:
+                                logger.debug('topic mismatch', want=filter_topic, have=log_topic)
                                 topic_match = False
                         if not topic_match:
                             continue
@@ -999,10 +1016,13 @@ class Filter(object):
                     if self.addresses is not None and log.address not in self.addresses:
                         continue
                     # still here, so match was successful => add to log list
-                    assert False, 'we never find filters!'
                     id_ = ethereum.utils.sha3rlp(log)
-                    self._logs[id_] = (log, i, block)
-                    self._new_logs[id_] = (log, i, block)
+                    assert id_ not in self._logs
+                    tx = block.get_transaction(r_idx)
+                    r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx)
+                    logger.debug('FOUND LOG', id=id_.encode('hex'))
+                    self._logs[id_] = r 
+                    self._new_logs[id_] = r # (log, i, block)
         # don't check blocks again, that have been checked already and won't change anymore
         self.blocks_done |= set(blocks_to_check)
         self.blocks_done -= set([self.chain.head_candidate])
@@ -1099,6 +1119,9 @@ class FilterManager(Subdispatcher):
             topics = []
             for topic in filter_dict['topics']:
                 if topic is not None:
+                    log.debug('with topic', topic=topic)
+                    log.debug('decoded', topic=data_decoder(topic))
+                    log.debug('int', topic=big_endian_to_int(data_decoder(topic)))
                     topics.append(big_endian_to_int(data_decoder(topic)))
                 else:
                     topics.append(None)
@@ -1108,7 +1131,8 @@ class FilterManager(Subdispatcher):
         blocks = [b1]
         while blocks[-1] != b0:
             blocks.append(blocks[-1].get_parent())
-        filter_ = Filter(self.chain.chain, reversed(blocks), addresses, topics)
+        filter_ = Filter(self.chain.chain, blocks=list(
+            reversed(blocks)), addresses=addresses, topics=topics)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
