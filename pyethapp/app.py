@@ -142,6 +142,7 @@ def run(ctx, dev, nodial, fake):
             assert hasattr(app.services, service.name)
 
     # start app
+    log.info('starting')
     app.start()
 
     if config['post_app_start_callback'] is not None:

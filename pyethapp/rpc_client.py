@@ -63,6 +63,9 @@ class JSONRPCClient(object):
         return quantity_decoder(
             self.call('eth_getTransactionCount', address_encoder(address), 'pending'))
 
+    def blocknumber(self):
+        return quantity_decoder(self.call('eth_blockNumber'))
+
     def send_transaction(self, to, value=0, data='', startgas=0):
         assert self.privkey
         sender = privtoaddr(self.privkey)
