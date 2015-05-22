@@ -19,6 +19,7 @@ class LevelDB(object):
         self.dbfile = dbfile
         # self.db = leveldb.LevelDB(dbfile)
         self.db = plyvel.DB(dbfile, create_if_missing=True)
+        self.commit_counter = 0
 
     def reopen(self):
         self.db.close()
@@ -66,7 +67,9 @@ class LevelDB(object):
                     wb.put(k, compress(v))
         self.uncommitted.clear()
         log.info('committed', db=self, num=len(self.uncommitted))
-        self.reopen()
+        self.commit_counter += 1
+        if self.commit_counter % 100 == 0:
+            self.reopen()
 
     def delete(self, key):
         log.trace('deleting entry', key=key)
