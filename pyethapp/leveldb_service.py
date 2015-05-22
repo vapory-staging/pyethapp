@@ -20,9 +20,9 @@ class LevelDB(object):
         # self.db = leveldb.LevelDB(dbfile)
         self.db = plyvel.DB(dbfile, create_if_missing=True)
 
-    # def reopen(self):
-    #     del self.db
-    #     self.db = leveldb.LevelDB(self.dbfile)
+    def reopen(self):
+        self.db.close()
+        self.db = plyvel.DB(self.dbfile, create_if_missing=True)
 
     def get(self, key):
         log.trace('getting entry', key=key.encode('hex')[:8])
@@ -66,7 +66,7 @@ class LevelDB(object):
                     wb.put(k, compress(v))
         self.uncommitted.clear()
         log.info('committed', db=self, num=len(self.uncommitted))
-        # self.reopen()
+        self.reopen()
 
     def delete(self, key):
         log.trace('deleting entry', key=key)
