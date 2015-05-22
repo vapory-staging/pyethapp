@@ -49,8 +49,7 @@ class LevelDB(object):
         self.db.Write(batch, sync=False)
         self.uncommitted.clear()
         log.info('committed', db=self, num=len(self.uncommitted))
-        print self.db.GetStats()
-        self.reopen()
+        # self.reopen()
 
     def delete(self, key):
         log.trace('deleting entry', key=key)
