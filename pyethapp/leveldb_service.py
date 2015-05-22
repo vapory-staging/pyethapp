@@ -1,7 +1,8 @@
 import os
 from devp2p.service import BaseService
 from gevent.event import Event
-import leveldb
+#import leveldb
+import plyvel
 from ethereum import slogging
 
 slogging.set_level('db', 'debug')
@@ -16,11 +17,12 @@ class LevelDB(object):
         self.uncommitted = dict()
         log.info('opening LevelDB', path=dbfile)
         self.dbfile = dbfile
-        self.db = leveldb.LevelDB(dbfile)
+        # self.db = leveldb.LevelDB(dbfile)
+        self.db = plyvel.DB(dbfile, create_if_missing=True)
 
-    def reopen(self):
-        del self.db
-        self.db = leveldb.LevelDB(self.dbfile)
+    # def reopen(self):
+    #     del self.db
+    #     self.db = leveldb.LevelDB(self.dbfile)
 
     def get(self, key):
         log.trace('getting entry', key=key.encode('hex')[:8])
@@ -30,7 +32,10 @@ class LevelDB(object):
             log.trace('from uncommitted')
             return self.uncommitted[key]
         log.trace('from db')
-        o = decompress(self.db.Get(key))
+        v = self.db.get(key)
+        if v is None:
+            raise KeyError('hey not in leveldb')
+        o = decompress(v)
         self.uncommitted[key] = o
         return o
 
@@ -38,15 +43,27 @@ class LevelDB(object):
         log.trace('putting entry', key=key.encode('hex')[:8], len=len(value))
         self.uncommitted[key] = value
 
+    # def commit(self):
+    #     log.info('committing', db=self, num=len(self.uncommitted))
+    #     batch = leveldb.WriteBatch()
+    #     for k, v in self.uncommitted.items():
+    #         if v is None:
+    #             batch.Delete(k)
+    #         else:
+    #             batch.Put(k, compress(v))
+    #     self.db.Write(batch, sync=False)
+    #     self.uncommitted.clear()
+    #     log.info('committed', db=self, num=len(self.uncommitted))
+        # self.reopen()
+
     def commit(self):
-        log.debug('committing', db=self)
-        batch = leveldb.WriteBatch()
-        for k, v in self.uncommitted.items():
-            if v is None:
-                batch.Delete(k)
-            else:
-                batch.Put(k, compress(v))
-        self.db.Write(batch, sync=False)
+        log.info('committing', db=self, num=len(self.uncommitted))
+        with self.db.write_batch(transaction=True, sync=True) as wb:
+            for k, v in self.uncommitted.items():
+                if v is None:
+                    wb.delete(k)
+                else:
+                    wb.put(k, compress(v))
         self.uncommitted.clear()
         log.info('committed', db=self, num=len(self.uncommitted))
         # self.reopen()
