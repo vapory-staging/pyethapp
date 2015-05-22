@@ -15,7 +15,12 @@ class LevelDB(object):
     def __init__(self, dbfile):
         self.uncommitted = dict()
         log.info('opening LevelDB', path=dbfile)
+        self.dbfile = dbfile
         self.db = leveldb.LevelDB(dbfile)
+
+    def reopen(self):
+        del self.db
+        self.db = leveldb.LevelDB(self.dbfile)
 
     def get(self, key):
         log.trace('getting entry', key=key.encode('hex')[:8])
@@ -43,6 +48,9 @@ class LevelDB(object):
                 batch.Put(k, compress(v))
         self.db.Write(batch, sync=False)
         self.uncommitted.clear()
+        log.info('committed', db=self, num=len(self.uncommitted))
+        print self.db.GetStats()
+        self.reopen()
 
     def delete(self, key):
         log.trace('deleting entry', key=key)
