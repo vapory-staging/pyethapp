@@ -22,6 +22,7 @@ class LevelDB(object):
         log.info('opening LevelDB', path=dbfile)
         self.dbfile = dbfile
         self.db = leveldb.LevelDB(dbfile)
+        self.commit_counter = 0
 
     def reopen(self):
         del self.db
@@ -43,33 +44,20 @@ class LevelDB(object):
         log.trace('putting entry', key=key.encode('hex')[:8], len=len(value))
         self.uncommitted[key] = value
 
-    # def commit(self):
-    #     log.debug('committing', db=self)
-    #     batch = leveldb.WriteBatch()
-    #     for k, v in self.uncommitted.items():
-    #         if v is None:
-    #             batch.Delete(k)
-    #         else:
-    #             batch.Put(k, compress(v))
-    #     self.db.Write(batch, sync=False)
-    #     self.uncommitted.clear()
-    #     log.info('committed', db=self, num=len(self.uncommitted))
-    #     # self.reopen()
-
     def commit(self):
-        ts = time.time()
         log.debug('committing', db=self)
+        batch = leveldb.WriteBatch()
         for k, v in self.uncommitted.items():
             if v is None:
-                self.db.Delete(k)
+                batch.Delete(k)
             else:
-                self.db.Put(k, compress(v))
+                batch.Put(k, compress(v))
+        self.db.Write(batch, sync=False)
         self.uncommitted.clear()
-        log.info('committed', db=self, num=len(self.uncommitted), took=time.time()-ts)
-        # self.reopen()
-
-
-
+        log.info('committed', db=self, num=len(self.uncommitted))
+        self.commit_counter += 1
+        if self.commit_counter % 100 == 0:
+            self.reopen()
 
     def delete(self, key):
         log.trace('deleting entry', key=key)
