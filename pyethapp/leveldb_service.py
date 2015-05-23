@@ -3,12 +3,17 @@ from devp2p.service import BaseService
 from gevent.event import Event
 import leveldb
 from ethereum import slogging
+import time
 
 slogging.set_level('db', 'debug')
 log = slogging.get_logger('db')
 
 compress = decompress = lambda x: x
 
+
+"""
+memleak in py-leveldb
+"""
 
 class LevelDB(object):
 
@@ -38,18 +43,33 @@ class LevelDB(object):
         log.trace('putting entry', key=key.encode('hex')[:8], len=len(value))
         self.uncommitted[key] = value
 
+    # def commit(self):
+    #     log.debug('committing', db=self)
+    #     batch = leveldb.WriteBatch()
+    #     for k, v in self.uncommitted.items():
+    #         if v is None:
+    #             batch.Delete(k)
+    #         else:
+    #             batch.Put(k, compress(v))
+    #     self.db.Write(batch, sync=False)
+    #     self.uncommitted.clear()
+    #     log.info('committed', db=self, num=len(self.uncommitted))
+    #     # self.reopen()
+
     def commit(self):
+        ts = time.time()
         log.debug('committing', db=self)
-        batch = leveldb.WriteBatch()
         for k, v in self.uncommitted.items():
             if v is None:
-                batch.Delete(k)
+                self.db.Delete(k)
             else:
-                batch.Put(k, compress(v))
-        self.db.Write(batch, sync=False)
+                self.db.Put(k, compress(v))
         self.uncommitted.clear()
-        log.info('committed', db=self, num=len(self.uncommitted))
+        log.info('committed', db=self, num=len(self.uncommitted), took=time.time()-ts)
         # self.reopen()
+
+
+
 
     def delete(self, key):
         log.trace('deleting entry', key=key)

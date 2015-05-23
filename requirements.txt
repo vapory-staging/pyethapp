@@ -1,5 +1,5 @@
 CodernityDB
-plyvel
+leveldb
 click
 decorator
 gevent
