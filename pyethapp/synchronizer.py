@@ -123,6 +123,7 @@ class SyncTask(object):
                     log_st.debug('found known blockhash', blockhash=blockhash.encode('hex'),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
+            log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes')
             max_blockhashes_per_request = self.max_blockhashes_per_request
 
         self.fetch_blocks(blockhashes_chain)
