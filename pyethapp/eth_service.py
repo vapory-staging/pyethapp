@@ -9,7 +9,7 @@ from ethereum.slogging import get_logger
 from ethereum.processblock import validate_transaction
 from ethereum.exceptions import InvalidTransaction
 from ethereum.chain import Chain
-from ethereum.blocks import Block, VerificationFailed
+from ethereum.blocks import Block, VerificationFailed, GENESIS_NONCE, genesis
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
@@ -82,7 +82,7 @@ class ChainService(WiredService):
     """
     # required by BaseService
     name = 'chain'
-    default_config = dict(eth=dict(network_id=0))
+    default_config = dict(eth=dict(network_id=0, genesis_nonce=GENESIS_NONCE.encode('hex')))
 
     # required by WiredService
     wire_protocol = eth_protocol.ETHProtocol  # create for each peer
@@ -104,7 +104,9 @@ class ChainService(WiredService):
         super(ChainService, self).__init__(app)
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
-        self.chain = Chain(self.db, new_head_cb=self._on_new_head, coinbase=coinbase)
+        _genesis = genesis(self.db, nonce=self.config['eth']['genesis_nonce'].decode('hex'))
+        self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
+                           coinbase=coinbase)
         log.info('chain at', number=self.chain.head.number)
         self.synchronizer = Synchronizer(self, force_sync=None)
 
