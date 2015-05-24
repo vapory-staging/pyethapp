@@ -228,10 +228,10 @@ class ChainService(WiredService):
                     log.warn('verification failed', error=e, FIXME='ban node')
                     self.block_queue.get()
                     continue
-                log.info('adding', block=block, ts=time.time())
+                log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
-                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()))
+                    log.debug('added', block=block, ts=now, txs=len(block.get_transactions()))
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
                         self.newblock_processing_times.append(total)
@@ -239,7 +239,7 @@ class ChainService(WiredService):
                         med = statistics.median(self.newblock_processing_times)
                         max_ = max(self.newblock_processing_times)
                         min_ = min(self.newblock_processing_times)
-                        log.info('processing time', last=total, avg=avg, max=max_, min=min_,
+                        log.debug('processing time', last=total, avg=avg, max=max_, min=min_,
                                  median=med)
                 else:
                     log.warn('could not add', block=block)

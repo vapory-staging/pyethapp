@@ -67,6 +67,19 @@ class JSONRPCClient(object):
         res = self.call('eth_sendTransaction', data)
         return data_decoder(res)
 
+    def eth_call(self, sender='', to='', value=0, data='',
+                 startgas=default_startgas, gasprice=default_gasprice):
+        "call on pending block"
+        encoders = dict(sender=address_encoder, to=data_encoder,
+                        value=quantity_encoder, gasprice=quantity_encoder,
+                        startgas=quantity_encoder, data=data_encoder)
+        data = {k: encoders[k](v) for k, v in locals().items()
+                if k not in ('self', 'encoders') and v is not None}
+        for k, v in dict(gasprice='gasPrice', startgas='gas', sender='from').items():
+            data[v] = data.pop(k)
+        res = self.call('eth_call', data)
+        return data_decoder(res)
+
     def blocknumber(self):
         return quantity_decoder(self.call('eth_blockNumber'))
 
@@ -86,6 +99,14 @@ class JSONRPCClient(object):
             self.call('eth_getBalance', address_encoder(account), 'pending'))
         return b
 
+    def gaslimit(self):
+        return quantity_decoder(self.call('eth_gasLimit'))
+
+    def lastgasprice(self):
+        return quantity_decoder(self.call('eth_lastGasPrice'))
+
+
+
     def send_transaction(self, sender, to, value=0, data='', startgas=0, gasprice=10*denoms.szabo):
         "can send a locally signed transaction if privkey is given"
         assert self.privkey or sender
@@ -104,28 +125,19 @@ class JSONRPCClient(object):
             tx.sign(self.privkey)
         tx_dict = tx.to_dict()
         tx_dict.pop('hash')
-        for k, v in dict(gasprice='gasPrice', startgas='gas').items():
+        for k, v in dict(gasprice='gasPrice', startgas='gas', sender='from').items():
             tx_dict[v] = tx_dict.pop(k)
         res = self.eth_sendTransaction(**tx_dict)
-        assert len(res) in (20,32)
+        assert len(res) in (20, 32)
         return res.encode('hex')
 
-    def eth_call(self, sender='', to='', value=0, data='', gasPrice=default_gasprice,
-                gas=default_startgas):
-        "call on pending block"
-        encoders = dict(sender=address_encoder, to=data_encoder,
-                        value=quantity_encoder, gasPrice=quantity_encoder,
-                        gas=quantity_encoder, data=data_encoder)
-        data = {k: encoders[k](v) for k, v in locals().items()
-                if k not in ('self', 'encoders') and v is not None}
-        data['from'] = data.pop('sender')
-        res = self.call('eth_call', data)
-        return data_decoder(res)
-
     def new_abi_contract(self, _abi, address):
-        return ABIContract(self, _abi, address)
+        sender = self.sender or privtoaddr(self.privkey)
+        return ABIContract(self, sender, _abi, address, self.eth_call, self.send_transaction)
 
 def address20(address):
+    if address == '':
+        return address
     if len(address) == '42':
         address = address[2:]
     if len(address) == 40:
@@ -138,45 +150,53 @@ class ABIContract():
     proxy for a contract
     """
 
-    def __init__(self, rpc_client, _abi, address):
+    def __init__(self, sender, _abi, address, call_func, transact_func):
         self._translator = abi.ContractTranslator(_abi)
         self.abi = _abi
-        address = address20(address)
+        self.address = address = address20(address)
+        sender = address20(sender)
+        valid_kargs = set(('gasprice', 'startgas', 'value'))
 
         class abi_method(object):
 
             def __init__(this, f):
                 this.f = f
 
-            def transact(this, *args):
+            def transact(this, *args, **kargs):
+                assert set(kargs.keys()).issubset(valid_kargs)
                 data = self._translator.encode(this.f, args)
-                txhash = rpc_client.send_transaction(
-                            sender=address20(rpc_client.sender),
-                            to=address,
-                            value=0,
-                            data=data)
+                txhash = transact_func(sender=sender,
+                                            to=address,
+                                            value=kargs.pop('value', 0),
+                                            data=data,
+                                            **kargs)
                 return txhash
 
-            def call(this, *args):
+            def call(this, *args, **kargs):
+                assert set(kargs.keys()).issubset(valid_kargs)
                 data = self._translator.encode(this.f, args)
-                res = rpc_client.eth_call(
-                            sender=address20(rpc_client.sender),
-                            to=address,
-                            value=0,
-                            data=data)
+                res = call_func(sender=sender,
+                                        to=address,
+                                        value=kargs.pop('value', 0),
+                                        data=data,
+                                        **kargs)
                 if res:
                     res = self._translator.decode(this.f, res)
                     res = res[0] if len(res) == 1 else res
                 return res
 
-            def __call__(this, *args):
+            def __call__(this, *args, **kargs):
                 if self._translator.function_data[this.f]['is_constant']:
-                    return this.call(*args)
+                    return this.call(*args, **kargs)
                 else:
-                    return this.transact(*args)
+                    return this.transact(*args, **kargs)
 
-        for f in self._translator.function_data:
-            setattr(self, f, abi_method(f))
+        for fname in self._translator.function_data:
+            func = abi_method(fname)
+            # create wrapper with signature
+            signature = self._translator.function_data[fname]['signature']
+            func.__doc__ = '%s(%s)' % (fname, ', '.join(('%s %s' % x) for x in signature))
+            setattr(self, fname, func)
 
 
 if __name__ == '__main__':

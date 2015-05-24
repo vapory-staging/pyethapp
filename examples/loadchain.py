@@ -45,11 +45,13 @@ def read_blocks(chain):
     reads all blocks from the database
     from head to genesis
     """
+    blocks = []
     blk = chain.head
     while blk.has_parent():
         blk = blk.get_parent()
         if blk.header.number % 1000 == 0:
             print blk.header.number
+            blocks.append(blk)
 
 if __name__ == '__main__':
     chain = get_chain()

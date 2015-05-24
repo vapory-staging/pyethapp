@@ -54,7 +54,7 @@ class LevelDB(object):
                 batch.Put(k, compress(v))
         self.db.Write(batch, sync=False)
         self.uncommitted.clear()
-        log.info('committed', db=self, num=len(self.uncommitted))
+        log.debug('committed', db=self, num=len(self.uncommitted))
         self.commit_counter += 1
         if self.commit_counter % 100 == 0:
             self.reopen()
@@ -101,4 +101,4 @@ class LevelDBService(LevelDB, BaseService):
     def stop(self):
         self.stop_event.set()
         # commit?
-        log.info('closing db')
+        log.debug('closing db')

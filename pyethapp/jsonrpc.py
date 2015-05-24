@@ -26,8 +26,6 @@ from ethereum.utils import denoms
 
 from ethereum.utils import DEBUG
 
-DEBUG("DEBUG TEST")
-
 logger = log = slogging.get_logger('jsonrpc')
 slogging.configure(config_string=':debug')
 
@@ -793,6 +791,14 @@ class Chain(Subdispatcher):
         return self.json_rpc_server.get_block('latest').gas_limit
 
     @public
+    @encode_res(quantity_encoder)
+    def lastGasPrice(self):
+        txs = self.json_rpc_server.get_block('latest').get_transactions()
+        if txs:
+            return min(tx.gasprice for tx in txs)
+        return 0
+
+    @public
     @decode_arg('nonce', data_decoder)
     @decode_arg('mining_hash', data_decoder)
     @decode_arg('mix_digest', data_decoder)
@@ -896,8 +902,8 @@ class Chain(Subdispatcher):
             test_block = ethereum.blocks.genesis(block.db)
             test_block.revert(original)
 
-        DEBUG('block is', test_block)
-        DEBUG('pending is', self.chain.chain.head_candidate)
+        # DEBUG('block is', test_block)
+        # DEBUG('pending is', self.chain.chain.head_candidate)
 
 
 
@@ -984,6 +990,7 @@ class Filter(object):
 
     def check(self):
         """Check for new logs."""
+        # DEBUG('Filter blocks', len(self.blocks_done), len(self.blocks))
         blocks_to_check = self.blocks[:]
         if self.pending:
             blocks_to_check.append(self.chain.head_candidate)
@@ -1021,7 +1028,7 @@ class Filter(object):
                     tx = block.get_transaction(r_idx)
                     r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx)
                     logger.debug('FOUND LOG', id=id_.encode('hex'))
-                    self._logs[id_] = r 
+                    self._logs[id_] = r
                     self._new_logs[id_] = r # (log, i, block)
         # don't check blocks again, that have been checked already and won't change anymore
         self.blocks_done |= set(blocks_to_check)
@@ -1075,6 +1082,7 @@ class NewBlockFilter(object):
             block = self.chainservice.chain.head
         if block not in self.blocks_done:
             self.blocks_done.add(block)
+            # DEBUG('NewBlockFilter blocks', len(self.blocks_done))
             return block
         # wait for event
         if self.new_block_event.is_set():

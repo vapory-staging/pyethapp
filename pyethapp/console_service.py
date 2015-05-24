@@ -9,6 +9,11 @@ import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from ethereum import slogging
+from ethereum.transactions import Transaction
+from ethereum.utils import denoms
+from ethereum import processblock
+from rpc_client import ABIContract, address20
+
 import sys
 GUI_GEVENT = 'gevent'
 
@@ -66,30 +71,111 @@ class Console(BaseService):
         super(Console, self).__init__(app)
         self.interrupt = Event()
         gevent.signal(signal.SIGTSTP, self.interrupt.set)
-        self.console_locals = []
+        self.console_locals = {}
+
+    def _stop_app(self):
+        try:
+            self.app.stop()
+        except gevent.GreenletExit:
+            pass
 
     def start(self):
         super(Console, self).start()
-        self.console_locals = {}
-        self.console_locals.update(self.app.services)
-        self.console_locals['app'] = self.app
 
-        def stop_app():
-            try:
-                self.app.stop()
-            except gevent.GreenletExit:
-                pass
-        self.console_locals['stop'] = stop_app
+        class Eth(object):
+            """
+            convenience object to interact with the live chain
+            """
+            app = self.app
+            services = self.app.services
+            stop = self._stop_app
+            chainservice = self.app.services.chain
+            chain = chainservice.chain
+            latest = head = property(lambda s: s.chain.head)
+            pending = head_candidate = property(lambda s: s.chain.head_candidate)
+            coinbase = self.app.services.accounts.coinbase
+
+            def __init__(this, app):
+                this.app = app
+
+            def transact(this, to, value=0, data='', sender=None,
+                         startgas=25000, gasprice=10*denoms.szabo):
+                sender = address20(sender or this.coinbase)
+                to = address20(to)
+                nonce = this.pending.get_nonce(sender)
+                tx = Transaction(nonce, gasprice, startgas, to, value, data)
+                this.app.services.accounts.sign_tx(sender, tx)
+                assert tx.sender == sender
+                this.chainservice.add_transaction(tx)
+                return tx
+
+            def call(this, to, value=0, data='',  sender=None,
+                     startgas=25000, gasprice=10*denoms.szabo):
+                sender = address20(sender or this.coinbase)
+                to = address20(to)
+                block = this.head_candidate
+                state_root_before = block.state_root
+                assert block.has_parent()
+                # rebuild block state before finalization
+                parent = block.get_parent()
+                test_block = block.init_from_parent(parent, block.coinbase,
+                                                    timestamp=block.timestamp)
+                for tx in block.get_transactions():
+                    success, output = processblock.apply_transaction(test_block, tx)
+                    assert success
+
+                # apply transaction
+                nonce = test_block.get_nonce(sender)
+                tx = Transaction(nonce, gasprice, startgas, to, value, data)
+                tx.sender = sender
+                try:
+                    success, output = processblock.apply_transaction(test_block, tx)
+                except processblock.InvalidTransaction as e:
+                    success = False
+                assert block.state_root == state_root_before
+                if success:
+                    return output
+                else:
+                    return False
+
+            def find_transaction(this, tx):
+                try:
+                    t, blk, idx = this.chain.index.get_transaction(tx.hash)
+                except:
+                    return {}
+                return dict(tx=t, block=blk, index=idx)
+
+            def new_contract(this, abi, address, sender=None):
+                return ABIContract(sender or this.coinbase, abi, address, this.call, this.transact)
+
+            def block_from_rlp(this, rlp_data):
+                from eth_protocol import TransientBlock
+                import rlp
+                l = rlp.decode_lazy(rlp_data)
+                return TransientBlock(l).to_block(this.chain.blockchain)
+
+        try:
+            from ethereum._solidity import solc_wrapper
+        except ImportError:
+            solc_wrapper = None
+            pass
+
+        try:
+            import serpent
+        except ImportError:
+            serpent = None
+            pass
+
+        self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
+                                   denoms=denoms)
 
     def _run(self):
-        # looping did not work
         self.interrupt.wait()
-
-        print '\n' * 3
-        print "Entering Console, stopping services"
-        for s in self.app.services.values():
-            if s != self:
-                s.stop()
+        print('\n' * 3)
+        print("Entering Console")
+        print("Tip: use loglevel `-l:error` to avoid logs")
+        print(">> help(eth)")
         IPython.start_ipython(argv=['--gui', 'gevent'], user_ns=self.console_locals)
         self.interrupt.clear()
+
         sys.exit(0)
