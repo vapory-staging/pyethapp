@@ -47,6 +47,12 @@ Installation and invocation
 
 There is also Dockerfile in the repo.
 
+Interacting
+-----------
+
+You can interact with the client using the JSONRPC api or directly on the console. 
+  * https://github.com/ethereum/pyethapp/wiki/The_Console
+  * https://github.com/ethereum/pyethapp/blob/master/pyethapp/rpc_client.py
 
 Status
 ------
