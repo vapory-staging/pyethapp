@@ -73,3 +73,17 @@ class AccountsService(BaseService):
             if a.address == address:
                 return a
         raise KeyError
+
+    def __iter__(self):
+        return iter(self.accounts)
+
+
+
+"""
+--import-key = key.json
+--unlock <password dialog>
+--password  passwordfile
+--newkey    <password dialog>
+
+
+"""
