@@ -133,7 +133,7 @@ class JSONRPCClient(object):
 
     def new_abi_contract(self, _abi, address):
         sender = self.sender or privtoaddr(self.privkey)
-        return ABIContract(self, sender, _abi, address, self.eth_call, self.send_transaction)
+        return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
 
 def address20(address):
     if address == '':

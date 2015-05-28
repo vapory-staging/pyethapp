@@ -73,8 +73,8 @@ def public(f):
     def new_f(*args, **kwargs):
         try:
             inspect.getcallargs(f, *args, **kwargs)
-        except TypeError:
-            raise JSONRPCInvalidParamsError()
+        except TypeError as t:
+            raise JSONRPCInvalidParamsError(t)
         else:
             return f(*args, **kwargs)
     new_f.func_name = f.func_name
@@ -194,11 +194,14 @@ class JSONRPCServer(BaseService):
         if is_numeric(block_id):
             # by number
             hash_ = chain.index.get_block_by_number(block_id)
+        elif block_id == chain.head_candidate.hash:
+            return chain.head_candidate
         else:
             # by hash
             assert is_string(block_id)
             hash_ = block_id
-        return chain.get(hash_)
+        return  chain.get(hash_)
+
 
 
 class Subdispatcher(object):
@@ -988,6 +991,9 @@ class Filter(object):
     def __repr__(self):
         return '<Filter(addresses=%r, topics=%r)>' % (self.addresses, self.topics)
 
+    def uninstall(self):
+        log.debug('in Filter.uninstall')
+
     def check(self):
         """Check for new logs."""
         # DEBUG('Filter blocks', len(self.blocks_done), len(self.blocks))
@@ -1063,16 +1069,19 @@ class NewBlockFilter(object):
         self.latest = latest
         self.new_block_event = gevent.event.Event()
 
-        def _new_block_cb(b):
-            log.debug('newblock cb called', filter=self, ts=time.time())
-            self.new_block_event.set()
-        self.chainservice.on_new_head_cbs.append(_new_block_cb)
+        self.chainservice.on_new_head_candidate_cbs.append(self._new_block_cb)
+
+    def _new_block_cb(self, b):
+        log.debug('newblock cb called', filter=self, ts=time.time())
+        self.new_block_event.set()
+        
 
     def __repr__(self):
         return '<NewBlockFilter(latest=%r, pending=%r)>' % (self.latest, self.pending)
 
-    def __del__(self):
-        self.chainservice.on_new_head_cbs.remove(self._new_block_cb)
+    def uninstall(self):
+        log.debug('in NewBlockFilter.uninstall')
+        self.chainservice.on_new_head_candidate_cbs.remove(self._new_block_cb)
 
     def check(self):
         "returns changed block or None"
@@ -1106,6 +1115,7 @@ class FilterManager(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def newFilter(self, filter_dict):
+        log.debug('in newFilter', filter_dict=filter_dict)
         if not isinstance(filter_dict, dict):
             raise BadRequestError('Filter must be an object')
         b0 = self.json_rpc_server.get_block(
@@ -1147,21 +1157,29 @@ class FilterManager(Subdispatcher):
 
     @public
     @encode_res(quantity_encoder)
-    def newBlockFilter(self, s):
-        if s not in ('latest', 'pending'):
-            raise JSONRPCInvalidParamsError('Parameter must be either "latest" or "pending"')
-        pending = (s == 'pending')
-        latest = (s == 'latest')
-        filter_ = NewBlockFilter(self.chain, pending=pending, latest=latest)
+    def newBlockFilter(self):
+        filter_ = NewBlockFilter(self.chain, pending=False, latest=True)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
+
+
+    @public
+    @encode_res(quantity_encoder)
+    def newPendingTransactionFilter(self):
+        filter_ = NewBlockFilter(self.chain, pending=True, latest=False)
+        self.filters[self.next_id] = filter_
+        self.next_id += 1
+        return self.next_id - 1
+
+
 
     @public
     @decode_arg('id_', quantity_decoder)
     def uninstallFilter(self, id_):
         try:
-            self.filters.pop(id_)
+            f = self.filters.pop(id_)
+            f.uninstall()
             return True
         except KeyError:
             return False
