@@ -1157,8 +1157,13 @@ class FilterManager(Subdispatcher):
 
     @public
     @encode_res(quantity_encoder)
-    def newBlockFilter(self):
-        filter_ = NewBlockFilter(self.chain, pending=False, latest=True)
+    def newBlockFilter(self, *args):
+        pending, latest = False, True
+        if args:
+            log.warn('newBlockFilter arg is deprecated', args=args)
+            if args[0] == 'pending':
+                pending, latest = True, False
+        filter_ = NewBlockFilter(self.chain, pending=pending, latest=latest)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
