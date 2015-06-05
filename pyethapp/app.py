@@ -233,6 +233,49 @@ def blocktest(ctx, file, name):
     app.stop()
 
 
+@app.command()
+@click.option('--from', 'from_', type=int, help='The first block to export (default: genesis)')
+@click.option('--to', type=int, help='The last block to export (default: latest)')
+@click.argument('file', type=click.File('wb'))
+@click.pass_context
+def export(ctx, from_, to, file):
+    """Export the blockchain to <FILE>.
+
+    The chain will be stored in binary format, i.e. as a concatenated list of RLP encoded blocks,
+    starting with the earliest block.
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    if from_ is None:
+        from_ = 0
+    head_number = app.services.chain.chain.head.number
+    if to is None:
+        to = head_number
+    if from_ < 0:
+        log.fatal('block numbers must not be negative')
+        sys.exit(1)
+    if to < from_:
+        log.fatal('"to" block must be newer than "from" block')
+        sys.exit(1)
+    if to > head_number:
+        log.fatal('"to" block not known (current head: {})'.format(head_number))
+        sys.exit(1)
+
+    log.info('Starting export')
+    for n in xrange(from_, to + 1):
+        log.debug('Exporting block {}'.format(n))
+        if (n - from_) % 50000 == 0:
+            log.info('Exporting block {} to {}'.format(n, min(n + 50000, to)))
+        block_hash = app.services.chain.chain.index.get_block_by_number(n)
+        # bypass slow block decoding by directly accessing db
+        block_rlp = app.services.db.get(block_hash)
+        file.write(block_rlp)
+    log.info('Export complete')
+
+
 if __name__ == '__main__':
     #  python app.py 2>&1 | less +F
     app()
