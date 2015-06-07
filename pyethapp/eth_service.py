@@ -207,7 +207,7 @@ class ChainService(WiredService):
                     self.block_queue.get()
                     continue
                 if t_block.header.prevhash not in self.chain:
-                    log.warn('missing parent', block=t_block)
+                    log.warn('missing parent', block=t_block, head=self.chain.head)
                     self.block_queue.get()
                     continue
                 # FIXME, this is also done in validation and in synchronizer for new_blocks
