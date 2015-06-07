@@ -25,7 +25,7 @@ class ETHProtocol(BaseProtocol):
     name = 'eth'
     version = 60
 
-    max_getblocks_count = 256
+    max_getblocks_count = 64
     max_getblockhashes_count = 2048
 
     def __init__(self, peer, service):

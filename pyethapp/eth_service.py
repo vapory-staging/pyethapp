@@ -1,4 +1,3 @@
-# https://github.com/ethereum/go-ethereum/wiki/Blockpool
 import time
 from ethereum.utils import sha3
 import rlp
