@@ -1,3 +1,8 @@
+###############################
+PROPAGATE_ERRORS = False
+
+###############################
+
 import time
 from copy import deepcopy
 from decorator import decorator
@@ -39,7 +44,9 @@ def _fail_on_error_dispatch(self, request):
     # we found the method
     result = method(*request.args, **request.kwargs)
     return request.respond(result)
-RPCDispatcher._dispatch = _fail_on_error_dispatch
+
+if PROPAGATE_ERRORS:
+    RPCDispatcher._dispatch = _fail_on_error_dispatch
 
 
 # route logging messages
