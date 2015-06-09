@@ -18,6 +18,7 @@ import gevent.lock
 import statistics
 from collections import deque
 from gevent.queue import Queue
+from pyethapp import sentry
 
 log = get_logger('eth.chainservice')
 
@@ -213,6 +214,7 @@ class ChainService(WiredService):
                 # FIXME, this is also done in validation and in synchronizer for new_blocks
                 if not t_block.header.check_pow():
                     log.warn('invalid pow', block=t_block, FIXME='ban node')
+                    sentry.warn_invalid(t_block)
                     self.block_queue.get()
                     continue
                 try:  # deserialize
@@ -223,10 +225,12 @@ class ChainService(WiredService):
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
                 except processblock.InvalidTransaction as e:
                     log.warn('invalid transaction', block=t_block, error=e, FIXME='ban node')
+                    sentry.warn_invalid(t_block)
                     self.block_queue.get()
                     continue
                 except VerificationFailed as e:
                     log.warn('verification failed', error=e, FIXME='ban node')
+                    sentry.warn_invalid(t_block)
                     self.block_queue.get()
                     continue
                 log.debug('adding', block=block, ts=time.time())
