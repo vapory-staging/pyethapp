@@ -282,7 +282,10 @@ def data_decoder(data):
     if not data.startswith('0x'):
         data = '0x' + data
     if len(data) % 2 != 0:
-        raise BadRequestError('Invalid data encoding, must be even length')
+        # workaround for missing leading zeros from netstats
+        assert len(data) < 64 + 2
+        data = '0x' + '0' * (64 - (len(data) - 2)) + data[2:]
+        #raise BadRequestError('Invalid data encoding, must be even length')
     try:
         return decode_hex(data[2:])
     except TypeError:
@@ -1081,7 +1084,7 @@ class NewBlockFilter(object):
     def _new_block_cb(self, b):
         log.debug('newblock cb called', filter=self, ts=time.time())
         self.new_block_event.set()
-        
+
 
     def __repr__(self):
         return '<NewBlockFilter(latest=%r, pending=%r)>' % (self.latest, self.pending)

@@ -3,7 +3,8 @@ import json
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
 from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
-from pyethapp.jsonrpc import address_encoder, data_encoder, data_decoder, address_decoder
+from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
+from pyethapp.jsonrpc import address_encoder as _address_encoder
 from pyethapp.jsonrpc import default_gasprice, default_startgas
 from ethereum.transactions import Transaction
 from pyethapp.accounts import mk_privkey, privtoaddr
@@ -11,6 +12,19 @@ from ethereum import abi
 from ethereum.utils import denoms
 
 z_address = '\x00' * 20
+
+def address20(address):
+    if address == '':
+        return address
+    if len(address) == '42':
+        address = address[2:]
+    if len(address) == 40:
+        address = address.decode('hex')
+    assert len(address) == 20
+    return address
+
+def address_encoder(a):
+    return _address_encoder(address20(a))
 
 
 class JSONRPCClient(object):
@@ -48,7 +62,8 @@ class JSONRPCClient(object):
         """
         i = 0
         while True:
-            block = self.call('eth_getBlockByNumber', quantity_encoder(i), True, print_comm=False)
+            block = self.call('eth_getBlockByNumber', quantity_encoder(i), True,
+                              print_communication=False)
             if condition(block):
                 return block
             i += 1
@@ -56,6 +71,7 @@ class JSONRPCClient(object):
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
+        to = address20(to)
         encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
                         value=quantity_encoder, gasPrice=quantity_encoder,
                         gas=quantity_encoder, data=data_encoder,
@@ -114,6 +130,7 @@ class JSONRPCClient(object):
             _sender = sender
             sender = privtoaddr(self.privkey)
             assert sender == _sender
+        assert sender
         # fetch nonce
         nonce = self.nonce(sender)
         if not startgas:
@@ -125,8 +142,9 @@ class JSONRPCClient(object):
             tx.sign(self.privkey)
         tx_dict = tx.to_dict()
         tx_dict.pop('hash')
-        for k, v in dict(gasprice='gasPrice', startgas='gas', sender='from').items():
+        for k, v in dict(gasprice='gasPrice', startgas='gas').items():
             tx_dict[v] = tx_dict.pop(k)
+        tx_dict['sender'] = sender
         res = self.eth_sendTransaction(**tx_dict)
         assert len(res) in (20, 32)
         return res.encode('hex')
@@ -135,15 +153,7 @@ class JSONRPCClient(object):
         sender = self.sender or privtoaddr(self.privkey)
         return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
 
-def address20(address):
-    if address == '':
-        return address
-    if len(address) == '42':
-        address = address[2:]
-    if len(address) == 40:
-        address = address.decode('hex')
-    assert len(address) == 20
-    return address
+
 
 class ABIContract():
     """
