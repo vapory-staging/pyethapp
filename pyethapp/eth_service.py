@@ -6,7 +6,8 @@ from ethereum import processblock
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
 from ethereum.processblock import validate_transaction
-from ethereum.exceptions import InvalidTransaction
+from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
+    InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
 from ethereum.blocks import Block, VerificationFailed, GENESIS_NONCE, genesis
 from ethereum.transactions import Transaction
@@ -214,7 +215,7 @@ class ChainService(WiredService):
                 # FIXME, this is also done in validation and in synchronizer for new_blocks
                 if not t_block.header.check_pow():
                     log.warn('invalid pow', block=t_block, FIXME='ban node')
-                    sentry.warn_invalid(t_block)
+                    sentry.warn_invalid(t_block, 'InvalidBlockNonce')
                     self.block_queue.get()
                     continue
                 try:  # deserialize
@@ -225,12 +226,17 @@ class ChainService(WiredService):
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
                 except processblock.InvalidTransaction as e:
                     log.warn('invalid transaction', block=t_block, error=e, FIXME='ban node')
-                    sentry.warn_invalid(t_block)
+                    errtype = \
+                        'InvalidNonce' if isinstance(e, InvalidNonce) else \
+                        'NotEnoughCash' if isinstance(e, InsufficientBalance) else \
+                        'OutOfGasBase' if isinstance(e, InsufficientStartGas) else \
+                        'other_transaction_error'
+                    sentry.warn_invalid(t_block, errtype)
                     self.block_queue.get()
                     continue
                 except VerificationFailed as e:
                     log.warn('verification failed', error=e, FIXME='ban node')
-                    sentry.warn_invalid(t_block)
+                    sentry.warn_invalid(t_block, 'other_block_error')
                     self.block_queue.get()
                     continue
                 log.debug('adding', block=block, ts=time.time())

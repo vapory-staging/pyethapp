@@ -21,8 +21,16 @@ def make_request(*args):
         raise Exception(p)
 
 
-def warn_invalid(block):
+def warn_invalid(block, errortype='other'):
     try:
-        make_request('http://badblocks.ethdev.com', utils.encode_hex(rlp.encode(block)))
+        make_request('http://badblocks.ethdev.com', {
+            "block": utils.encode_hex(rlp.encode(block)),
+            "errortype": errortype,
+            "hints": {
+                "receipts": [utils.encode_hex(rlp.encode(x)) for x in
+                             block.get_receipts()],
+                "vmtrace": "NOT YET IMPLEMENTED"
+            }
+        })
     except:
         sys.stderr.write('Failed to connect to badblocks.ethdev.com\n')
