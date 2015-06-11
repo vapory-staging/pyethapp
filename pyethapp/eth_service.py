@@ -23,9 +23,6 @@ from ethereum.utils import DEBUG
 
 log = get_logger('eth.chainservice')
 
-from pympler.classtracker import ClassTracker
-memory_tracker = ClassTracker()
-
 
 # patch to get context switches between tx replay
 processblock_apply_transaction = processblock.apply_transaction
