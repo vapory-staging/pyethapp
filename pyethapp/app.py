@@ -1,8 +1,9 @@
 import monkeypatches
 import json
-import sys
 import os
 import signal
+import sys
+from uuid import uuid4
 import click
 from click import BadParameter
 import gevent
@@ -19,7 +20,7 @@ import config as konfig
 from db_service import DBService
 from jsonrpc import JSONRPCServer
 from pow_service import PoWService
-from accounts import AccountsService
+from accounts import AccountsService, Account
 from pyethapp import __version__
 import utils
 
@@ -274,6 +275,54 @@ def export(ctx, from_, to, file):
         block_rlp = app.services.db.get(block_hash)
         file.write(block_rlp)
     log.info('Export complete')
+
+
+@app.group()
+@click.pass_context
+def account(ctx):
+    app = EthApp(ctx.obj['config'])
+    ctx.obj['app'] = app
+    AccountsService.register_with_app(app)
+
+
+@account.command()
+@click.password_option(default='', show_default=False)
+@click.option('--uuid', '-i', help='equip the account with a random UUID', is_flag=True)
+@click.pass_context
+def new(ctx, password, uuid):
+    app = ctx.obj['app']
+    if uuid:
+        id_ = str(uuid4())
+    else:
+        id_ = None
+    account = Account.new(password, uuid=id_)
+    try:
+        app.services.accounts.add_account(account, path=account.address.encode('hex'))
+    except IOError:
+        click.echo('Could not write keystore file. Make sure you have write permission in the '
+                   'configured directory and check the log for further information.')
+        sys.exit(1)
+    else:
+        click.echo('Account creation successful')
+        click.echo('  Address: ' + account.address.encode('hex'))
+        click.echo('       Id: ' + str(account.uuid))
+
+
+@account.command()
+@click.pass_context
+def list(ctx):
+    """List all accounts with their addresses and ids"""
+    accounts = ctx.obj['app'].services.accounts
+    if len(accounts) == 0:
+        click.echo('no accounts found')
+    else:
+        fmt = '{i:>4} {address:<40} {id:<36}'
+        click.echo('     {address:<40} {id:<36}'.format(address='Address (if known)',
+                                                        id='Id (if any)'))
+        for i, account in enumerate(accounts):
+            click.echo(fmt.format(i='#' + str(i + 1),
+                                  address=(account.address or '').encode('hex'),
+                                  id=account.uuid or ''))
 
 
 if __name__ == '__main__':

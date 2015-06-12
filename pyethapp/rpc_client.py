@@ -7,7 +7,7 @@ from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
 from pyethapp.jsonrpc import address_encoder as _address_encoder
 from pyethapp.jsonrpc import default_gasprice, default_startgas
 from ethereum.transactions import Transaction
-from pyethapp.accounts import mk_privkey, privtoaddr
+from ethereum.keys import privtoaddr
 from ethereum import abi
 from ethereum.utils import denoms
 
