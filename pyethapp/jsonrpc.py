@@ -207,8 +207,7 @@ class JSONRPCServer(BaseService):
             # by hash
             assert is_string(block_id)
             hash_ = block_id
-        return  chain.get(hash_)
-
+        return chain.get(hash_)
 
 
 class Subdispatcher(object):
@@ -890,9 +889,6 @@ class Chain(Subdispatcher):
         else:
             return data_encoder(tx.hash)
 
-
-
-
     @public
     @decode_arg('block_id', block_id_decoder)
     @encode_res(data_encoder)
@@ -917,8 +913,6 @@ class Chain(Subdispatcher):
 
         # DEBUG('block is', test_block)
         # DEBUG('pending is', self.chain.chain.head_candidate)
-
-
 
         # validate transaction
         if not isinstance(data, dict):
@@ -999,7 +993,8 @@ class Filter(object):
         log.debug('new filter', filter=self, topics=self.topics)
 
     def __repr__(self):
-        return '<Filter(addresses=%r, topics=%r)>' % (self.addresses, self.topics)
+        return '<Filter(addresses=%r, topics=%r latest=%r, pending=%r)>' \
+            % (self.addresses, self.topics, self.latest, self.pending)
 
     def uninstall(self):
         log.debug('in Filter.uninstall')
@@ -1016,7 +1011,7 @@ class Filter(object):
         logger.debug('blocks to check', blocks=blocks_to_check)
         for block in blocks_to_check:
             logger.debug('-')
-            logger.debug('with block', block=block )
+            logger.debug('with block', block=block)
             if block in self.blocks_done:
                 continue
             receipts = block.get_receipts()
@@ -1045,7 +1040,7 @@ class Filter(object):
                     r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx)
                     logger.debug('FOUND LOG', id=id_.encode('hex'))
                     self._logs[id_] = r
-                    self._new_logs[id_] = r # (log, i, block)
+                    self._new_logs[id_] = r  # (log, i, block)
         # don't check blocks again, that have been checked already and won't change anymore
         self.blocks_done |= set(blocks_to_check)
         self.blocks_done -= set([self.chain.head_candidate])
@@ -1084,7 +1079,6 @@ class NewBlockFilter(object):
     def _new_block_cb(self, b):
         log.debug('newblock cb called', filter=self, ts=time.time())
         self.new_block_event.set()
-
 
     def __repr__(self):
         return '<NewBlockFilter(latest=%r, pending=%r)>' % (self.latest, self.pending)
@@ -1128,12 +1122,6 @@ class FilterManager(Subdispatcher):
         log.debug('in newFilter', filter_dict=filter_dict)
         if not isinstance(filter_dict, dict):
             raise BadRequestError('Filter must be an object')
-        b0 = self.json_rpc_server.get_block(
-            block_id_decoder(filter_dict.get('fromBlock', 'latest')))
-        b1 = self.json_rpc_server.get_block(
-            block_id_decoder(filter_dict.get('toBlock', 'latest')))
-        if b1.number < b0.number:
-            raise BadRequestError('fromBlock must be prior or equal to toBlock')
         address = filter_dict.get('address', None)
         if is_string(address):
             addresses = [address_decoder(address)]
@@ -1156,11 +1144,25 @@ class FilterManager(Subdispatcher):
         else:
             topics = None
 
-        blocks = [b1]
-        while blocks[-1] != b0:
-            blocks.append(blocks[-1].get_parent())
-        filter_ = Filter(self.chain.chain, blocks=list(
-            reversed(blocks)), addresses=addresses, topics=topics)
+
+        fromBlock = filter_dict.get('fromBlock')
+        toBlock = filter_dict.get('toBlock') or 'latest'
+
+        if toBlock in ('latest', 'pending'):
+            assert fromBlock in (None, toBlock) , 'latest/pending does not support ranges'
+            filter_ = Filter(self.chain.chain, blocks=[], addresses=addresses, topics=topics,
+                pending=bool(toBlock==b'pending'), latest=bool(toBlock==b'latest'))
+        else:
+            assert fromBlock not in ('latest', 'pending')
+            b0 = self.json_rpc_server.get_block(block_id_decoder(fromBlock))
+            b1 = self.json_rpc_server.get_block(block_id_decoder(toBlock))
+            if b1.number < b0.number:
+                raise BadRequestError('fromBlock must be prior or equal to toBlock')    
+            blocks = [b1]
+            while blocks[-1] != b0:
+                blocks.append(blocks[-1].get_parent())
+            filter_ = Filter(self.chain.chain, blocks=list(
+                reversed(blocks)), addresses=addresses, topics=topics)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1178,7 +1180,6 @@ class FilterManager(Subdispatcher):
         self.next_id += 1
         return self.next_id - 1
 
-
     @public
     @encode_res(quantity_encoder)
     def newPendingTransactionFilter(self):
@@ -1186,8 +1187,6 @@ class FilterManager(Subdispatcher):
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
-
-
 
     @public
     @decode_arg('id_', quantity_decoder)
