@@ -95,7 +95,7 @@ class SyncTask(object):
                     blockhashes_batch = deferred.get(block=True,
                                                      timeout=self.blockhashes_request_timeout)
                 except gevent.Timeout:
-                    log_st.warn('syncing timed out')
+                    log_st.warn('syncing hashchain timed out')
                     continue
                 finally:
                     # is also executed 'on the way out' when any other clause of the try statement

@@ -3,14 +3,48 @@ import json
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
 from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
-from pyethapp.jsonrpc import address_encoder, data_encoder, data_decoder, address_decoder
+from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
+from pyethapp.jsonrpc import address_encoder as _address_encoder
 from pyethapp.jsonrpc import default_gasprice, default_startgas
 from ethereum.transactions import Transaction
 from pyethapp.accounts import mk_privkey, privtoaddr
 from ethereum import abi
-from ethereum.utils import denoms
+from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int
 
 z_address = '\x00' * 20
+
+
+def address20(address):
+    if address == '':
+        return address
+    if len(address) == '42':
+        address = address[2:]
+    if len(address) == 40:
+        address = address.decode('hex')
+    assert len(address) == 20
+    return address
+
+
+def address_encoder(a):
+    return _address_encoder(address20(a))
+
+
+def block_tag_encoder(val):
+    if isinstance(val, int):
+        return quantity_encoder(val)
+    elif val and isinstance(val, bytes):
+        assert val in ('latest', 'pending')
+        return data_encoder(val)
+    else:
+        assert not val
+
+def topic_encoder(t):
+    assert isinstance(t, (int, long))
+    return data_encoder(int_to_big_endian(t))
+
+def topic_decoder(t):
+    return big_endian_to_int(data_decoder(t))
+
 
 
 class JSONRPCClient(object):
@@ -31,9 +65,8 @@ class JSONRPCClient(object):
             self._sender = self.coinbase
         return self._sender
 
-
-    def call(self, method, *args, **kwargs):
-        request = self.protocol.create_request(method, args, kwargs)
+    def call(self, method, *args):
+        request = self.protocol.create_request(method, args)
         reply = self.transport.send_message(request.serialize())
         if self.print_communication:
             print json.dumps(json.loads(request.serialize()), indent=2)
@@ -48,14 +81,38 @@ class JSONRPCClient(object):
         """
         i = 0
         while True:
-            block = self.call('eth_getBlockByNumber', quantity_encoder(i), True, print_comm=False)
+            block = self.call('eth_getBlockByNumber', quantity_encoder(i), True)
             if condition(block):
                 return block
             i += 1
 
+            return None
+
+    def new_filter(self, fromBlock="", toBlock="", address=None, topics=[]):
+        encoders = dict(fromBlock=block_tag_encoder, toBlock=block_tag_encoder,
+                        address=address_encoder, topics=lambda x: [topic_encoder(t) for t in x])
+        data = {k: encoders[k](v) for k, v in locals().items()
+                if k not in ('self', 'encoders') and v is not None}
+        fid = self.call('eth_newFilter', data)
+        return quantity_decoder(fid)
+
+    def filter_changes(self, fid):
+        changes = self.call('eth_getFilterChanges', quantity_encoder(fid))
+        if not changes:
+            return None
+        elif isinstance(changes, bytes):
+            return data_decoder(changes)
+        else:
+            decoders = dict(blockHash=data_decoder, transactionHash=data_decoder, data=data_decoder,
+                            address=address_decoder, topics=lambda x: [topic_decoder(t) for t in x],
+                            blockNumber=quantity_decoder, logIndex=quantity_decoder, transactionIndex=quantity_decoder)
+            return [{k: decoders[k](v) for k, v in c.items() if v is not None} for c  in changes]
+
+
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
+        to = address20(to)
         encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
                         value=quantity_encoder, gasPrice=quantity_encoder,
                         gas=quantity_encoder, data=data_encoder,
@@ -89,7 +146,6 @@ class JSONRPCClient(object):
         return quantity_decoder(
             self.call('eth_getTransactionCount', address_encoder(address), 'pending'))
 
-
     @property
     def coinbase(self):
         return address_decoder(self.call('eth_coinbase'))
@@ -105,15 +161,14 @@ class JSONRPCClient(object):
     def lastgasprice(self):
         return quantity_decoder(self.call('eth_lastGasPrice'))
 
-
-
-    def send_transaction(self, sender, to, value=0, data='', startgas=0, gasprice=10*denoms.szabo):
+    def send_transaction(self, sender, to, value=0, data='', startgas=0, gasprice=10 * denoms.szabo):
         "can send a locally signed transaction if privkey is given"
         assert self.privkey or sender
         if self.privkey:
             _sender = sender
             sender = privtoaddr(self.privkey)
             assert sender == _sender
+        assert sender
         # fetch nonce
         nonce = self.nonce(sender)
         if not startgas:
@@ -125,8 +180,9 @@ class JSONRPCClient(object):
             tx.sign(self.privkey)
         tx_dict = tx.to_dict()
         tx_dict.pop('hash')
-        for k, v in dict(gasprice='gasPrice', startgas='gas', sender='from').items():
+        for k, v in dict(gasprice='gasPrice', startgas='gas').items():
             tx_dict[v] = tx_dict.pop(k)
+        tx_dict['sender'] = sender
         res = self.eth_sendTransaction(**tx_dict)
         assert len(res) in (20, 32)
         return res.encode('hex')
@@ -135,17 +191,9 @@ class JSONRPCClient(object):
         sender = self.sender or privtoaddr(self.privkey)
         return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
 
-def address20(address):
-    if address == '':
-        return address
-    if len(address) == '42':
-        address = address[2:]
-    if len(address) == 40:
-        address = address.decode('hex')
-    assert len(address) == 20
-    return address
 
 class ABIContract():
+
     """
     proxy for a contract
     """
@@ -166,20 +214,20 @@ class ABIContract():
                 assert set(kargs.keys()).issubset(valid_kargs)
                 data = self._translator.encode(this.f, args)
                 txhash = transact_func(sender=sender,
-                                            to=address,
-                                            value=kargs.pop('value', 0),
-                                            data=data,
-                                            **kargs)
+                                       to=address,
+                                       value=kargs.pop('value', 0),
+                                       data=data,
+                                       **kargs)
                 return txhash
 
             def call(this, *args, **kargs):
                 assert set(kargs.keys()).issubset(valid_kargs)
                 data = self._translator.encode(this.f, args)
                 res = call_func(sender=sender,
-                                        to=address,
-                                        value=kargs.pop('value', 0),
-                                        data=data,
-                                        **kargs)
+                                to=address,
+                                value=kargs.pop('value', 0),
+                                data=data,
+                                **kargs)
                 if res:
                     res = self._translator.decode(this.f, res)
                     res = res[0] if len(res) == 1 else res

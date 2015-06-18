@@ -20,6 +20,7 @@ import statistics
 from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
+from ethereum.utils import DEBUG
 
 log = get_logger('eth.chainservice')
 
@@ -119,7 +120,6 @@ class ChainService(WiredService):
         self.on_new_head_cbs = []
         self.on_new_head_candidate_cbs = []
         self.newblock_processing_times = deque(maxlen=1000)
-        # gevent.spawn(update_watcher, self)
 
     @property
     def is_syncing(self):
@@ -132,11 +132,13 @@ class ChainService(WiredService):
         return False
 
     def _on_new_head(self, block):
+        # DEBUG('new head cbs', len(self.on_new_head_cbs))
         for cb in self.on_new_head_cbs:
             cb(block)
         self._on_new_head_candidate()  # we implicitly have a new head_candidate
 
     def _on_new_head_candidate(self):
+        # DEBUG('new head candidate cbs', len(self.on_new_head_candidate_cbs))
         for cb in self.on_new_head_candidate_cbs:
             cb(self.chain.head_candidate)
 
@@ -242,7 +244,7 @@ class ChainService(WiredService):
                 log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
-                    log.debug('added', block=block, ts=now, txs=len(block.get_transactions()))
+                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()))
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
                         self.newblock_processing_times.append(total)
@@ -250,10 +252,11 @@ class ChainService(WiredService):
                         med = statistics.median(self.newblock_processing_times)
                         max_ = max(self.newblock_processing_times)
                         min_ = min(self.newblock_processing_times)
-                        log.debug('processing time', last=total, avg=avg, max=max_, min=min_,
+                        log.info('processing time', last=total, avg=avg, max=max_, min=min_,
                                  median=med)
                 else:
                     log.warn('could not add', block=block)
+
                 self.block_queue.get()  # remove block from queue (we peeked only)
                 gevent.sleep(0.001)
         finally:

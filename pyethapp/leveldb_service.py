@@ -13,6 +13,37 @@ compress = decompress = lambda x: x
 
 """
 memleak in py-leveldb
+
+
+25140 ralf      20   0 3360m 1.3g  53m S    3  4.2   4:12.71 pyethapp
+26167 ralf      20   0 2943m 1.0g  44m S    1  3.3   3:19.51 pyethapp
+
+
+25140 ralf      20   0 3531m 1.5g  61m S    1  4.7   5:07.49 pyethapp
+26167 ralf      20   0 3115m 1.1g  47m S    1  3.6   4:03.54 pyethapp
+
+
+mit reload_db()
+ 4096 ralf      20   0 1048m 362m  14m S    2  1.1   1:21.97 pyethapp
+ 4109 ralf      20   0  975m 307m  14m S    2  1.0   1:16.03 pyethapp
+
+ 4096 ralf      20   0  903m 431m 9484 S    2  1.3   1:54.29 pyethapp
+ 4109 ralf      20   0  807m 367m 8852 S    1  1.1   1:47.01 pyethapp
+
+ 4109 ralf      20   0 2609m 640m  60m S    3  2.0   2:41.05 pyethapp
+ 4096 ralf      20   0 1232m 521m  14m S    6  1.6   2:28.68 pyethapp
+
+
+
+deserializing all blocks + pow + add to list:
+1GB after 300k blocks
+
+
+reading all entries == 400MB
++ check pow every 1000 32 caches = 580MB
++ check pow every 1000 1 cache = 590MB
+
+
 """
 
 class LevelDB(object):
