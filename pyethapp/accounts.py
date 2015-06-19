@@ -22,7 +22,7 @@ def mk_random_privkey():
 class Account(object):
     """Represents an account.
 
-    :ivar keystore: the key store as a dictionary (decoded from json)
+    :ivar keystore: the key store as a dictionary (as decoded from json)
     :ivar locked: `True` if the account is locked and neither private nor public keys can be
                   accessed, otherwise `False`
     """
@@ -110,12 +110,14 @@ class Account(object):
         be reconstructed (because the account is locked)
         """
         if self._address:
-            return self._address
+            pass
+        elif 'address' in self.keystore:
+            self._address = self.keystore['address'].decode('hex')
         elif not self.locked:
             self._address = keys.privtoaddr(self.privkey)
-            return self._address
         else:
             return None
+        return self._address
 
     @property
     def uuid(self):
