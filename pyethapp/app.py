@@ -320,13 +320,15 @@ def list(ctx):
     if len(accounts) == 0:
         click.echo('no accounts found')
     else:
-        fmt = '{i:>4} {address:<40} {id:<36}'
-        click.echo('     {address:<40} {id:<36}'.format(address='Address (if known)',
-                                                        id='Id (if any)'))
+        fmt = '{i:>4} {address:<40} {id:<36} {locked:<1}'
+        click.echo('     {address:<40} {id:<36} {locked}'.format(address='Address (if known)',
+                                                                 id='Id (if any)',
+                                                                 locked='Locked'))
         for i, account in enumerate(accounts):
             click.echo(fmt.format(i='#' + str(i + 1),
                                   address=(account.address or '').encode('hex'),
-                                  id=account.uuid or ''))
+                                  id=account.uuid or '',
+                                  locked='yes' if account.locked else 'no'))
 
 
 def unlock_accounts(account_ids, account_service, max_attempts=3):
