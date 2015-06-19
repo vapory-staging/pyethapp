@@ -1,10 +1,87 @@
+import json
+from uuid import uuid4
 from ethereum.keys import privtoaddr
 from pyethapp.accounts import Account
+import pytest
 
 
-def test_account_creation():
-    privkey = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-    account = Account.new('secret', privkey)
-    assert account.address
+@pytest.fixture(scope='module')
+def privkey():
+    return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+
+
+@pytest.fixture(scope='module')
+def password():
+    return 'secret'
+
+
+@pytest.fixture(scope='module')
+def uuid():
+    return str(uuid4())
+
+
+# keystore generation takes a while, so make this module scoped
+@pytest.fixture(scope='module')
+def account(privkey, password, uuid):
+    return Account.new(password, privkey, uuid)
+
+
+@pytest.fixture(scope='module')
+def keystore(account):
+    # `account.keystore` might not contain address and id
+    return json.loads(account.dump())
+
+
+def test_account_creation(account, password, privkey, uuid):
+    assert not account.locked
     assert account.privkey == privkey
     assert account.address == privtoaddr(privkey)
+    assert account.uuid == uuid
+
+
+def test_locked(keystore, uuid):
+    account = Account(keystore)
+    assert account.locked
+    assert account.address.encode('hex') == keystore['address']
+    assert account.privkey is None
+    assert account.pubkey is None
+    assert account.uuid == uuid
+    keystore2 = keystore.copy()
+    keystore2.pop('address')
+    account = Account(keystore2)
+    assert account.locked
+    assert account.address is None
+    assert account.privkey is None
+    assert account.pubkey is None
+    assert account.uuid == uuid
+
+
+def test_unlock(keystore, password, privkey, uuid):
+    account = Account(keystore)
+    assert account.locked
+    account.unlock(password)
+    assert not account.locked
+    assert account.privkey == privkey
+    assert account.address == privtoaddr(privkey)
+
+
+def test_dump(account):
+    keystore = json.loads(account.dump(include_address=True, include_id=True))
+    required_keys = set(['crypto', 'version'])
+    assert set(keystore.keys()) == required_keys | set(['address', 'id'])
+    assert keystore['address'] == account.address.encode('hex')
+    assert keystore['id'] == account.uuid
+
+    keystore = json.loads(account.dump(include_address=False, include_id=True))
+    required_keys = set(['crypto', 'version'])
+    assert set(keystore.keys()) == required_keys | set(['id'])
+    assert keystore['id'] == account.uuid
+
+    keystore = json.loads(account.dump(include_address=True, include_id=False))
+    required_keys = set(['crypto', 'version'])
+    assert set(keystore.keys()) == required_keys | set(['address'])
+    assert keystore['address'] == account.address.encode('hex')
+
+    keystore = json.loads(account.dump(include_address=False, include_id=False))
+    required_keys = set(['crypto', 'version'])
+    assert set(keystore.keys()) == required_keys
