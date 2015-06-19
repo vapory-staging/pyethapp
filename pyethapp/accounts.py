@@ -243,7 +243,7 @@ class AccountsService(BaseService):
         - '3' (index)
 
         :param identifier: the accounts hex encoded address (with optional 0x prefix), its UUID or
-                           its index in `account_service.accounts`
+                           its index (as string, >= 1) in `account_service.accounts`
         :raises: :exc:`ValueError` if the identifier could not be interpreted
         :raises: :exc:`KeyError` if the identified account is not known to the account_service
         """
@@ -259,6 +259,8 @@ class AccountsService(BaseService):
         except ValueError:
             pass
         else:
+            if index <= 0:
+                raise ValueError('Index must be 1 or greater')
             try:
                 return self.accounts[index - 1]
             except IndexError as e:

@@ -55,7 +55,7 @@ class EthApp(BaseApp):
 @click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
 @click.option('--unlock', multiple=True, type=str,
-              help='Unlock the account with the given address (prompts for password)')
+              help='Unlock an account (prompts for password)')
 @click.pass_context
 def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock):
@@ -283,6 +283,11 @@ def export(ctx, from_, to, file):
 @app.group()
 @click.pass_context
 def account(ctx):
+    """Manage accounts.
+
+    For accounts to be accessible by pyethapp, their keys must be stored in the keystore directory.
+    Its path can be configured through "accounts.keystore_dir".
+    """
     app = EthApp(ctx.obj['config'])
     ctx.obj['app'] = app
     AccountsService.register_with_app(app)
@@ -294,6 +299,12 @@ def account(ctx):
 @click.option('--uuid', '-i', help='equip the account with a random UUID', is_flag=True)
 @click.pass_context
 def new(ctx, password, uuid):
+    """Create a new account.
+
+    This will generate a random private key and store it in encrypted form in the keystore
+    directory. You are prompted for the password that is employed. If desired the private key can
+    be associated with a random UUID (version 4) using the --uuid flag.
+    """
     app = ctx.obj['app']
     if uuid:
         id_ = str(uuid4())
@@ -315,7 +326,13 @@ def new(ctx, password, uuid):
 @account.command()
 @click.pass_context
 def list(ctx):
-    """List all accounts with their addresses and ids"""
+    """List accounts with addresses and ids.
+
+    This prints a table of all accounts, numbered consecutively, along with their addresses and
+    ids. Note that some accounts do not have an id, and some addresses might be hidden (i.e. are
+    not present in the keystore file). In the latter case, you have to unlock the accounts (e.g.
+    via "pyethapp --unlock <account> account list") to display the address anyway.
+    """
     accounts = ctx.obj['app'].services.accounts
     if len(accounts) == 0:
         click.echo('no accounts found')
