@@ -54,9 +54,11 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
+@click.option('--unlock', multiple=True, type=str,
+              help='Unlock the account with the given address (prompts for password)')
 @click.pass_context
 def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
-        mining_pct):
+        mining_pct, unlock):
 
     # configure logging
     log_config = log_config or ':info'
@@ -96,7 +98,8 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     if not config['pow']['activated']:
         config['deactivated_services'].append(PoWService.name)
 
-    ctx.obj = {'config': config}
+    ctx.obj = {'config': config,
+               'unlock': unlock}
 
 
 @app.command()
@@ -283,6 +286,7 @@ def account(ctx):
     app = EthApp(ctx.obj['config'])
     ctx.obj['app'] = app
     AccountsService.register_with_app(app)
+    unlock_accounts(ctx.obj['unlock'], app.services.accounts)
 
 
 @account.command()
@@ -323,6 +327,51 @@ def list(ctx):
             click.echo(fmt.format(i='#' + str(i + 1),
                                   address=(account.address or '').encode('hex'),
                                   id=account.uuid or ''))
+
+
+def unlock_accounts(account_ids, account_service, max_attempts=3):
+    """Unlock a list of accounts, prompting for passwords one by one.
+
+    If an account can not be identified or unlocked, an error message is logged and the program
+    exits.
+
+    :param accounts: a list of account identifiers accepted by :meth:`AccountsService.find`
+    :param account_service: the account service managing the given accounts
+    :param max_attempts: maximum number of attempts per account before the unlocking process is
+                         aborted (>= 1), or `None` to allow an arbitrary number of tries
+    """
+    accounts = []
+    for account_id in account_ids:
+        try:
+            account = account_service.find(account_id)
+        except KeyError:
+            log.fatal('could not find account', identifier=account_id)
+            sys.exit(1)
+        accounts.append(account)
+
+    max_attempts_str = str(max_attempts) if max_attempts else 'oo'
+    attempt_fmt = '(attempt {{attempt}}/{})'.format(max_attempts_str)
+    first_attempt_fmt = 'Password for account {id} ' + attempt_fmt
+    further_attempts_fmt = 'Wrong password. Please try again ' + attempt_fmt
+
+    for identifier, account in zip(account_ids, accounts):
+        attempt = 1
+        pw = click.prompt(first_attempt_fmt.format(id=identifier, attempt=1), hide_input=True,
+                          default='', show_default=False)
+        while True:
+            attempt += 1
+            try:
+                account.unlock(pw)
+            except ValueError:
+                if max_attempts and attempt > max_attempts:
+                    log.fatal('Too many unlock attempts', attempts=attempt, account_id=identifier)
+                    sys.exit(1)
+                else:
+                    pw = click.prompt(further_attempts_fmt.format(attempt=attempt),
+                                      hide_input=True, default='', show_default=False)
+            else:
+                break
+        assert not account.locked
 
 
 if __name__ == '__main__':
