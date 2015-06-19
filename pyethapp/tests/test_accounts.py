@@ -65,6 +65,41 @@ def test_unlock(keystore, password, privkey, uuid):
     assert account.address == privtoaddr(privkey)
 
 
+def test_unlock_wrong(keystore, password, privkey, uuid):
+    account = Account(keystore)
+    assert account.locked
+    with pytest.raises(ValueError):
+        account.unlock(password + '1234')
+    assert account.locked
+    with pytest.raises(ValueError):
+        account.unlock('4321' + password)
+    assert account.locked
+    with pytest.raises(ValueError):
+        account.unlock(password[:len(password) / 2])
+    assert account.locked
+    account.unlock(password)
+    assert not account.locked
+    account.unlock(password + 'asdf')
+    assert not account.locked
+    account.unlock(password + '1234')
+    assert not account.locked
+
+
+def test_lock(account, password, privkey):
+    assert not account.locked
+    assert account.address == privtoaddr(privkey)
+    assert account.privkey == privkey
+    assert account.pubkey is not None
+    account.unlock(password + 'fdsa')
+    account.lock()
+    assert account.locked
+    assert account.address == privtoaddr(privkey)
+    assert account.privkey is None
+    assert account.pubkey is None
+    with pytest.raises(ValueError):
+        account.unlock(password + 'fdsa')
+
+
 def test_dump(account):
     keystore = json.loads(account.dump(include_address=True, include_id=True))
     required_keys = set(['crypto', 'version'])
