@@ -1,6 +1,7 @@
 import json
 import os
 import random
+from uuid import UUID
 from devp2p.service import BaseService
 from ethereum import keys
 from ethereum.slogging import get_logger
@@ -230,6 +231,53 @@ class AccountsService(BaseService):
     def unlocked_accounts(self):
         """Return a list of all unlocked accounts."""
         return [account for account in self if not account.locked]
+
+    def find(self, identifier):
+        """Find an account by either its address, its id or its index as string.
+
+        Example identifiers:
+
+        - '9c0e0240776cfbe6fa1eb37e57721e1a88a563d1' (address)
+        - '0x9c0e0240776cfbe6fa1eb37e57721e1a88a563d1' (address with 0x prefix)
+        - '01dd527b-f4a5-4b3c-9abb-6a8e7cd6722f' (UUID)
+        - '3' (index)
+
+        :param identifier: the accounts hex encoded address (with optional 0x prefix), its UUID or
+                           its index in `account_service.accounts`
+        :raises: :exc:`ValueError` if the identifier could not be interpreted
+        :raises: :exc:`KeyError` if the identified account is not known to the account_service
+        """
+        try:
+            uuid = UUID(identifier)
+        except ValueError:
+            pass
+        else:
+            return self.get_by_id(str(uuid))
+
+        try:
+            index = int(identifier, 10)
+        except ValueError:
+            pass
+        else:
+            try:
+                return self.accounts[index - 1]
+            except IndexError as e:
+                raise KeyError(e.message)
+
+        if identifier[:2] == '0x':
+            identifier = identifier[2:]
+        try:
+            address = identifier.decode('hex')
+        except ValueError:
+            success = False
+        else:
+            if len(address) != 20:
+                success = False
+            else:
+                return self[address]
+
+        assert not success
+        raise ValueError('Could not interpret account identifier')
 
     def get_by_id(self, id):
         """Return the account with a given id.
