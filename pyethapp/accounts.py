@@ -83,10 +83,23 @@ class Account(object):
         return json.dumps(d)
 
     def unlock(self, password):
-        """Unlock the account with a password."""
-        # TODO wrong password
-        self._privkey = keys.decode_keystore_json(self.keystore, password)
-        self.locked = False
+        """Unlock the account with a password.
+
+        If the account is already unlocked, nothing happens, even if the password is wrong.
+
+        :raises: :exc:`ValueError` (originating in ethereum.keys) if the password is wrong
+        """
+        if self.locked:
+            self._privkey = keys.decode_keystore_json(self.keystore, password)
+            self.locked = False
+
+    def lock(self):
+        """Relock an unlocked account.
+
+        This method sets `account.privkey` to `None` (unlike `account.address` which is preserved).
+        """
+        self._privkey = None
+        self.locked = True
 
     @property
     def privkey(self):
