@@ -249,6 +249,8 @@ class AccountsService(BaseService):
                     pass
                 else:
                     unlocked.append(account)
+        log.info('unlocked accounts', n_locked=len(self.accounts) - len(self.unlocked_accounts),
+                 n_unlocked=len(self.unlocked_accounts), n_newly_unlocked=len(unlocked))
         return unlocked
 
     @property
