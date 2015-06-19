@@ -24,11 +24,11 @@ class SyncTask(object):
             for each block
                 chainservice.add_blocks() # blocks if queue is full
     """
-    max_blocks_per_request = 256
+    max_blocks_per_request = 32
     initial_blockhashes_per_request = 16
-    max_blockhashes_per_request = 2048
-    blocks_request_timeout = 8.  # 256 * ~2KB = 512KB
-    blockhashes_request_timeout = 8.  # 32 * 2048 = 65KB
+    max_blockhashes_per_request = 96
+    blocks_request_timeout = 32.
+    blockhashes_request_timeout = 32.
 
     def __init__(self, synchronizer, proto, blockhash, chain_difficulty=0, originator_only=False):
         self.synchronizer = synchronizer
