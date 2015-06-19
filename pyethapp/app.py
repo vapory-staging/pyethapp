@@ -56,9 +56,10 @@ class EthApp(BaseApp):
               help='pct cpu used for mining')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
+@click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, unlock):
+        mining_pct, unlock, password):
 
     # configure logging
     log_config = log_config or ':info'
@@ -99,7 +100,8 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
         config['deactivated_services'].append(PoWService.name)
 
     ctx.obj = {'config': config,
-               'unlock': unlock}
+               'unlock': unlock,
+               'password': password.read().rstrip() if password else None}
 
 
 @app.command()
@@ -291,25 +293,29 @@ def account(ctx):
     app = EthApp(ctx.obj['config'])
     ctx.obj['app'] = app
     AccountsService.register_with_app(app)
-    unlock_accounts(ctx.obj['unlock'], app.services.accounts)
+    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
 
 
 @account.command()
-@click.password_option(default='', show_default=False)
 @click.option('--uuid', '-i', help='equip the account with a random UUID', is_flag=True)
 @click.pass_context
-def new(ctx, password, uuid):
+def new(ctx, uuid):
     """Create a new account.
 
     This will generate a random private key and store it in encrypted form in the keystore
-    directory. You are prompted for the password that is employed. If desired the private key can
-    be associated with a random UUID (version 4) using the --uuid flag.
+    directory. You are prompted for the password that is employed (if no password file is
+    specified). If desired the private key can be associated with a random UUID (version 4) using
+    the --uuid flag.
     """
     app = ctx.obj['app']
     if uuid:
         id_ = str(uuid4())
     else:
         id_ = None
+    password = ctx.obj['password']
+    if password is None:
+        password = click.prompt('Password to encrypt private key', default='', hide_input=True,
+                                confirmation_prompt=True, show_default=False)
     account = Account.new(password, uuid=id_)
     try:
         app.services.accounts.add_account(account, path=account.address.encode('hex'))
@@ -350,17 +356,17 @@ def list(ctx):
 
 @account.command('import')
 @click.argument('f', type=click.File(), metavar='FILE')
-@click.password_option(default='', show_default=False)
 @click.option('--uuid', '-i', help='equip the new account with a random UUID', is_flag=True)
 @click.pass_context
-def import_(ctx, f, password, uuid):
+def import_(ctx, f, uuid):
     """Import a private key from FILE.
 
     FILE is the path to the file in which the private key is stored. The key is assumed to be hex
     encoded, surrounding whitespace is stripped. A new account is created for the private key, as
     if it was created with "pyethapp account new", and stored in the keystore directory. You will
-    be prompted for a password to encrypt the key. If desired a random UUID (version 4) can be
-    generated using the --uuid flag in order to identify the new account later.
+    be prompted for a password to encrypt the key (if no password file is specified). If desired a
+    random UUID (version 4) can be generated using the --uuid flag in order to identify the new
+    account later.
     """
     app = ctx.obj['app']
     if uuid:
@@ -373,6 +379,10 @@ def import_(ctx, f, password, uuid):
     except TypeError:
         click.echo('Could not decode private key from file (should be hex encoded)')
         sys.exit(1)
+    password = ctx.obj['password']
+    if password is None:
+        password = click.prompt('Password to encrypt private key', default='', hide_input=True,
+                                confirmation_prompt=True, show_default=False)
     account = Account.new(password, privkey, uuid=id_)
     try:
         app.services.accounts.add_account(account, path=account.address.encode('hex'))
@@ -386,8 +396,11 @@ def import_(ctx, f, password, uuid):
         click.echo('       Id: ' + str(account.uuid))
 
 
-def unlock_accounts(account_ids, account_service, max_attempts=3):
-    """Unlock a list of accounts, prompting for passwords one by one.
+def unlock_accounts(account_ids, account_service, max_attempts=3, password=None):
+    """Unlock a list of accounts., prompting for passwords one by one if not given.
+
+    If a password is specified, it will be used to unlock all accounts. If not, the user is
+    prompted for one password per account.
 
     If an account can not be identified or unlocked, an error message is logged and the program
     exits.
@@ -396,6 +409,7 @@ def unlock_accounts(account_ids, account_service, max_attempts=3):
     :param account_service: the account service managing the given accounts
     :param max_attempts: maximum number of attempts per account before the unlocking process is
                          aborted (>= 1), or `None` to allow an arbitrary number of tries
+    :param password: optional password which will be used to unlock the accounts
     """
     accounts = []
     for account_id in account_ids:
@@ -405,6 +419,15 @@ def unlock_accounts(account_ids, account_service, max_attempts=3):
             log.fatal('could not find account', identifier=account_id)
             sys.exit(1)
         accounts.append(account)
+
+    if password is not None:
+        for identifier, account in zip(account_ids, accounts):
+            try:
+                account.unlock(password)
+            except ValueError:
+                log.fatal('Could not unlock account with password from file',
+                          account_id=identifier)
+        return
 
     max_attempts_str = str(max_attempts) if max_attempts else 'oo'
     attempt_fmt = '(attempt {{attempt}}/{})'.format(max_attempts_str)
