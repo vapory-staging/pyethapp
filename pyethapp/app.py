@@ -348,6 +348,44 @@ def list(ctx):
                                   locked='yes' if account.locked else 'no'))
 
 
+@account.command('import')
+@click.argument('f', type=click.File(), metavar='FILE')
+@click.password_option(default='', show_default=False)
+@click.option('--uuid', '-i', help='equip the new account with a random UUID', is_flag=True)
+@click.pass_context
+def import_(ctx, f, password, uuid):
+    """Import a private key from FILE.
+
+    FILE is the path to the file in which the private key is stored. The key is assumed to be hex
+    encoded, surrounding whitespace is stripped. A new account is created for the private key, as
+    if it was created with "pyethapp account new", and stored in the keystore directory. You will
+    be prompted for a password to encrypt the key. If desired a random UUID (version 4) can be
+    generated using the --uuid flag in order to identify the new account later.
+    """
+    app = ctx.obj['app']
+    if uuid:
+        id_ = str(uuid4())
+    else:
+        id_ = None
+    privkey_hex = f.read()
+    try:
+        privkey = privkey_hex.strip().decode('hex')
+    except TypeError:
+        click.echo('Could not decode private key from file (should be hex encoded)')
+        sys.exit(1)
+    account = Account.new(password, privkey, uuid=id_)
+    try:
+        app.services.accounts.add_account(account, path=account.address.encode('hex'))
+    except IOError:
+        click.echo('Could not write keystore file. Make sure you have write permission in the '
+                   'configured directory and check the log for further information.')
+        sys.exit(1)
+    else:
+        click.echo('Account creation successful')
+        click.echo('  Address: ' + account.address.encode('hex'))
+        click.echo('       Id: ' + str(account.uuid))
+
+
 def unlock_accounts(account_ids, account_service, max_attempts=3):
     """Unlock a list of accounts, prompting for passwords one by one.
 
