@@ -41,7 +41,7 @@ class Account(object):
     def new(cls, password, key=None, uuid=None):
         """Create a new account.
 
-        Note that the account will not be stored on disk.
+        Note that this creates the account in memory and does not store it on disk.
 
         :param password: the password used to encrypt the private key
         :param key: the private key, or `None` to generate a random one
@@ -55,7 +55,7 @@ class Account(object):
 
     @classmethod
     def load(cls, f, password=None):
-        """Load an account from a key file.
+        """Load an account from a keystore file.
 
         :param f: either a path to the keyfile or the opened key file.
         :param password: the password to decrypt the key file or `None` to leave it encrypted
@@ -69,6 +69,12 @@ class Account(object):
 
     def dump(self, include_address=True, include_id=True):
         """Dump the keystore for later disk storage.
+
+        The result inherits the entries `'crypto'` and `'version`' from `account.keystore`, and
+        adds `'address'` and `'id'` in accordance with the parameters `'include_address'` and
+        `'include_id`'.
+
+        If address or id are not known, they are not added, even if requested.
 
         :param include_address: flag denoting if the address should be included or not
         :param include_id: flag denoting if the id should be included or not
@@ -87,7 +93,8 @@ class Account(object):
 
         If the account is already unlocked, nothing happens, even if the password is wrong.
 
-        :raises: :exc:`ValueError` (originating in ethereum.keys) if the password is wrong
+        :raises: :exc:`ValueError` (originating in ethereum.keys) if the password is wrong (and the
+                 account is locked)
         """
         if self.locked:
             self._privkey = keys.decode_keystore_json(self.keystore, password)
@@ -97,6 +104,8 @@ class Account(object):
         """Relock an unlocked account.
 
         This method sets `account.privkey` to `None` (unlike `account.address` which is preserved).
+        After calling this method, both `account.privkey` and `account.pubkey` are `None.
+        `account.address` stays unchanged, even if it has been derived from the private key.
         """
         self._privkey = None
         self.locked = True
