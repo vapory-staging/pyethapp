@@ -309,24 +309,6 @@ class AccountsService(BaseService):
                 return account
         raise KeyError('account not found by address', address=address.encode('hex'))
 
-    def unlock_all(self, password):
-        """Try to unlock each locked account with the given password.
-
-        :returns: a list of all accounts that have successfully been unlocked
-        """
-        unlocked = []
-        for account in self.accounts:
-            if account.locked:
-                try:
-                    account.unlock(password)
-                except ValueError:
-                    pass
-                else:
-                    unlocked.append(account)
-        log.info('unlocked accounts', n_locked=len(self.accounts) - len(self.unlocked_accounts),
-                 n_unlocked=len(self.unlocked_accounts), n_newly_unlocked=len(unlocked))
-        return unlocked
-
     @property
     def coinbase(self):
         return self.accounts[0].address
