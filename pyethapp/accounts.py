@@ -307,26 +307,30 @@ class AccountsService(BaseService):
 
         :raises: `KeyError` if no matching account can be found
         """
-        accts = [acct for acct in self.accounts if acct.id == id]
+        accts = [acct for acct in self.accounts if UUID(acct.uuid) == UUID(id)]
         assert len(accts) <= 1
         if len(accts) == 0:
             raise KeyError('account with id {} unknown'.format(id))
-        else:
-            return accts[0]
+        elif len(accts) > 1:
+            log.warning('multiple accounts with same UUID found', uuid=id)
+        return accts[0]
 
     def get_by_address(self, address):
         """Get an account by its address.
 
         Note that even if an account with the given address exists, it might not be found if it is
-        locked.
+        locked. Also, multiple accounts with the same address may exist, in which case the first
+        one is returned (and a warning is logged).
 
         :raises: `KeyError` if no matching account can be found
         """
         assert len(address) == 20
-        for account in self.accounts:
-            if account.address == address:
-                return account
-        raise KeyError('account not found by address', address=address.encode('hex'))
+        accounts = [account for account in self.accounts if account.address == address]
+        if len(accounts) == 0:
+            raise KeyError('account not found by address', address=address.encode('hex'))
+        elif len(accounts) > 1:
+            log.warning('multiple accounts with same address found', address=address.encode('hex'))
+        return accounts[0]
 
     @property
     def coinbase(self):
