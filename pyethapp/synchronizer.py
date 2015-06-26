@@ -3,6 +3,7 @@ import gevent
 import time
 from eth_protocol import TransientBlock
 from ethereum.slogging import get_logger
+import ethereum.utils as utils
 import traceback
 
 log = get_logger('eth.sync')
@@ -116,11 +117,11 @@ class SyncTask(object):
                 return self.exit(success=False)
 
             for blockhash in blockhashes_batch:  # youngest to oldest
-                assert isinstance(blockhash, bytes)
+                assert utils.is_string(blockhash)
                 if blockhash not in self.chain:
                     blockhashes_chain.append(blockhash)
                 else:
-                    log_st.debug('found known blockhash', blockhash=blockhash.encode('hex'),
+                    log_st.debug('found known blockhash', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
             log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes')

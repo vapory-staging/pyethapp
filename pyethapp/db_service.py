@@ -1,6 +1,7 @@
 from devp2p.service import BaseService
 from ethereum.slogging import get_logger
 log = get_logger('db')
+import sys
 
 
 # load available databases

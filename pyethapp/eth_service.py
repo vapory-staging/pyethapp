@@ -20,6 +20,7 @@ import statistics
 from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
+from pyethapp.canary import canary_addresses
 from ethereum.utils import DEBUG
 
 log = get_logger('eth.chainservice')
@@ -241,10 +242,20 @@ class ChainService(WiredService):
                     sentry.warn_invalid(t_block, 'other_block_error')
                     self.block_queue.get()
                     continue
+                # Check canary
+                score = 0
+                for address in canary_addresses:
+                    if block.get_storage_data(address, 1) > 0:
+                        score += 1
+                if score >= 2:
+                    log.warn('canary triggered')
+                    continue
+                # All checks passed
                 log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
-                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()))
+                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()),
+                             gas_used=block.gas_used)
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
                         self.newblock_processing_times.append(total)
@@ -425,3 +436,34 @@ class ChainService(WiredService):
         log.debug('----------------------------------')
         log.debug("recv newblock", block=block, remote_id=proto)
         self.synchronizer.receive_newblock(proto, block, chain_difficulty)
+
+    def on_receive_getblockheaders(self, proto, blockhashes):
+        log.debug('----------------------------------')
+        log.debug("on_receive_getblockheaders", count=len(blockhashes))
+        found = []
+        for bh in blockhashes[:self.wire_protocol.max_getblocks_count]:
+            try:
+                found.append(rlp.encode(rlp.decode(self.chain.db.get(bh))[0]))
+            except KeyError:
+                log.debug("unknown block requested", block_hash=encode_hex(bh))
+        if found:
+            log.debug("found", count=len(found))
+            proto.send_blockheaders(*found)
+
+    def on_receive_blockheaders(self, proto, transient_blocks):
+        log.debug('----------------------------------')
+        pass
+        # TODO: implement headers first syncing
+
+    def on_receive_hashlookup(self, proto, hashes):
+        found = []
+        for h in hashes:
+            try:
+                found.append(utils.encode_hex(self.chain.db.get(
+                             'node:'+utils.decode_hex(h))))
+            except KeyError:
+                found.append('')
+        proto.send_hashlookupresponse(h)
+
+    def on_receive_hashlookupresponse(self, proto, hashresponses):
+        pass

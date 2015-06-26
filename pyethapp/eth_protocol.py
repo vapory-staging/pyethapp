@@ -164,6 +164,42 @@ class ETHProtocol(BaseProtocol):
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
 
+    class getblockheaders(BaseProtocol.command):
+
+        """
+        Requests a BlockHeaders message detailing a number of block headers to be sent,
+        each referred to by a hash. Note: Don't expect that the peer necessarily give you all
+        these block headers in a single message - you might have to re-request them.
+        """
+        cmd_id = 8
+        structure = rlp.sedes.CountableList(rlp.sedes.binary)
+
+    class blockheaders(BaseProtocol.command):
+        cmd_id = 9
+        structure = rlp.sedes.CountableList(Block)
+
+        @classmethod
+        def encode_payload(cls, list_of_rlp):
+            return rlp.encode([rlp.codec.RLPData(x) for x in list_of_rlp], infer_serializer=False)
+
+        @classmethod
+        def decode_payload(cls, rlp_data):
+            # fn = 'blocks.fromthewire.hex.rlp'
+            # open(fn, 'a').write(rlp_data.encode('hex') + '\n')
+            # convert to dict
+            blockheaders = []
+            for blockheader in rlp.decode_lazy(rlp_data):
+                blockheaders.append(BlockHeader(blockheader))
+            return blockheaders
+
+    class hashlookup(BaseProtocol.command):
+        cmd_id = 10
+        structure = rlp.sedes.CountableList(rlp.sedes.binary)
+
+    class hashlookupresponse(BaseProtocol.command):
+        cmd_id = 11
+        structure = rlp.sedes.CountableList(rlp.sedes.binary)
+
 
 class TransientBlock(rlp.Serializable):
 
