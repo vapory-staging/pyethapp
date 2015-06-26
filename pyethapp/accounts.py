@@ -216,8 +216,16 @@ class AccountsService(BaseService):
         To save the account on disk as a key file, pass a path to the desired location. It can
         either be absolute or relative to the keystore directory. `include_address` and
         `include_id` determine if address and id should be removed for storage or not.
+
+        This method will raise a :exc:`ValueError` if the new account has the same UUID as an
+        account already known to the service. Note that address collisions do not result in an
+        exception as those may slip through anyway for locked accounts with hidden addresses.
         """
         log.info('adding account', account=account)
+        if account.uuid is not None:
+            if len([acct for acct in self.accounts if acct.uuid == account.uuid]) > 0:
+                log.error('could not add account (UUID collision)', uuid=account.uuid)
+                raise ValueError('Could not add account (UUID collision)')
         if path:
             if not os.path.isabs(path):
                 path = os.path.join(self.keystore_dir, path)
