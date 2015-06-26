@@ -1,13 +1,14 @@
 import json
 from uuid import uuid4
 from ethereum.keys import privtoaddr
+from ethereum.transactions import Transaction
 from pyethapp.accounts import Account
 import pytest
 
 
 @pytest.fixture(scope='module')
 def privkey():
-    return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'.decode('hex')
 
 
 @pytest.fixture(scope='module')
@@ -98,6 +99,7 @@ def test_lock(account, password, privkey):
     assert account.pubkey is None
     with pytest.raises(ValueError):
         account.unlock(password + 'fdsa')
+    account.unlock(password)
 
 
 def test_dump(account):
@@ -132,3 +134,13 @@ def test_uuid_setting(account):
     account.uuid = uuid
     assert account.uuid == uuid
     assert account.keystore['id'] == uuid
+
+
+def test_sign(account, password):
+    tx = Transaction(1, 0, 0, account.address, 0, '')
+    account.sign_tx(tx)
+    assert tx.sender == account.address
+    account.lock()
+    with pytest.raises(ValueError):
+        account.sign_tx(tx)
+    account.unlock(password)

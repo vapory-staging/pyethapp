@@ -48,7 +48,7 @@ class Account(object):
         :param key: the private key, or `None` to generate a random one
         :param uuid: an optional id
         """
-        if not key:
+        if key is None:
             key = mk_random_privkey()
         keystore = keys.make_keystore_json(key, password)
         keystore['id'] = uuid
@@ -159,6 +159,20 @@ class Account(object):
             self.keystore['id'] = value
         elif 'id' in self.keystore:
             self.keystore.pop('id')
+
+    def sign_tx(self, tx):
+        """Sign a Transaction with the private key of this account.
+
+        If the account is unlocked, this is equivalent to ``tx.sign(account.privkey)``.
+
+        :param tx: the :class:`ethereum.transactions.Transaction` to sign
+        :raises: :exc:`ValueError` if the account is locked
+        """
+        if self.privkey:
+            log.info('signing tx', tx=tx, account=self)
+            tx.sign(self.privkey)
+        else:
+            raise ValueError('Locked account cannot sign tx')
 
     def __repr__(self):
         if self.address is not None:
@@ -336,13 +350,6 @@ class AccountsService(BaseService):
     @property
     def coinbase(self):
         return self.accounts[0].address
-
-    def sign_tx(self, sender, tx):
-        # should be moved to Account where individual rules can be implemented
-        assert sender in self
-        a = self[sender]
-        log.info('signing tx', tx=tx, account=a)
-        tx.sign(a.privkey)
 
     def __contains__(self, address):
         assert len(address) == 20
