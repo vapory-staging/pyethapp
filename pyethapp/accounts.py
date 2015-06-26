@@ -233,6 +233,9 @@ class AccountsService(BaseService):
                 log.error('File does already exist', path=path)
                 raise IOError('File does already exist')
             try:
+                directory = os.path.dirname(path)
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
                 with open(path, 'w') as f:
                     f.write(account.dump(include_address, include_id))
             except IOError as e:
