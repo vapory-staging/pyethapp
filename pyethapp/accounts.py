@@ -261,8 +261,9 @@ class AccountsService(BaseService):
         - '01dd527b-f4a5-4b3c-9abb-6a8e7cd6722f' (UUID)
         - '3' (index)
 
-        :param identifier: the accounts hex encoded address (with optional 0x prefix), its UUID or
-                           its index (as string, >= 1) in `account_service.accounts`
+        :param identifier: the accounts hex encoded, case insensitive address (with optional 0x
+                           prefix), its UUID or its index (as string, >= 1) in
+                           `account_service.accounts`
         :raises: :exc:`ValueError` if the identifier could not be interpreted
         :raises: :exc:`KeyError` if the identified account is not known to the account_service
         """
@@ -289,7 +290,7 @@ class AccountsService(BaseService):
             identifier = identifier[2:]
         try:
             address = identifier.decode('hex')
-        except ValueError:
+        except TypeError:
             success = False
         else:
             if len(address) != 20:
