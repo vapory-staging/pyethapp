@@ -120,3 +120,15 @@ def test_dump(account):
     keystore = json.loads(account.dump(include_address=False, include_id=False))
     required_keys = set(['crypto', 'version'])
     assert set(keystore.keys()) == required_keys
+
+
+def test_uuid_setting(account):
+    uuid = account.uuid
+    account.uuid = 'asdf'
+    assert account.uuid == 'asdf'
+    account.uuid = None
+    assert account.uuid is None
+    assert 'id' not in account.keystore
+    account.uuid = uuid
+    assert account.uuid == uuid
+    assert account.keystore['id'] == uuid
