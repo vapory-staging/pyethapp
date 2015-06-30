@@ -1077,7 +1077,7 @@ class NewBlockFilter(object):
         self.chainservice.on_new_head_candidate_cbs.append(self._new_block_cb)
 
     def _new_block_cb(self, b):
-        log.debug('newblock cb called', filter=self, ts=time.time())
+        # log.debug('newblock cb called', filter=self, ts=time.time())
         self.new_block_event.set()
 
     def __repr__(self):
