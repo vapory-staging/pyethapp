@@ -9,7 +9,9 @@ from ethereum.processblock import validate_transaction
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
-from ethereum.blocks import Block, VerificationFailed, GENESIS_NONCE, genesis
+from ethereum.refcount_db import RefcountDB
+from ethereum.blocks import Block, VerificationFailed, GENESIS_NONCE, \
+    genesis, GENESIS_INITIAL_ALLOC
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
@@ -22,6 +24,7 @@ from gevent.queue import Queue
 from pyethapp import sentry
 from pyethapp.canary import canary_addresses
 from ethereum.utils import DEBUG
+import json
 
 log = get_logger('eth.chainservice')
 
@@ -85,7 +88,10 @@ class ChainService(WiredService):
     """
     # required by BaseService
     name = 'chain'
-    default_config = dict(eth=dict(network_id=0, genesis_nonce=GENESIS_NONCE.encode('hex')))
+    default_config = dict(eth=dict(network_id=0,
+                                   genesis_nonce=GENESIS_NONCE.encode('hex'),
+                                   genesis_file='',
+                                   pruning=-1))
 
     # required by WiredService
     wire_protocol = eth_protocol.ETHProtocol  # create for each peer
@@ -102,12 +108,32 @@ class ChainService(WiredService):
 
     def __init__(self, app):
         self.config = app.config
-        self.db = app.services.db
+        sce = self.config['eth']
+        if int(sce['pruning']) >= 0:
+            self.db = RefcountDB(app.services.db)
+            if "I am not pruning" in self.db.db:
+                raise Exception("This database was initialized as non-pruning."
+                                " Kinda hard to start pruning now.")
+            self.db.ttl = int(sce['pruning'])
+            self.db.db.put("I am pruning", "1")
+        else:
+            self.db = app.services.db
+            if "I am pruning" in self.db:
+                raise Exception("This database was initialized as pruning."
+                                " Kinda hard to stop pruning now.")
+            self.db.put("I am not pruning", "1")
         assert self.db is not None
         super(ChainService, self).__init__(app)
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
-        _genesis = genesis(self.db, nonce=self.config['eth']['genesis_nonce'].decode('hex'))
+        try:
+            _alloc = json.load(sce['genesis_file'])
+            log.info('loaded genesis file', filename=sce['genesis_file'])
+        except:
+            _alloc = GENESIS_INITIAL_ALLOC
+            log.info('loaded default genesis alloc')
+        _genesis = genesis(self.db, start_alloc=_alloc,
+                           nonce=sce['genesis_nonce'].decode('hex'))
         self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
                            coinbase=coinbase)
         log.info('chain at', number=self.chain.head.number)

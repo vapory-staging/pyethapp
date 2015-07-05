@@ -66,8 +66,11 @@ class SyncTask(object):
     def fetch_hashchain(self):
         log_st.debug('fetching hashchain')
         blockhashes_chain = [self.blockhash]  # youngest to oldest
+        # For testing purposes: skip the hash downoading stage
+        # import ast
+        # blockhashes_chain = ast.literal_eval(open('/home/vub/blockhashes.pyast').read())[:299000]
 
-        blockhash = self.blockhash
+        blockhash = self.blockhash = blockhashes_chain[-1]
         assert blockhash not in self.chain
 
         # get block hashes until we found a known one
@@ -124,7 +127,7 @@ class SyncTask(object):
                     log_st.debug('found known blockhash', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
-            log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes')
+            log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes, ending with %s' % utils.encode_hex(blockhashes_chain[-1]))
             max_blockhashes_per_request = self.max_blockhashes_per_request
 
         self.fetch_blocks(blockhashes_chain)

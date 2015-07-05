@@ -110,6 +110,25 @@ class LevelDB(object):
     def __repr__(self):
         return '<DB at %d uncommitted=%d>' % (id(self.db), len(self.uncommitted))
 
+    def inc_refcount(self, key, value):
+        self.put(key, value)
+
+    def dec_refcount(self, key):
+        pass
+
+    def revert_refcount_changes(self, epoch):
+        pass
+
+    def commit_refcount_changes(self, epoch):
+        pass
+
+    def cleanup(self, epoch):
+        pass
+
+    def put_temporarily(self, key, value):
+        self.inc_refcount(key, value)
+        self.dec_refcount(key)
+
 
 class LevelDBService(LevelDB, BaseService):
 

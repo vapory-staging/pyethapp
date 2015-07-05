@@ -23,7 +23,7 @@ def make_request(*args):
 
 def warn_invalid(block, errortype='other'):
     try:
-        make_request('http://badblocks.ethdev.com', {
+        make_request('http://badblocks.ethereum.org', {
             "block": utils.encode_hex(rlp.encode(block)),
             "errortype": errortype,
             "hints": {
