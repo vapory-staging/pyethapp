@@ -1,8 +1,9 @@
 import monkeypatches
 import json
-import sys
 import os
 import signal
+import sys
+from uuid import uuid4
 import click
 from click import BadParameter
 import gevent
@@ -19,7 +20,7 @@ import config as konfig
 from db_service import DBService
 from jsonrpc import JSONRPCServer
 from pow_service import PoWService
-from accounts import AccountsService
+from accounts import AccountsService, Account
 from pyethapp import __version__
 import utils
 
@@ -53,9 +54,12 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
+@click.option('--unlock', multiple=True, type=str,
+              help='Unlock an account (prompts for password)')
+@click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
-        mining_pct):
+        mining_pct, unlock, password):
 
     # configure logging
     log_config = log_config or ':info'
@@ -95,7 +99,9 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     if not config['pow']['activated']:
         config['deactivated_services'].append(PoWService.name)
 
-    ctx.obj = {'config': config}
+    ctx.obj = {'config': config,
+               'unlock': unlock,
+               'password': password.read().rstrip() if password else None}
 
 
 @app.command()
@@ -274,6 +280,178 @@ def export(ctx, from_, to, file):
         block_rlp = app.services.db.get(block_hash)
         file.write(block_rlp)
     log.info('Export complete')
+
+
+@app.group()
+@click.pass_context
+def account(ctx):
+    """Manage accounts.
+
+    For accounts to be accessible by pyethapp, their keys must be stored in the keystore directory.
+    Its path can be configured through "accounts.keystore_dir".
+    """
+    app = EthApp(ctx.obj['config'])
+    ctx.obj['app'] = app
+    AccountsService.register_with_app(app)
+    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
+
+
+@account.command()
+@click.option('--uuid', '-i', help='equip the account with a random UUID', is_flag=True)
+@click.pass_context
+def new(ctx, uuid):
+    """Create a new account.
+
+    This will generate a random private key and store it in encrypted form in the keystore
+    directory. You are prompted for the password that is employed (if no password file is
+    specified). If desired the private key can be associated with a random UUID (version 4) using
+    the --uuid flag.
+    """
+    app = ctx.obj['app']
+    if uuid:
+        id_ = str(uuid4())
+    else:
+        id_ = None
+    password = ctx.obj['password']
+    if password is None:
+        password = click.prompt('Password to encrypt private key', default='', hide_input=True,
+                                confirmation_prompt=True, show_default=False)
+    account = Account.new(password, uuid=id_)
+    try:
+        app.services.accounts.add_account(account, path=account.address.encode('hex'))
+    except IOError:
+        click.echo('Could not write keystore file. Make sure you have write permission in the '
+                   'configured directory and check the log for further information.')
+        sys.exit(1)
+    else:
+        click.echo('Account creation successful')
+        click.echo('  Address: ' + account.address.encode('hex'))
+        click.echo('       Id: ' + str(account.uuid))
+
+
+@account.command()
+@click.pass_context
+def list(ctx):
+    """List accounts with addresses and ids.
+
+    This prints a table of all accounts, numbered consecutively, along with their addresses and
+    ids. Note that some accounts do not have an id, and some addresses might be hidden (i.e. are
+    not present in the keystore file). In the latter case, you have to unlock the accounts (e.g.
+    via "pyethapp --unlock <account> account list") to display the address anyway.
+    """
+    accounts = ctx.obj['app'].services.accounts
+    if len(accounts) == 0:
+        click.echo('no accounts found')
+    else:
+        fmt = '{i:>4} {address:<40} {id:<36} {locked:<1}'
+        click.echo('     {address:<40} {id:<36} {locked}'.format(address='Address (if known)',
+                                                                 id='Id (if any)',
+                                                                 locked='Locked'))
+        for i, account in enumerate(accounts):
+            click.echo(fmt.format(i='#' + str(i + 1),
+                                  address=(account.address or '').encode('hex'),
+                                  id=account.uuid or '',
+                                  locked='yes' if account.locked else 'no'))
+
+
+@account.command('import')
+@click.argument('f', type=click.File(), metavar='FILE')
+@click.option('--uuid', '-i', help='equip the new account with a random UUID', is_flag=True)
+@click.pass_context
+def import_(ctx, f, uuid):
+    """Import a private key from FILE.
+
+    FILE is the path to the file in which the private key is stored. The key is assumed to be hex
+    encoded, surrounding whitespace is stripped. A new account is created for the private key, as
+    if it was created with "pyethapp account new", and stored in the keystore directory. You will
+    be prompted for a password to encrypt the key (if no password file is specified). If desired a
+    random UUID (version 4) can be generated using the --uuid flag in order to identify the new
+    account later.
+    """
+    app = ctx.obj['app']
+    if uuid:
+        id_ = str(uuid4())
+    else:
+        id_ = None
+    privkey_hex = f.read()
+    try:
+        privkey = privkey_hex.strip().decode('hex')
+    except TypeError:
+        click.echo('Could not decode private key from file (should be hex encoded)')
+        sys.exit(1)
+    password = ctx.obj['password']
+    if password is None:
+        password = click.prompt('Password to encrypt private key', default='', hide_input=True,
+                                confirmation_prompt=True, show_default=False)
+    account = Account.new(password, privkey, uuid=id_)
+    try:
+        app.services.accounts.add_account(account, path=account.address.encode('hex'))
+    except IOError:
+        click.echo('Could not write keystore file. Make sure you have write permission in the '
+                   'configured directory and check the log for further information.')
+        sys.exit(1)
+    else:
+        click.echo('Account creation successful')
+        click.echo('  Address: ' + account.address.encode('hex'))
+        click.echo('       Id: ' + str(account.uuid))
+
+
+def unlock_accounts(account_ids, account_service, max_attempts=3, password=None):
+    """Unlock a list of accounts., prompting for passwords one by one if not given.
+
+    If a password is specified, it will be used to unlock all accounts. If not, the user is
+    prompted for one password per account.
+
+    If an account can not be identified or unlocked, an error message is logged and the program
+    exits.
+
+    :param accounts: a list of account identifiers accepted by :meth:`AccountsService.find`
+    :param account_service: the account service managing the given accounts
+    :param max_attempts: maximum number of attempts per account before the unlocking process is
+                         aborted (>= 1), or `None` to allow an arbitrary number of tries
+    :param password: optional password which will be used to unlock the accounts
+    """
+    accounts = []
+    for account_id in account_ids:
+        try:
+            account = account_service.find(account_id)
+        except KeyError:
+            log.fatal('could not find account', identifier=account_id)
+            sys.exit(1)
+        accounts.append(account)
+
+    if password is not None:
+        for identifier, account in zip(account_ids, accounts):
+            try:
+                account.unlock(password)
+            except ValueError:
+                log.fatal('Could not unlock account with password from file',
+                          account_id=identifier)
+        return
+
+    max_attempts_str = str(max_attempts) if max_attempts else 'oo'
+    attempt_fmt = '(attempt {{attempt}}/{})'.format(max_attempts_str)
+    first_attempt_fmt = 'Password for account {id} ' + attempt_fmt
+    further_attempts_fmt = 'Wrong password. Please try again ' + attempt_fmt
+
+    for identifier, account in zip(account_ids, accounts):
+        attempt = 1
+        pw = click.prompt(first_attempt_fmt.format(id=identifier, attempt=1), hide_input=True,
+                          default='', show_default=False)
+        while True:
+            attempt += 1
+            try:
+                account.unlock(pw)
+            except ValueError:
+                if max_attempts and attempt > max_attempts:
+                    log.fatal('Too many unlock attempts', attempts=attempt, account_id=identifier)
+                    sys.exit(1)
+                else:
+                    pw = click.prompt(further_attempts_fmt.format(attempt=attempt),
+                                      hide_input=True, default='', show_default=False)
+            else:
+                break
+        assert not account.locked
 
 
 if __name__ == '__main__':
