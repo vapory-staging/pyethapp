@@ -435,7 +435,7 @@ def list_accounts(ctx):
 @click.argument('f', type=click.File(), metavar='FILE')
 @click.option('--uuid', '-i', help='equip the new account with a random UUID', is_flag=True)
 @click.pass_context
-def import_accounts(ctx, f, uuid):
+def import_account(ctx, f, uuid):
     """Import a private key from FILE.
 
     FILE is the path to the file in which the private key is stored. The key is assumed to be hex
