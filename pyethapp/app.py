@@ -8,10 +8,12 @@ import click
 from click import BadParameter
 import gevent
 from gevent.event import Event
+import rlp
 from devp2p.service import BaseService
 from devp2p.peermanager import PeerManager
 from devp2p.discovery import NodeDiscovery
 from devp2p.app import BaseApp
+import eth_protocol
 from eth_service import ChainService
 from console_service import Console
 from ethereum.blocks import Block
@@ -239,16 +241,21 @@ def blocktest(ctx, file, name):
     app.stop()
 
 
-@app.command()
-@click.option('--from', 'from_', type=int, help='The first block to export (default: genesis)')
-@click.option('--to', type=int, help='The last block to export (default: latest)')
-@click.argument('file', type=click.File('wb'))
+@app.command('export')
+@click.option('--from', 'from_', type=int, help='Number of the first block (default: genesis)')
+@click.option('--to', type=int, help='Number of the last block (default: latest)')
+@click.argument('file', type=click.File('ab'))
 @click.pass_context
-def export(ctx, from_, to, file):
+def export_blocks(ctx, from_, to, file):
     """Export the blockchain to <FILE>.
 
     The chain will be stored in binary format, i.e. as a concatenated list of RLP encoded blocks,
     starting with the earliest block.
+
+    If the file already exists, the additional blocks are appended. Otherwise, a new file is
+    created.
+
+    Use - to write to stdout.
     """
     app = EthApp(ctx.obj['config'])
     DBService.register_with_app(app)
@@ -282,6 +289,76 @@ def export(ctx, from_, to, file):
     log.info('Export complete')
 
 
+@app.command('import')
+@click.argument('file', type=click.File('rb'))
+@click.pass_context
+def import_blocks(ctx, file):
+    """Import blocks from <FILE>.
+
+    Blocks are expected to be in binary format, i.e. as a concatenated list of RLP encoded blocks.
+
+    Blocks are imported sequentially. If a block can not be imported (e.g. because it is badly
+    encoded, it is in the chain already or its parent is not in the chain) it will be ignored, but
+    the process will continue. Sole exception: If neither the first block nor its parent is known,
+    importing will end right away.
+
+    Use - to read from stdin.
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+    chain = app.services.chain
+    assert chain.block_queue.empty()
+
+    data = file.read()
+    app.start()
+
+    def blocks():
+        """Generator for blocks encoded in `data`."""
+        i = 0
+        while i < len(data):
+            try:
+                block_data, next_i = rlp.codec.consume_item(data, i)
+            except rlp.DecodingError:
+                log.fatal('invalid RLP encoding', byte_index=i)
+                sys.exit(1)  # have to abort as we don't know where to continue
+            try:
+                if not isinstance(block_data, list) or len(block_data) != 3:
+                    raise rlp.DeserializationError('', block_data)
+                yield eth_protocol.TransientBlock(block_data)
+            except (IndexError, rlp.DeserializationError):
+                log.warning('not a valid block', byte_index=i)  # we can still continue
+                yield None
+            i = next_i
+
+    log.info('importing blocks')
+    # check if it makes sense to go through all blocks
+    first_block = next(blocks())
+    if first_block is None:
+        log.fatal('first block invalid')
+        sys.exit(1)
+    if not (chain.knows_block(first_block.header.hash) or
+            chain.knows_block(first_block.header.prevhash)):
+        log.fatal('unlinked chains', newest_known_block=chain.chain.head.number,
+                  first_unknown_block=first_block.header.number)
+        sys.exit(1)
+
+    # import all blocks
+    for n, block in enumerate(blocks()):
+        if block is None:
+            log.warning('skipping block', number_in_file=n)
+            continue
+        log.debug('adding block to queue', number_in_file=n, number_in_chain=block.header.number)
+        app.services.chain.add_block(block, None)  # None for proto
+
+    # let block processing finish
+    while not app.services.chain.block_queue.empty():
+        gevent.sleep()
+    app.stop()
+    log.info('import finished', head_number=app.services.chain.chain.head.number)
+
+
 @app.group()
 @click.pass_context
 def account(ctx):
@@ -296,10 +373,10 @@ def account(ctx):
     unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
 
 
-@account.command()
+@account.command('new')
 @click.option('--uuid', '-i', help='equip the account with a random UUID', is_flag=True)
 @click.pass_context
-def new(ctx, uuid):
+def new_account(ctx, uuid):
     """Create a new account.
 
     This will generate a random private key and store it in encrypted form in the keystore
@@ -329,9 +406,9 @@ def new(ctx, uuid):
         click.echo('       Id: ' + str(account.uuid))
 
 
-@account.command()
+@account.command('list')
 @click.pass_context
-def list(ctx):
+def list_accounts(ctx):
     """List accounts with addresses and ids.
 
     This prints a table of all accounts, numbered consecutively, along with their addresses and
@@ -358,7 +435,7 @@ def list(ctx):
 @click.argument('f', type=click.File(), metavar='FILE')
 @click.option('--uuid', '-i', help='equip the new account with a random UUID', is_flag=True)
 @click.pass_context
-def import_(ctx, f, uuid):
+def import_accounts(ctx, f, uuid):
     """Import a private key from FILE.
 
     FILE is the path to the file in which the private key is stored. The key is assumed to be hex
