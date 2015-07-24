@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import shutil
 from uuid import UUID
 from devp2p.service import BaseService
 from ethereum import keys
@@ -264,6 +265,72 @@ class AccountsService(BaseService):
                 raise
         self.accounts.append(account)
         self.accounts.sort(key=lambda account: account.path)
+
+    def update_account(self, account, new_password, include_address=True, include_id=True):
+        """Replace the password of an account.
+
+        The update is carried out in three steps:
+
+        1) the old keystore file is renamed
+        2) the new keystore file is created at the previous location of the old keystore file
+        3) the old keystore file is removed
+
+        In this way, at least one of the keystore files exists on disk at any time and can be
+        recovered if the process is interrupted.
+
+        :param account: the :class:`Account` which must be unlocked, stored on disk and included in
+                        :attr:`AccountsService.accounts`.
+        :param include_address: forwarded to :meth:`add_account` during step 2
+        :param include_id: forwarded to :meth:`add_account` during step 2
+        :raises: :exc:`ValueError` if the account is locked, if it is not added to the account
+                 manager, or if it is not stored
+        """
+        if account not in self.accounts:
+            raise ValueError('Account not managed by account service')
+        if account.locked:
+            raise ValueError('Cannot update locked account')
+        if account.path is None:
+            raise ValueError('Account not stored on disk')
+        assert os.path.isabs(account.path)
+
+        # create new account
+        log.debug('creating new account')
+        new_account = Account.new(new_password, key=account.privkey, uuid=account.uuid)
+        new_account.path = account.path
+
+        # generate unique path and move old keystore file there
+        backup_path = account.path + '~'
+        i = 1
+        while os.path.exists(backup_path):
+            backup_path = backup_path[:backup_path.rfind('~') + 1] + str(i)
+            i += 1
+        assert not os.path.exists(backup_path)
+        log.debug('moving old keystore file to backup location', **{'from': account.path,
+                                                                    'to': backup_path})
+        shutil.move(account.path, backup_path)
+        assert os.path.exists(backup_path)
+        account.path = backup_path
+
+        # remove old account from manager (not from disk yet) and add new account
+        self.accounts.remove(account)
+        assert account not in self.accounts
+        self.add_account(new_account, include_address, include_id)
+        assert os.path.exists(new_account.path)
+        assert new_account in self.accounts
+
+        # everything was successful (no exception has been raised), so delete old keystore file
+        log.debug('deleting backup of old keystore', path=backup_path)
+        os.remove(backup_path)
+
+        # set members of account to values of new_account
+        account.keystore = new_account.keystore
+        account.path = new_account.path
+        assert account.__dict__ == new_account.__dict__
+        # replace new_account by old account in account list
+        self.accounts.append(account)
+        self.accounts.remove(new_account)
+        self.accounts.sort(key=lambda account: account.path)
+        log.debug('updating account password successful')
 
     def accounts_with_address(self):
         """Return a list of accounts whose address is known."""

@@ -264,3 +264,50 @@ def test_account_sorting(app):
 
     assert [account.path for account in s.accounts] == paths_sorted
     assert [s.find(str(i)).path for i in xrange(1, len(paths) + 1)] == paths_sorted
+
+
+def test_update(app, account, password):
+    s = app.services.accounts
+    path = os.path.join(app.config['accounts']['keystore_dir'], 'update_test')
+    address = account.address
+    privkey = account.privkey
+    pubkey = account.pubkey
+    uuid = account.uuid
+
+    with pytest.raises(ValueError):
+        s.update_account(account, 'pw2')
+    s.add_account(account, store=False)
+    with pytest.raises(ValueError):
+        s.update_account(account, 'pw2')
+    s.accounts.remove(account)
+    account.path = path
+    s.add_account(account, store=True)
+    account.lock()
+    with pytest.raises(ValueError):
+        s.update_account(account, 'pw2')
+    account.unlock(password)
+    s.update_account(account, 'pw2')
+
+    assert account.path == path
+    assert account.address == address
+    assert account.privkey == privkey
+    assert account.pubkey == pubkey
+    assert account.uuid == uuid
+    assert not account.locked
+    assert account in s.accounts
+
+    account.lock()
+    with pytest.raises(ValueError):
+        account.unlock(password)
+    account.unlock('pw2')
+    assert not account.locked
+
+    assert os.listdir(app.config['accounts']['keystore_dir']) == ['update_test']
+
+    files = ['update_test~' + str(i) for i in xrange(20)]
+    files.append('update_test~')
+    for filename in files:
+        # touch files
+        open(os.path.join(app.config['accounts']['keystore_dir'], filename), 'w').close()
+    s.update_account(account, 'pw3')
+    assert set(os.listdir(app.config['accounts']['keystore_dir'])) == set(files + ['update_test'])
