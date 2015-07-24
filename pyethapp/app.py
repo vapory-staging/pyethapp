@@ -495,6 +495,10 @@ def update_account(ctx, account):
 
     As this command tampers with your keystore directory, it is advisable to perform a manual
     backup in advance.
+
+    If a password is provided via the "--password" option (on the "pyethapp" base command), it will
+    be used to unlock the account, but not as the new password (as distinguished from
+    "pyethapp account new").
     """
     app = ctx.obj['app']
     unlock_accounts([account], app.services.accounts, password=ctx.obj['password'])
@@ -507,13 +511,8 @@ def update_account(ctx, account):
     click.echo('Address: {}'.format(old_account.address.encode('hex')))
     click.echo('     Id: {}'.format(old_account.uuid))
 
-    password = ctx.obj['password']
-    if password is None:
-        new_password = click.prompt('New password', default='', hide_input=True,
-                                    confirmation_prompt=True, show_default=False)
-    else:
-        click.echo('New password read from file')
-        new_password = password
+    new_password = click.prompt('New password', default='', hide_input=True,
+                                confirmation_prompt=True, show_default=False)
 
     try:
         app.services.accounts.update_account(old_account, new_password)
