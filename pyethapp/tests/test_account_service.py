@@ -164,6 +164,7 @@ def test_store(app, account):
     assert account_reloaded.privkey is None
     assert account_reloaded.path == account.path
     assert account.privkey is not None
+    account.path = None
 
 
 def test_store_overwrite(app, account):
@@ -179,6 +180,7 @@ def test_store_overwrite(app, account):
         s.add_account(account, store=True)
     s.add_account(account2, store=True)
     account.uuid = uuid
+    account.path = None
 
 
 def test_store_dir(app, account):
@@ -212,6 +214,7 @@ def test_store_private(app, account, password):
     account_reloaded.unlock(password)
     assert account_reloaded.address == account.address
     assert account_reloaded.uuid is None
+    account.path = None
 
 
 def test_store_absolute(app, account):
@@ -224,6 +227,7 @@ def test_store_absolute(app, account):
     account_reloaded = Account.load(account.path)
     assert account_reloaded.address == account.address
     shutil.rmtree(tmpdir)
+    account.path = None
 
 
 def test_restart_service(app, account, password):
@@ -243,6 +247,7 @@ def test_restart_service(app, account, password):
     reloaded_account.unlock(password)
     assert reloaded_account.privkey == account.privkey
     assert reloaded_account.pubkey == account.pubkey
+    account.path = None
 
 
 def test_account_sorting(app):
@@ -311,3 +316,4 @@ def test_update(app, account, password):
         open(os.path.join(app.config['accounts']['keystore_dir'], filename), 'w').close()
     s.update_account(account, 'pw3')
     assert set(os.listdir(app.config['accounts']['keystore_dir'])) == set(files + ['update_test'])
+    account.path = None
