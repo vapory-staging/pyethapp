@@ -2,9 +2,13 @@ import os
 import shutil
 import tempfile
 from uuid import uuid4
+from ethereum.slogging import get_logger
 from devp2p.app import BaseApp
 import pytest
 from pyethapp.accounts import Account, AccountsService
+
+
+log = get_logger('tests.account_service')
 
 
 @pytest.fixture()
@@ -16,6 +20,7 @@ def app(request):
         # cleanup temporary keystore directory
         assert app.config['accounts']['keystore_dir'].startswith(tempfile.gettempdir())
         shutil.rmtree(app.config['accounts']['keystore_dir'])
+        log.debug('cleaned temporary keystore dir', dir=app.config['accounts']['keystore_dir'])
     request.addfinalizer(fin)
 
     return app
@@ -53,7 +58,7 @@ def test_empty(app):
 def test_add_account(app, account):
     s = app.services.accounts
     assert len(s) == 0
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert len(s) == 1
     assert s.accounts == [account]
     assert s[account.address] == account
@@ -66,7 +71,7 @@ def test_add_locked_account(app, account, password):
     s = app.services.accounts
     account.lock()
     assert account.address is not None
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert s.accounts == [account]
     assert s[account.address] == account
     assert len(s.unlocked_accounts()) == 0
@@ -81,7 +86,7 @@ def test_add_account_without_address(app, account, password):
     account.lock()
     address = account.address
     account._address = None
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert s.accounts == [account]
     assert len(s.unlocked_accounts()) == 0
     assert len(s.accounts_with_address()) == 0
@@ -94,13 +99,13 @@ def test_add_account_without_address(app, account, password):
 
 def test_add_account_twice(app, account):
     s = app.services.accounts
-    s.add_account(account)
+    s.add_account(account, store=False)
     with pytest.raises(ValueError):
-        s.add_account(account)
+        s.add_account(account, store=False)
     assert len(s.accounts) == 1
     uuid = account.uuid
     account.uuid = None
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert len(s) == 2
     assert s.accounts == [account, account]
     assert s[account.address] == account
@@ -111,7 +116,7 @@ def test_add_account_twice(app, account):
 
 def test_lock_after_adding(app, account, password):
     s = app.services.accounts
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert s.unlocked_accounts() == [account]
     account.lock()
     assert len(s.unlocked_accounts()) == 0
@@ -121,7 +126,7 @@ def test_lock_after_adding(app, account, password):
 
 def test_find(app, account):
     s = app.services.accounts
-    s.add_account(account)
+    s.add_account(account, store=False)
     assert len(s) == 1
     assert s.find('1') == account
     assert s.find(account.address.encode('hex')) == account
@@ -148,15 +153,16 @@ def test_find(app, account):
 
 def test_store(app, account):
     s = app.services.accounts
-    s.add_account(account, path='account1', include_id=True, include_address=True)
-    path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
-    assert os.path.exists(path)
-    account_reloaded = Account.load(path)
+    account.path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
+    s.add_account(account, include_id=True, include_address=True)
+    assert os.path.exists(account.path)
+    account_reloaded = Account.load(account.path)
     assert account_reloaded.uuid is not None
     assert account_reloaded.address is not None
     assert account_reloaded.uuid == account.uuid
     assert account_reloaded.address == account.address
     assert account_reloaded.privkey is None
+    assert account_reloaded.path == account.path
     assert account.privkey is not None
 
 
@@ -164,10 +170,14 @@ def test_store_overwrite(app, account):
     s = app.services.accounts
     uuid = account.uuid
     account.uuid = None
-    s.add_account(account, path='account1')
+    account.path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
+    account2 = Account(account.keystore)
+    account2.path = os.path.join(app.config['accounts']['keystore_dir'], 'account2')
+
+    s.add_account(account, store=True)
     with pytest.raises(IOError):
-        s.add_account(account, path='account1')
-    s.add_account(account, path='account2')
+        s.add_account(account, store=True)
+    s.add_account(account2, store=True)
     account.uuid = uuid
 
 
@@ -175,19 +185,28 @@ def test_store_dir(app, account):
     s = app.services.accounts
     uuid = account.uuid
     account.uuid = None
-    s.add_account(account, path='some/sub/dir/account1')
-    s.add_account(account, path='some/sub/dir/account2')
-    s.add_account(account, path='account1')
-    with pytest.raises(IOError):
-        s.add_account(account, path='some/sub/dir/account1')
+    paths = [os.path.join(app.config['accounts']['keystore_dir'], p) for p in [
+        'some/sub/dir/account1',
+        'some/sub/dir/account2',
+        'account1',
+    ]]
+
+    for path in paths:
+        new_account = Account(account.keystore, path=path)
+        s.add_account(new_account)
+    for path in paths:
+        new_account = Account(account.keystore, path=path)
+        with pytest.raises(IOError):
+            s.add_account(new_account)
+
     account.uuid = uuid
 
 
 def test_store_private(app, account, password):
     s = app.services.accounts
-    s.add_account(account, path='account1', include_id=False, include_address=False)
-    path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
-    account_reloaded = Account.load(path)
+    account.path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
+    s.add_account(account, include_id=False, include_address=False)
+    account_reloaded = Account.load(account.path)
     assert account_reloaded.address is None
     assert account_reloaded.uuid is None
     account_reloaded.unlock(password)
@@ -198,23 +217,25 @@ def test_store_private(app, account, password):
 def test_store_absolute(app, account):
     s = app.services.accounts
     tmpdir = tempfile.mkdtemp()
-    path = os.path.join(tmpdir, 'account1')
-    assert os.path.isabs(path)
-    s.add_account(account, path=path)
-    assert os.path.exists(path)
-    account_reloaded = Account.load(path)
+    account.path = os.path.join(tmpdir, 'account1')
+    assert os.path.isabs(account.path)
+    s.add_account(account)
+    assert os.path.exists(account.path)
+    account_reloaded = Account.load(account.path)
     assert account_reloaded.address == account.address
     shutil.rmtree(tmpdir)
 
 
 def test_restart_service(app, account, password):
     s = app.services.accounts
-    s.add_account(account, path='account1')
+    account.path = os.path.join(app.config['accounts']['keystore_dir'], 'account1')
+    s.add_account(account)
     app.services.pop('accounts')
     AccountsService.register_with_app(app)
     s = app.services.accounts
     assert len(s) == 1
     reloaded_account = s.accounts[0]
+    assert reloaded_account.path == account.path
     assert reloaded_account.address == account.address
     assert reloaded_account.uuid == account.uuid
     assert reloaded_account.privkey is None
@@ -222,3 +243,24 @@ def test_restart_service(app, account, password):
     reloaded_account.unlock(password)
     assert reloaded_account.privkey == account.privkey
     assert reloaded_account.pubkey == account.pubkey
+
+
+def test_account_sorting(app):
+    keystore_dummy = {}
+    paths = [
+        '/absolute/path/b',
+        '/absolute/path/c',
+        '/absolute/path/letter/e',
+        '/absolute/path/letter/d',
+        '/letter/f',
+        '/absolute/path/a',
+        None
+    ]
+    paths_sorted = sorted(paths)
+
+    s = app.services.accounts
+    for path in paths:
+        s.add_account(Account(keystore_dummy, path=path), store=False)
+
+    assert [account.path for account in s.accounts] == paths_sorted
+    assert [s.find(str(i)).path for i in xrange(1, len(paths) + 1)] == paths_sorted

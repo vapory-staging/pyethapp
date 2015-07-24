@@ -26,9 +26,10 @@ class Account(object):
     :ivar keystore: the key store as a dictionary (as decoded from json)
     :ivar locked: `True` if the account is locked and neither private nor public keys can be
                   accessed, otherwise `False`
+    :ivar path: absolute path to the associated keystore file (`None` for in-memory accounts)
     """
 
-    def __init__(self, keystore, password=None):
+    def __init__(self, keystore, password=None, path=None):
         self.keystore = keystore
         try:
             self._address = self.keystore['address'].decode('hex')
@@ -37,6 +38,10 @@ class Account(object):
         self.locked = True
         if password is not None:
             self.unlock(password)
+        if path is not None:
+            self.path = os.path.abspath(path)
+        else:
+            self.path = None
 
     @classmethod
     def new(cls, password, key=None, uuid=None):
@@ -52,21 +57,18 @@ class Account(object):
             key = mk_random_privkey()
         keystore = keys.make_keystore_json(key, password)
         keystore['id'] = uuid
-        return Account(keystore, password)
+        return Account(keystore, password, None)
 
     @classmethod
-    def load(cls, f, password=None):
+    def load(cls, path, password=None):
         """Load an account from a keystore file.
 
-        :param f: either a path to the keyfile or the opened key file.
+        :param path: full path to the keyfile
         :param password: the password to decrypt the key file or `None` to leave it encrypted
         """
-        try:
+        with open(path) as f:
             keystore = json.load(f)
-        except AttributeError:
-            with open(f) as opened:
-                keystore = json.load(opened)
-        return Account(keystore, password)
+        return Account(keystore, password, path=path)
 
     def dump(self, include_address=True, include_id=True):
         """Dump the keystore for later disk storage.
@@ -190,7 +192,8 @@ class AccountsService(BaseService):
 
     To add more accounts, use :method:`add_account`.
 
-    :ivar accounts: the :class:`Account`s managed by this service
+    :ivar accounts: the :class:`Account`s managed by this service, sorted by the paths to their
+                    keystore files
     :ivar keystore_dir: absolute path to the keystore directory
     """
 
@@ -218,17 +221,18 @@ class AccountsService(BaseService):
                     except ValueError:
                         log.warning('invalid file skipped in keystore directory',
                                     path=filename)
+        self.accounts.sort(key=lambda account: account.path)  # sort accounts by path
         if not self.accounts:
             log.warn('no accounts found')
         else:
             log.info('found account(s)', coinbase=self.coinbase.encode('hex'),
                      accounts=self.accounts)
 
-    def add_account(self, account, path=None, include_address=True, include_id=True):
+    def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.
 
-        To save the account on disk as a key file, pass a path to the desired location. It can
-        either be absolute or relative to the keystore directory. `include_address` and
+        If `store` is true the account will be stored as a key file at the location given by
+        `account.path`. If this is `None` a :exc:`ValueError` is raised. `include_address` and
         `include_id` determine if address and id should be removed for storage or not.
 
         This method will raise a :exc:`ValueError` if the new account has the same UUID as an
@@ -240,22 +244,26 @@ class AccountsService(BaseService):
             if len([acct for acct in self.accounts if acct.uuid == account.uuid]) > 0:
                 log.error('could not add account (UUID collision)', uuid=account.uuid)
                 raise ValueError('Could not add account (UUID collision)')
-        if path:
-            if not os.path.isabs(path):
-                path = os.path.join(self.keystore_dir, path)
-            if os.path.exists(path):
-                log.error('File does already exist', path=path)
+        if store:
+            if account.path is None:
+                raise ValueError('Cannot store account without path')
+            assert os.path.isabs(account.path)
+            if os.path.exists(account.path):
+                log.error('File does already exist', path=account.path)
                 raise IOError('File does already exist')
+            assert account.path not in [acct.path for acct in self.accounts]
             try:
-                directory = os.path.dirname(path)
+                directory = os.path.dirname(account.path)
                 if not os.path.exists(directory):
                     os.makedirs(directory)
-                with open(path, 'w') as f:
+                with open(account.path, 'w') as f:
                     f.write(account.dump(include_address, include_id))
             except IOError as e:
-                log.error('Could not write to file', path=path, message=e.strerror, errno=e.errno)
+                log.error('Could not write to file', path=account.path, message=e.strerror,
+                          errno=e.errno)
                 raise
         self.accounts.append(account)
+        self.accounts.sort(key=lambda account: account.path)
 
     def accounts_with_address(self):
         """Return a list of accounts whose address is known."""

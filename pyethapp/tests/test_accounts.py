@@ -110,17 +110,14 @@ def test_dump(account):
     assert keystore['id'] == account.uuid
 
     keystore = json.loads(account.dump(include_address=False, include_id=True))
-    required_keys = set(['crypto', 'version'])
     assert set(keystore.keys()) == required_keys | set(['id'])
     assert keystore['id'] == account.uuid
 
     keystore = json.loads(account.dump(include_address=True, include_id=False))
-    required_keys = set(['crypto', 'version'])
     assert set(keystore.keys()) == required_keys | set(['address'])
     assert keystore['address'] == account.address.encode('hex')
 
     keystore = json.loads(account.dump(include_address=False, include_id=False))
-    required_keys = set(['crypto', 'version'])
     assert set(keystore.keys()) == required_keys
 
 
