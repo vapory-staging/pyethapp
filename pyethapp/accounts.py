@@ -305,22 +305,42 @@ class AccountsService(BaseService):
             backup_path = backup_path[:backup_path.rfind('~') + 1] + str(i)
             i += 1
         assert not os.path.exists(backup_path)
-        log.debug('moving old keystore file to backup location', **{'from': account.path,
+        log.info('moving old keystore file to backup location', **{'from': account.path,
                                                                     'to': backup_path})
-        shutil.move(account.path, backup_path)
+        try:
+            shutil.move(account.path, backup_path)
+        except:
+            log.error('could not backup keystore, stopping account update',
+                      **{'from': account.path, 'to': backup_path})
+            raise
+
         assert os.path.exists(backup_path)
+        assert not os.path.exists(new_account.path)
         account.path = backup_path
 
         # remove old account from manager (not from disk yet) and add new account
         self.accounts.remove(account)
         assert account not in self.accounts
-        self.add_account(new_account, include_address, include_id)
+        try:
+            self.add_account(new_account, include_address, include_id)
+        except:
+            log.error('adding new account failed, recovering from backup')
+            shutil.move(backup_path, new_account.path)
+            self.accounts.append(account)
+            self.accounts.sort(key=lambda account: account.path)
+            raise
+
         assert os.path.exists(new_account.path)
         assert new_account in self.accounts
 
-        # everything was successful (no exception has been raised), so delete old keystore file
-        log.debug('deleting backup of old keystore', path=backup_path)
-        os.remove(backup_path)
+        # everything was successful (we are still here), so delete old keystore file
+        log.info('deleting backup of old keystore', path=backup_path)
+        try:
+            os.remove(backup_path)
+        except:
+            log.error('failed to delete no longer needed backup of old keystore',
+                      path=account.path)
+            raise
 
         # set members of account to values of new_account
         account.keystore = new_account.keystore
@@ -330,7 +350,7 @@ class AccountsService(BaseService):
         self.accounts.append(account)
         self.accounts.remove(new_account)
         self.accounts.sort(key=lambda account: account.path)
-        log.debug('updating account password successful')
+        log.debug('account update successful')
 
     def accounts_with_address(self):
         """Return a list of accounts whose address is known."""

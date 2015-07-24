@@ -247,7 +247,7 @@ def blocktest(ctx, file, name):
 @click.argument('file', type=click.File('ab'))
 @click.pass_context
 def export_blocks(ctx, from_, to, file):
-    """Export the blockchain to <FILE>.
+    """Export the blockchain to FILE.
 
     The chain will be stored in binary format, i.e. as a concatenated list of RLP encoded blocks,
     starting with the earliest block.
@@ -293,7 +293,7 @@ def export_blocks(ctx, from_, to, file):
 @click.argument('file', type=click.File('rb'))
 @click.pass_context
 def import_blocks(ctx, file):
-    """Import blocks from <FILE>.
+    """Import blocks from FILE.
 
     Blocks are expected to be in binary format, i.e. as a concatenated list of RLP encoded blocks.
 
@@ -473,8 +473,61 @@ def import_account(ctx, f, uuid):
         click.echo('       Id: ' + str(account.uuid))
 
 
+@account.command('update')
+@click.argument('account', type=str)
+@click.pass_context
+def update_account(ctx, account):
+    """
+    Change the password of an account.
+
+    ACCOUNT identifies the account: It can be one of the following: an address, a uuid, or a
+    number corresponding to an entry in "pyethapp account list" (one based).
+
+    "update" first prompts for the current password to unlock the account. Next, the new password
+    must be entered.
+
+    The password replacement procedure backups the original keystore file in the keystore
+    directory, creates the new file, and finally deletes the backup. If something goes wrong, an
+    attempt will be made to restore the keystore file from the backup. In the event that this does
+    not work, it is possible to recover from the backup manually by simply renaming it. The backup
+    shares the same name as the original file, but with an appended "~" plus a number if necessary
+    to avoid name clashes.
+
+    As this command tampers with your keystore directory, it is advisable to perform a manual
+    backup in advance.
+    """
+    app = ctx.obj['app']
+    unlock_accounts([account], app.services.accounts, password=ctx.obj['password'])
+    old_account = app.services.accounts.find(account)
+    if old_account.locked:
+        click.echo('Account needs to be unlocked in order to update its password')
+        sys.exit(1)
+
+    click.echo('Updating account')
+    click.echo('Address: {}'.format(old_account.address.encode('hex')))
+    click.echo('     Id: {}'.format(old_account.uuid))
+
+    password = ctx.obj['password']
+    if password is None:
+        new_password = click.prompt('New password', default='', hide_input=True,
+                                    confirmation_prompt=True, show_default=False)
+    else:
+        click.echo('New password read from file')
+        new_password = password
+
+    try:
+        app.services.accounts.update_account(old_account, new_password)
+    except:
+        click.echo('Account update failed. Make sure that the keystore file has been restored '
+                   'correctly (e.g. with "pyethapp --unlock <acct> account list"). If not, look '
+                   'for automatic backup files in the keystore directory (suffix "~" or '
+                   '"~<number>"). Check the log for further information.')
+        raise
+    click.echo('Account update successful')
+
+
 def unlock_accounts(account_ids, account_service, max_attempts=3, password=None):
-    """Unlock a list of accounts., prompting for passwords one by one if not given.
+    """Unlock a list of accounts, prompting for passwords one by one if not given.
 
     If a password is specified, it will be used to unlock all accounts. If not, the user is
     prompted for one password per account.
