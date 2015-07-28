@@ -248,7 +248,7 @@ class AccountsService(BaseService):
         if store:
             if account.path is None:
                 raise ValueError('Cannot store account without path')
-            assert os.path.isabs(account.path)
+            assert os.path.isabs(account.path), account.path
             if os.path.exists(account.path):
                 log.error('File does already exist', path=account.path)
                 raise IOError('File does already exist')

@@ -394,8 +394,11 @@ def new_account(ctx, uuid):
         password = click.prompt('Password to encrypt private key', default='', hide_input=True,
                                 confirmation_prompt=True, show_default=False)
     account = Account.new(password, uuid=id_)
+    account.path = os.path.join(os.path.abspath(ctx.obj['config']['data_dir']),
+                                ctx.obj['config']['accounts']['keystore_dir'],
+                                account.address.encode('hex'))
     try:
-        app.services.accounts.add_account(account, path=account.address.encode('hex'))
+        app.services.accounts.add_account(account)
     except IOError:
         click.echo('Could not write keystore file. Make sure you have write permission in the '
                    'configured directory and check the log for further information.')
