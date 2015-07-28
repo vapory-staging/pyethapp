@@ -11,7 +11,7 @@ from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
 from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
 from ethereum.blocks import Block, VerificationFailed, genesis, \
-    GENESIS_INITIAL_JSON
+    GENESIS_JSON
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
