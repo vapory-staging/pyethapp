@@ -10,8 +10,8 @@ from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
-from ethereum.blocks import Block, VerificationFailed, GENESIS_NONCE, \
-    genesis, GENESIS_INITIAL_ALLOC
+from ethereum.blocks import Block, VerificationFailed, genesis, \
+    GENESIS_INITIAL_JSON
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
@@ -88,10 +88,7 @@ class ChainService(WiredService):
     """
     # required by BaseService
     name = 'chain'
-    default_config = dict(eth=dict(network_id=0,
-                                   genesis_nonce=GENESIS_NONCE.encode('hex'),
-                                   genesis_file='',
-                                   pruning=-1))
+    default_config = dict(eth=dict(network_id=0, genesis='', pruning=-1))
 
     # required by WiredService
     wire_protocol = eth_protocol.ETHProtocol  # create for each peer
@@ -127,13 +124,12 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         try:
-            _alloc = json.load(sce['genesis_file'])
-            log.info('loaded genesis file', filename=sce['genesis_file'])
+            _json = json.load(sce['genesis'])
+            log.info('loaded genesis', filename=sce['genesis'])
         except:
-            _alloc = GENESIS_INITIAL_ALLOC
+            _json = GENESIS_INITIAL_JSON
             log.info('loaded default genesis alloc')
-        _genesis = genesis(self.db, start_alloc=_alloc,
-                           nonce=sce['genesis_nonce'].decode('hex'))
+        _genesis = genesis(self.db, json=_json)
         self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
                            coinbase=coinbase)
         log.info('chain at', number=self.chain.head.number)
