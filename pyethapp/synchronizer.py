@@ -27,7 +27,7 @@ class SyncTask(object):
     """
     max_blocks_per_request = 32
     initial_blockhashes_per_request = 16
-    max_blockhashes_per_request = 96
+    max_blockhashes_per_request = 512
     blocks_request_timeout = 32.
     blockhashes_request_timeout = 32.
 
@@ -253,6 +253,8 @@ class Synchronizer(object):
             drop
     """
 
+    MAX_NEWBLOCK_AGE = 5  # maximum age (in blocks) of blocks received as newblock
+
     def __init__(self, chainservice, force_sync=None):
         """
         @param: force_sync None or tuple(blockhash, chain_difficulty)
@@ -306,13 +308,13 @@ class Synchronizer(object):
             self.chainservice.broadcast_newblock(t_block, chain_difficulty, origin=proto)
         else:
             # any criteria for which blocks/chains not to add?
-            max_age = 5
             age = self.chain.head.number - t_block.header.number
             log.debug('low difficulty', client=proto.peer.remote_client_version,
                       chain_difficulty=chain_difficulty, expected_difficulty=expected_difficulty,
                       block_age=age)
-            if age > max_age:
-                log.debug('newblock is too old, not adding', block_age=age, max_age=max_age)
+            if age > self.MAX_NEWBLOCK_AGE:
+                log.debug('newblock is too old, not adding', block_age=age,
+                          max_age=self.MAX_NEWBLOCK_AGE)
                 return
 
         # unknown and pow check and highest difficulty

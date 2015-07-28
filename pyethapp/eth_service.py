@@ -166,6 +166,8 @@ class ChainService(WiredService):
             cb(self.chain.head_candidate)
 
     def add_transaction(self, tx, origin=None):
+        if self.is_syncing:
+            return  # we can not evaluate the tx based on outdated state
         log.debug('add_transaction', locked=self.add_transaction_lock.locked(), tx=tx)
         assert isinstance(tx, Transaction)
         assert origin is None or isinstance(origin, BaseProtocol)
@@ -276,7 +278,7 @@ class ChainService(WiredService):
                 log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
-                    log.info('added', block=block, ts=now, txs=len(block.get_transactions()),
+                    log.info('added', block=block, ts=now, txs=block.num_transactions(),
                              gas_used=block.gas_used)
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
