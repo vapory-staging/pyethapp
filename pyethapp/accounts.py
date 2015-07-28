@@ -10,6 +10,8 @@ from ethereum.utils import privtopub  # this is different  than the one used in 
 from ethereum.utils import sha3
 log = get_logger('accounts')
 
+DEFAULT_COINBASE = 'de0b295669a9fd93d5f28d9ec85e40f4cb697bae'
+
 
 def mk_privkey(seed):
     return sha3(seed)
@@ -206,6 +208,10 @@ class AccountsService(BaseService):
         self.keystore_dir = app.config['accounts']['keystore_dir']
         if not os.path.isabs(self.keystore_dir):
             self.keystore_dir = os.path.join(app.config['data_dir'], self.keystore_dir)
+        try:
+            self.coinbase = app.config['pow']['coinbase'] or DEFAULT_COINBASE
+        except:
+            self.coinbase = DEFAULT_COINBASE
         self.accounts = []
         if not os.path.exists(self.keystore_dir):
             log.warning('keystore directory does not exist', directory=self.keystore_dir)
@@ -226,8 +232,7 @@ class AccountsService(BaseService):
         if not self.accounts:
             log.warn('no accounts found')
         else:
-            log.info('found account(s)', coinbase=self.coinbase.encode('hex'),
-                     accounts=self.accounts)
+            log.info('found account(s)', accounts=self.accounts)
 
     def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.
@@ -441,10 +446,6 @@ class AccountsService(BaseService):
         elif len(accounts) > 1:
             log.warning('multiple accounts with same address found', address=address.encode('hex'))
         return accounts[0]
-
-    @property
-    def coinbase(self):
-        return self.accounts[0].address
 
     def __contains__(self, address):
         assert len(address) == 20

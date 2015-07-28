@@ -124,12 +124,14 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         try:
-            _json = json.load(sce['genesis'])
-            log.info('loaded genesis', filename=sce['genesis'])
-        except:
-            _json = GENESIS_INITIAL_JSON
+            _json = json.load(open(sce['genesis']))
+            log.info('loading genesis', filename=sce['genesis'])
+        except Exception as e:
+            log.warn(str(e))
+            _json = GENESIS_JSON
             log.info('loaded default genesis alloc')
         _genesis = genesis(self.db, json=_json)
+        log.info('created genesis block', hash=encode_hex(_genesis.hash))
         self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
                            coinbase=coinbase)
         log.info('chain at', number=self.chain.head.number)
@@ -278,7 +280,7 @@ class ChainService(WiredService):
                 log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
                     now = time.time()
-                    log.info('added', block=block, ts=now, txs=block.num_transactions(),
+                    log.info('added', block=block, txs=block.transaction_count,
                              gas_used=block.gas_used)
                     if t_block.newblock_timestamp:
                         total = now - t_block.newblock_timestamp
