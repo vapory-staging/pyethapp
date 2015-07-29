@@ -124,7 +124,7 @@ def run(ctx, dev, nodial, fake):
 
     if fake:
         from ethereum import blocks
-        blocks.GENESIS_DIFFICULTY = 1024
+        blocks.GENESIS_JSON["difficulty"] = blocks.int_to_hex(64)
         blocks.BLOCK_DIFF_FACTOR = 16
     # create app
     app = EthApp(config)
