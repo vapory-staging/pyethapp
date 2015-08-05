@@ -449,6 +449,9 @@ class AccountsService(BaseService):
             log.warning('multiple accounts with same address found', address=address.encode('hex'))
         return accounts[0]
 
+    def sign_tx(self, address, tx):
+        self.get_by_address(address).sign_tx(tx)
+
     def __contains__(self, address):
         assert len(address) == 20
         return address in [a.address for a in self.accounts]
