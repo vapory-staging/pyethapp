@@ -10,7 +10,7 @@ from ethereum.utils import privtopub  # this is different  than the one used in 
 from ethereum.utils import sha3
 log = get_logger('accounts')
 
-DEFAULT_COINBASE = 'de0b295669a9fd93d5f28d9ec85e40f4cb697bae'
+DEFAULT_COINBASE = 'de0b295669a9fd93d5f28d9ec85e40f4cb697bae'.decode('hex')
 
 
 def mk_privkey(seed):
@@ -233,6 +233,8 @@ class AccountsService(BaseService):
             log.warn('no accounts found')
         else:
             log.info('found account(s)', accounts=self.accounts)
+        if self.accounts:
+            self.coinbase = self.accounts[0].address
 
     def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.

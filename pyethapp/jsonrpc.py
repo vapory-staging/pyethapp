@@ -572,7 +572,9 @@ class Miner(Subdispatcher):
     @public
     @encode_res(address_encoder)
     def coinbase(self):
-        return self.app.services.accounts.coinbase
+        cb = self.app.services.accounts.coinbase
+        assert len(cb) == 20
+        return cb
 
     @public
     @encode_res(quantity_encoder)
