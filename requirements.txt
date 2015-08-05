@@ -2,7 +2,6 @@ CodernityDB
 leveldb
 click
 decorator
-gevent
 wheel
 pyyaml
 werkzeug
