@@ -22,6 +22,8 @@ if not __version__:
             if l.startswith("version = '"):
                 __version__ = l.split("'")[1]
                 break
+    except:
+        pass
     finally:
         if not __version__:
             __version__ = 'undefined'
