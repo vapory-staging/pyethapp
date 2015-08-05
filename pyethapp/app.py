@@ -126,6 +126,9 @@ def run(ctx, dev, nodial, fake):
         from ethereum import blocks
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
+        # workaround for genesis.json hack
+        blocks.GENESIS_JSON["difficulty"] = blocks.int_to_hex(blocks.GENESIS_DIFFICULTY)
+
     # create app
     app = EthApp(config)
 
