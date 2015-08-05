@@ -126,6 +126,7 @@ def run(ctx, dev, nodial, fake):
         from ethereum import blocks
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
+        blocks.MIN_GAS_LIMIT = blocks.GENESIS_GAS_LIMIT / 2
         # workaround for genesis.json hack
         blocks.GENESIS_JSON["difficulty"] = blocks.int_to_hex(blocks.GENESIS_DIFFICULTY)
 
