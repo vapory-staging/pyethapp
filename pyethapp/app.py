@@ -104,6 +104,7 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     ctx.obj = {'config': config,
                'unlock': unlock,
                'password': password.read().rstrip() if password else None}
+    assert (password and ctx.obj['password'] is not None and len(ctx.obj['password'])) or not password, "empty password file"
 
 
 @app.command()
@@ -152,6 +153,10 @@ def run(ctx, dev, nodial, fake):
             assert service.name not in app.services
             service.register_with_app(app)
             assert hasattr(app.services, service.name)
+
+    if ctx.obj['unlock']:
+        unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
+        assert not app.services.accounts.accounts[0].locked, "unlock failed"
 
     # start app
     log.info('starting')
