@@ -154,9 +154,7 @@ def run(ctx, dev, nodial, fake):
             service.register_with_app(app)
             assert hasattr(app.services, service.name)
 
-    if ctx.obj['unlock']:
-        unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
-        assert not app.services.accounts.accounts[0].locked, "unlock failed"
+    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
 
     # start app
     log.info('starting')
@@ -568,6 +566,7 @@ def unlock_accounts(account_ids, account_service, max_attempts=3, password=None)
             except ValueError:
                 log.fatal('Could not unlock account with password from file',
                           account_id=identifier)
+                sys.exit(1)
         return
 
     max_attempts_str = str(max_attempts) if max_attempts else 'oo'
