@@ -45,8 +45,11 @@ def test_status():
     genesis = head = chain.blocks[-1]
 
     # test status
-    proto.send_status(total_difficulty=head.difficulty, chain_head_hash=head.hash,
-                      genesis_hash=genesis.hash)
+    proto.send_status(
+        chain_difficulty=head.chain_difficulty(),
+        chain_head_hash=head.hash,
+        genesis_hash=genesis.hash
+    )
     packet = peer.packets.pop()
     proto.receive_status_callbacks.append(cb)
     proto._receive_status(packet)
