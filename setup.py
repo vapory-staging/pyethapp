@@ -39,7 +39,7 @@ install_requires_replacements = {
 
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 
-test_requirements = []
+test_requirements = ['serpent']
 
 version = '0.9.18'  # preserve format, this is read from __init__.py
 
