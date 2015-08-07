@@ -28,10 +28,11 @@ def test_default_config():
 def test_save_load_config():
     conf = config.get_default_config([BaseApp] + base_services)
     assert conf
+    garbage_conf = tempfile.mktemp()  # do not use default paths in tests!
 
     # from fn or base path
-    config.write_config(conf)
-    conf2 = config.load_config()
+    config.write_config(conf, path=garbage_conf)
+    conf2 = config.load_config(path=garbage_conf)
     print 'b', conf
     print 'a', conf2
     assert conf == conf2
