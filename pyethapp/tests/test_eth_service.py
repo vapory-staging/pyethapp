@@ -13,10 +13,22 @@ slogging.configure(config_string=':info')
 
 class AppMock(object):
 
-    config = dict(app=dict(dir=tempfile.gettempdir()), db=dict(path='_db'))
+    config = dict(
+        app=dict(dir=tempfile.mkdtemp()),
+        db=dict(path='_db'),
+        eth=dict(
+            pruning=-1,
+        ),
+    )
 
-    class Services(object):
-        pass
+    class Services(dict):
+        class accounts:
+            coinbase = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+        class peermanager:
+            @classmethod
+            def broadcast(*args, **kwargs):
+                pass
 
     def __init__(self, db=None):
         self.services = self.Services()
@@ -28,6 +40,7 @@ class PeerMock(object):
     def __init__(self, app):
         self.config = app.config
         self.send_packet = lambda x: x
+        self.remote_client_version = None
 
 newblk_rlp = (
     "f90207f901fef901f9a018632409b5181b4b6508d4b2b2a5463f814ac47bb580c1fe545b4e0"
