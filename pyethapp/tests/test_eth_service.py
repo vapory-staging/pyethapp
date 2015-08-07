@@ -91,9 +91,9 @@ def test_receive_newblock():
 def receive_blocks(rlp_data, leveldb=False, codernitydb=False):
     app = AppMock()
     if leveldb:
-        app.db = leveldb_service.LevelDB(app)
+        app.db = leveldb_service.LevelDB(os.path.join(app.config['app']['dir'], app.config['db']['path']))
     if codernitydb:
-        app.db = codernitydb_service.CodernityDB(app)
+        app.db = codernitydb_service.CodernityDB(os.path.join(app.config['app']['dir'], app.config['db']['path']))
 
     eth = eth_service.ChainService(app)
     proto = eth_protocol.ETHProtocol(PeerMock(app), eth)
