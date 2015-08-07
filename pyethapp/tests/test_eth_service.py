@@ -10,6 +10,8 @@ import rlp
 import tempfile
 slogging.configure(config_string=':info')
 
+empty = object()
+
 
 class AppMock(object):
 
@@ -40,7 +42,7 @@ class PeerMock(object):
     def __init__(self, app):
         self.config = app.config
         self.send_packet = lambda x: x
-        self.remote_client_version = None
+        self.remote_client_version = empty
 
 newblk_rlp = (
     "f90207f901fef901f9a018632409b5181b4b6508d4b2b2a5463f814ac47bb580c1fe545b4e0"
