@@ -18,6 +18,7 @@ class PeerMock(object):
 def setup():
     peer = PeerMock()
     proto = ETHProtocol(peer, WiredService(BaseApp()))
+    proto.service.app.config['eth'] = dict(network_id=1337)
     chain = tester.state()
     cb_data = []
 
@@ -57,7 +58,7 @@ def test_status():
     _p, _d = cb_data.pop()
     assert _p == proto
     assert isinstance(_d, dict)
-    assert _d['total_difficulty'] == head.difficulty
+    assert _d['chain_difficulty'] == head.chain_difficulty()
     print _d
     assert _d['chain_head_hash'] == head.hash
     assert _d['genesis_hash'] == genesis.hash
