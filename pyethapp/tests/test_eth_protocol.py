@@ -68,7 +68,8 @@ def test_blocks():
     # test blocks
     chain.mine(n=2)
     assert len(chain.blocks) == 3
-    proto.send_blocks(*chain.blocks)
+    payload = [rlp.encode(b) for b in chain.blocks]
+    proto.send_blocks(*payload)
     packet = peer.packets.pop()
     assert len(rlp.decode(packet.payload)) == 3
 
@@ -82,26 +83,26 @@ def test_blocks():
     assert isinstance(blocks, list)
     for block in blocks:
         assert isinstance(block, TransientBlock)
-        assert isinstance(block.transaction_list, rlp.LazyList)
-        assert isinstance(block.uncles, rlp.LazyList)
+        assert isinstance(block.transaction_list, list)
+        assert isinstance(block.uncles, list)
         # assert that transactions and uncles have not been decoded
-        assert len(block.transaction_list._elements) == 0
-        assert len(block.uncles._elements) == 0
+        assert len(block.transaction_list) == 0
+        assert len(block.uncles) == 0
 
     # newblock
     approximate_difficulty = chain.blocks[-1].difficulty * 3
-    proto.send_newblock(block=chain.blocks[-1], total_difficulty=approximate_difficulty)
+    proto.send_newblock(block=chain.blocks[-1], chain_difficulty=approximate_difficulty)
     packet = peer.packets.pop()
     proto.receive_newblock_callbacks.append(cb)
     proto._receive_newblock(packet)
 
     _p, _d = cb_data.pop()
     assert 'block' in _d
-    assert 'total_difficulty' in _d
-    assert _d['total_difficulty'] == approximate_difficulty
+    assert 'chain_difficulty' in _d
+    assert _d['chain_difficulty'] == approximate_difficulty
     assert _d['block'].header == chain.blocks[-1].header
-    assert isinstance(_d['block'].transaction_list, rlp.LazyList)
-    assert isinstance(_d['block'].uncles, rlp.LazyList)
+    assert isinstance(_d['block'].transaction_list, list)
+    assert isinstance(_d['block'].uncles, list)
     # assert that transactions and uncles have not been decoded
-    assert len(_d['block'].transaction_list._elements) == 0
-    assert len(_d['block'].uncles._elements) == 0
+    assert len(_d['block'].transaction_list) == 0
+    assert len(_d['block'].uncles) == 0
