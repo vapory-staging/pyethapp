@@ -221,10 +221,6 @@ class TransientBlock(rlp.Serializable):
         """Convert the transient block to a :class:`ethereum.blocks.Block`"""
         return Block(self.header, self.transaction_list, self.uncles, db=db, parent=parent)
 
-    # def serialize(self):
-    # return rlp.encode([self.header.serialize(self.header),
-    # self.transaction_list, self.uncles])
-
     @property
     def hex_hash(self):
         return self.header.hex_hash()
