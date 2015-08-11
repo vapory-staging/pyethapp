@@ -220,8 +220,48 @@ class Console(BaseService):
         self.interrupt.wait()
         print('\n' * 3)
         print("Entering Console")
-        print("Tip: use loglevel `-l:error` to avoid logs")
-        print(">> help(eth)")
+        print("Tip:")
+        print("\tuse `lastlog(n)` to see n lines of log-output.")
+        print("\tuse `lasterr(n)` to see n lines of stderr.")
+        print("\t>> help(eth)")
+        print("\n")
+        import logging
+        import StringIO
+        stream = StringIO.StringIO()
+        handler = logging.StreamHandler(stream=stream)
+        handler.formatter = logging.Formatter("%(levelname)s:%(name)s %(message)s")
+        root = logging.getLogger()
+        root.handlers = []
+        root.addHandler(handler)
+
+        def lastlog(n=1, prefix=None, level=None):
+            """Print the last `n` log lines to stdout.
+            Use `prefix='p2p'` to filter for a specific logger.
+            Use `level=INFO` to filter for a specific level.
+
+            Level- and prefix-filtering are applied before tailing the log.
+            """
+            lines = (stream.getvalue().strip().split('\n') or [])
+            if prefix:
+                lines = filter(lambda line: line.split(':')[1].startswith(prefix), lines)
+            if level:
+                lines = filter(lambda line: line.split(':')[0] == level, lines)
+            for line in lines[-n:]:
+                print(line)
+
+        self.console_locals['lastlog'] = lastlog
+
+        err = StringIO.StringIO()
+        sys.stderr = err
+
+        def lasterr(n=1):
+            """Print the last `n` entries of stderr to stdout.
+            """
+            for line in (err.getvalue().strip().split('\n') or [])[-n:]:
+                print(line)
+
+        self.console_locals['lasterr'] = lasterr
+
         IPython.start_ipython(argv=['--gui', 'gevent'], user_ns=self.console_locals)
         self.interrupt.clear()
 
