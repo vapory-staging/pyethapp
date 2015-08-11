@@ -103,7 +103,7 @@ class Console(BaseService):
                 this.app = app
 
             def transact(this, to, value=0, data='', sender=None,
-                         startgas=25000, gasprice=10*denoms.szabo):
+                         startgas=25000, gasprice=10 * denoms.szabo):
                 sender = address20(sender or this.coinbase)
                 to = address20(to)
                 nonce = this.pending.get_nonce(sender)
@@ -114,7 +114,7 @@ class Console(BaseService):
                 return tx
 
             def call(this, to, value=0, data='',  sender=None,
-                     startgas=25000, gasprice=10*denoms.szabo):
+                     startgas=25000, gasprice=10 * denoms.szabo):
                 sender = address20(sender or this.coinbase)
                 to = address20(to)
                 block = this.head_candidate
@@ -134,7 +134,7 @@ class Console(BaseService):
                 tx.sender = sender
                 try:
                     success, output = processblock.apply_transaction(test_block, tx)
-                except processblock.InvalidTransaction as e:
+                except processblock.InvalidTransaction:
                     success = False
                 assert block.state_root == state_root_before
                 if success:
