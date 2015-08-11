@@ -130,7 +130,7 @@ def set_config_param(config, s, strict=True):
     d = config
     for key in keys[:-1]:
         if strict and key not in d:
-            raise KeyError('Unknown config option')
+            raise KeyError('Unknown config option %s' % param)
         d = d.setdefault(key, {})
     try:
         d[keys[-1]] = yaml.load(value)

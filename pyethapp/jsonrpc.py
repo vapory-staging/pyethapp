@@ -517,8 +517,12 @@ class Compilers(Subdispatcher):
             except ImportError:
                 pass
             try:
-                import solidity
-                self.compilers_['solidity'] = solidity.compile
+                import ethereum._solidity
+                s = ethereum._solidity.get_solidity()
+                if s:
+                    self.compilers_['solidity'] = s.compile
+                else:
+                    log.warn('could not import solidity')
             except ImportError:
                 pass
         return self.compilers_
@@ -1159,7 +1163,7 @@ class FilterManager(Subdispatcher):
             b0 = self.json_rpc_server.get_block(block_id_decoder(fromBlock))
             b1 = self.json_rpc_server.get_block(block_id_decoder(toBlock))
             if b1.number < b0.number:
-                raise BadRequestError('fromBlock must be prior or equal to toBlock')    
+                raise BadRequestError('fromBlock must be prior or equal to toBlock')
             blocks = [b1]
             while blocks[-1] != b0:
                 blocks.append(blocks[-1].get_parent())

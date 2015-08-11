@@ -41,7 +41,7 @@ install_requires = [install_requires_replacements.get(r, r) for r in install_req
 
 test_requirements = ['serpent']
 
-version = '0.9.18'  # preserve format, this is read from __init__.py
+version = '0.9.19'  # preserve format, this is read from __init__.py
 
 setup(
     name='pyethapp',
