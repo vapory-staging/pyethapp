@@ -70,8 +70,12 @@ class Console(BaseService):
     def __init__(self, app):
         super(Console, self).__init__(app)
         self.interrupt = Event()
-        gevent.signal(signal.SIGTSTP, self.interrupt.set)
+        if not app.start_console:
+            gevent.signal(signal.SIGINT, self.interrupt.set)
         self.console_locals = {}
+        if app.start_console:
+            self.start()
+            self.interrupt.set()
 
     def _stop_app(self):
         try:

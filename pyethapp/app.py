@@ -136,8 +136,9 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 @click.option('--dev/--nodev', default=False, help='Drop into interactive debugger on unhandled exceptions.')
 @click.option('--nodial/--dial',  default=False, help='Do not dial nodes.')
 @click.option('--fake/--nofake',  default=False, help='Fake genesis difficulty.')
+@click.option('--console',  is_flag=True, default=False, help='Start into interactive console.')
 @click.pass_context
-def run(ctx, dev, nodial, fake):
+def run(ctx, dev, nodial, fake, console):
     """Start the client ( --dev to stop on error)"""
     config = ctx.obj['config']
     if nodial:
@@ -180,6 +181,8 @@ def run(ctx, dev, nodial, fake):
             log.fatal('invalid coinbase', coinbase=config.get('pow', {}).get('coinbase_hex'),
                       error=e.message)
             sys.exit()
+
+    app.start_console = console
 
     # register services
     for service in services:
