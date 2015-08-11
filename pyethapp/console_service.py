@@ -8,13 +8,15 @@ from gevent.event import Event
 import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
-from ethereum import slogging
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms
 from ethereum import processblock
 from rpc_client import ABIContract, address20
-
+import time
+from threading import Thread
 import sys
+
+
 GUI_GEVENT = 'gevent'
 
 
@@ -59,6 +61,47 @@ class GeventInputHook(object):
 IPython.core.shellapp.InteractiveShellApp.gui.values += ('gevent',)
 
 
+def timed_input(msg, timeout=2):
+
+    class ThreadedInput(Thread):
+        def __init__(self, msg):
+            super(ThreadedInput, self).__init__()
+            self.msg = msg
+            self.key = -1
+
+        def run(self):
+            sys.stdout.write(self.msg)
+            self.key = sys.stdin.readline().strip()
+
+    thread = ThreadedInput(msg)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout)
+    key = thread.key
+    del(thread)
+    return key
+
+
+class LockedEvent(Event):
+
+    timeout = 2
+
+    def __init__(self):
+        super(LockedEvent, self).__init__()
+        self.engage_time = 0
+
+    def engage(self):
+        if time.time() - self.engage_time < LockedEvent.timeout:
+            sys.exit("Aborted.")
+        else:
+            self.engage_time = time.time()
+            key = timed_input("Hit [ENTER], to launch console; [Ctrl+C] again to quit!", timeout=LockedEvent.timeout * .9)
+            if key == '':
+                self.set()
+            else:
+                pass
+
+
 class Console(BaseService):
 
     """A service starting an interactive ipython session when receiving the
@@ -69,9 +112,9 @@ class Console(BaseService):
 
     def __init__(self, app):
         super(Console, self).__init__(app)
-        self.interrupt = Event()
+        self.interrupt = LockedEvent()
         if not app.start_console:
-            gevent.signal(signal.SIGINT, self.interrupt.set)
+            gevent.signal(signal.SIGINT, self.interrupt.engage)
         self.console_locals = {}
         if app.start_console:
             self.start()

@@ -203,7 +203,6 @@ def run(ctx, dev, nodial, fake, console):
     evt = Event()
     gevent.signal(signal.SIGQUIT, evt.set)
     gevent.signal(signal.SIGTERM, evt.set)
-    gevent.signal(signal.SIGINT, evt.set)
     evt.wait()
 
     # finally stop
