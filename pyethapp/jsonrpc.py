@@ -520,7 +520,7 @@ class Compilers(Subdispatcher):
                 import ethereum._solidity
                 s = ethereum._solidity.get_solidity()
                 if s:
-                    self.compilers_['solidity'] = s.compile
+                    self.compilers_['solidity'] = s.compile_rich
                 else:
                     log.warn('could not import solidity')
             except ImportError:
@@ -532,7 +532,6 @@ class Compilers(Subdispatcher):
         return self.compilers.keys()
 
     @public
-    @encode_res(data_encoder)
     def compileSolidity(self, code):
         try:
             return self.compilers['solidity'](code)
