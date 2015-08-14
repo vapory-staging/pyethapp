@@ -5,6 +5,7 @@ Checklist for implemented JSON RPC methods
 [x] net_version
 [x] net_peerCount
 [x] net_listening
+[ ] eth_protocolVersion
 [x] eth_coinbase
 [x] eth_mining
 [x] eth_gasPrice
@@ -19,14 +20,16 @@ Checklist for implemented JSON RPC methods
 [x] eth_getUncleCountByBlockHash
 [x] eth_getUncleCountByBlockNumber
 [x] eth_getCode
+[ ] eth_sign
 [x] eth_sendTransaction
 [x] eth_call
-[ ] eth_flush
+[ ] eth_estimateGas
 [x] eth_getBlockByHash
 [x] eth_getBlockByNumber
 [x] eth_getTransactionByHash
 [x] eth_getTransactionByBlockHashAndIndex
 [x] eth_getTransactionByBlockNumberAndIndex
+[ ] eth_getTransactionReceipt
 [x] eth_getUncleByBlockHashAndIndex
 [x] eth_getUncleByBlockNumberAndIndex
 [x] eth_getCompilers
@@ -35,6 +38,7 @@ Checklist for implemented JSON RPC methods
 [x] eth_compileSerpent
 [x] eth_newFilter
 [x] eth_newBlockFilter
+[ ] eth_newPendingTransactionFilter
 [x] eth_uninstallFilter
 [x] eth_getFilterChanges
 [x] eth_getFilterLogs
@@ -46,6 +50,7 @@ Checklist for implemented JSON RPC methods
 [x] db_putHex
 [x] db_getHex
 [ ] shh_post
+[ ] shh_version
 [ ] shh_newIdentity
 [ ] shh_hasIdentity
 [ ] shh_newGroup
