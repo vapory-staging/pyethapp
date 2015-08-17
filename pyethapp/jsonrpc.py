@@ -899,7 +899,6 @@ class Chain(Subdispatcher):
     @encode_res(data_encoder)
     def call(self, data, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
-        block = self.chain.chain.head_candidate
         state_root_before = block.state_root
 
         # rebuild block state before finalization
