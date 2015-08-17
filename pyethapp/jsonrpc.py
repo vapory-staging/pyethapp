@@ -777,11 +777,11 @@ class Chain(Subdispatcher):
         return block_encoder(uncle, is_header=True)
 
     @public
-    @decode_arg('block_number', quantity_decoder)
+    @decode_arg('block_id', block_id_decoder)
     @decode_arg('index', quantity_decoder)
-    def getUncleByBlockNumberAndIndex(self, block_number, index):
+    def getUncleByBlockNumberAndIndex(self, block_id, index):
         try:
-            block = self.json_rpc_server.get_block(block_number)
+            block = self.json_rpc_server.get_block(block_id)
             uncle = block.uncles[index]
         except (IndexError, KeyError):
             return None
