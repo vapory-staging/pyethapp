@@ -47,10 +47,13 @@ def load_block_tests(data, db):
             'nonce': nonce,
             'storage': acct_state['storage']
         }
-    genesis(db, initial_alloc)  # builds the state trie
+    genesis(db, start_alloc=initial_alloc)  # builds the state trie
     genesis_block = rlp.decode(ethereum.utils.decode_hex(data['genesisRLP'][2:]), Block, db=db)
-    blocks = [genesis_block]
+    blocks = {genesis_block.hash: genesis_block}
     for blk in data['blocks']:
         rlpdata = ethereum.utils.decode_hex(blk['rlp'][2:])
-        blocks.append(rlp.decode(rlpdata, Block, db=db, parent=blocks[-1]))
-    return blocks
+        assert ethereum.utils.decode_hex(blk['blockHeader']['parentHash']) in blocks
+        parent = blocks[ethereum.utils.decode_hex(blk['blockHeader']['parentHash'])]
+        block = rlp.decode(rlpdata, Block, db=db, parent=parent)
+        blocks[block.hash] = block
+    return sorted(blocks.values(), key=lambda b: b.number)
