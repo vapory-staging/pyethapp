@@ -47,10 +47,24 @@ Installation and invocation
 
 There is also Dockerfile in the repo.
 
+Invocation on the Frontier Main Net
+-----------------------------------
+In order to sync with the current live ethereum network, you need to provide some extra arguments. Note, that these will not be necessary in future releases.
+
+```pyethapp -c eth.network_id=1 -c eth.genesis=/full/path/to/genesis_w_extradata.json run```
+
+Warning: If you invoked pyethapp without above `eth.genesis` arg, then there is already a wrong genesis block in the chain. You'll need to delete your data directory (which is reported on startup). You can set a custom data directory with the `-d <path>` option.
+
+`genesis_w_extradata.json` can be found in main dir of this repository.
+
+
+
+
+
 Interacting
 -----------
 
-You can interact with the client using the JSONRPC api or directly on the console. 
+You can interact with the client using the JSONRPC api or directly on the console.
 
 * https://github.com/ethereum/pyethapp/wiki/The_Console
 * https://github.com/ethereum/pyethapp/blob/master/pyethapp/rpc_client.py
