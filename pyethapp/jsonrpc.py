@@ -899,7 +899,7 @@ class Chain(Subdispatcher):
     @encode_res(data_encoder)
     def call(self, data, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
-        state_root_before = block.state_root
+        snapshot_before = block.snapshot()
 
         # rebuild block state before finalization
         if block.has_parent():
@@ -952,12 +952,71 @@ class Chain(Subdispatcher):
             success, output = processblock.apply_transaction(test_block, tx)
         except processblock.InvalidTransaction as e:
             success = False
-        assert block.state_root == state_root_before
+        assert snapshot_before == block.snapshot()
 
         if success:
             return output
         else:
             return False
+
+    @public
+    @decode_arg('block_id', block_id_decoder)
+    @encode_res(quantity_encoder)
+    def estimateGas(self, data, block_id='pending'):
+        block = self.json_rpc_server.get_block(block_id)
+        snapshot_before = block.snapshot()
+
+        # rebuild block state before finalization
+        if block.has_parent():
+            parent = block.get_parent()
+            test_block = block.init_from_parent(parent, block.coinbase,
+                                                timestamp=block.timestamp)
+            for tx in block.get_transactions():
+                success, output = processblock.apply_transaction(test_block, tx)
+                assert success
+        else:
+            original = block.snapshot()
+            original['journal'] = deepcopy(original['journal'])  # do not alter original journal
+            test_block = ethereum.blocks.genesis(block.db)
+            test_block.revert(original)
+
+        # validate transaction
+        if not isinstance(data, dict):
+            raise BadRequestError('Transaction must be an object')
+        to = address_decoder(data['to'])
+        try:
+            startgas = quantity_decoder(data['gas'])
+        except KeyError:
+            startgas = block.gas_limit - block.gas_used
+        try:
+            gasprice = quantity_decoder(data['gasPrice'])
+        except KeyError:
+            gasprice = 0
+        try:
+            value = quantity_decoder(data['value'])
+        except KeyError:
+            value = 0
+        try:
+            data_ = data_decoder(data['data'])
+        except KeyError:
+            data_ = b''
+        try:
+            sender = address_decoder(data['from'])
+        except KeyError:
+            sender = '\x00' * 20
+
+        # apply transaction
+        nonce = test_block.get_nonce(sender)
+        tx = Transaction(nonce, gasprice, startgas, to, value, data_)
+        tx.sender = sender
+
+        try:
+            success, output = processblock.apply_transaction(test_block, tx)
+        except processblock.InvalidTransaction as e:
+            success = False
+        assert snapshot_before == block.snapshot()
+
+        return test_block.gas_used - block.gas_used
 
 
 class Filter(object):
