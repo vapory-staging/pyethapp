@@ -1290,6 +1290,41 @@ class FilterManager(Subdispatcher):
             txs.append(self.trace_transaction(txhash_hex, exclude))
         return txs
 
+    @public
+    @decode_arg('tx_hash', tx_hash_decoder)
+    def getTransactionReceipt(self, tx_hash):
+        try:
+            tx, block, index = self.chain.chain.index.get_transaction(tx_hash)
+        except KeyError:
+            return None
+        receipt = block.get_receipt(index)
+        response = {
+            'transactionHash': data_encoder(tx.hash),
+            'transactionIndex': quantity_encoder(index),
+            'blockHash': data_encoder(block.hash),
+            'blockNumber': quantity_encoder(block.number),
+            'cumulativeGasUsed': quantity_encoder(receipt.gas_used),
+            'contractAddress': data_encoder(tx.creates) if tx.creates else None
+        }
+        if index == 0:
+            response['gasUsed'] = quantity_encoder(receipt.gas_used)
+        else:
+            prev_receipt = block.get_receipt(index - 1)
+            assert prev_receipt.gas_used < receipt.gas_used
+            response['gasUsed'] = quantity_encoder(receipt.gas_used - prev_receipt.gas_used)
+
+        logs = []
+        for i, log in enumerate(receipt.logs):
+            logs.append({
+                'log': log,
+                'log_idx': i,
+                'block': block,
+                'txhash': tx.hash,
+                'tx_idx': index
+            })
+        response['logs'] = loglist_encoder(logs)
+        return response
+
 
 if __name__ == '__main__':
     import inspect
