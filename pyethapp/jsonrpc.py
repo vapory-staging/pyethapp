@@ -1121,53 +1121,66 @@ class Filter(object):
         return ret.values()
 
 
-class NewBlockFilter(object):
+class BlockFilter(object):
 
     """A filter for new blocks.
-    :ivar pending: if `True` also look for logs from the current pending block
-    :ivar latest: if `True` also look for logs from the current head
-    :ivar blocks_done: a list of blocks that don't have to be searched again
+
+    Note that "new" refers to block numbers. In case of chain reorganizations this may mean that
+    some blocks are missed.
+
+    :ivar latest_block: the newest block that will not be returned when :meth:`check` is called
     """
 
-    def __init__(self, chainservice, pending=False, latest=False):
+    def __init__(self, chainservice):
         self.chainservice = chainservice
-        self.blocks_done = set()
-        assert latest or pending
-        self.pending = pending
-        self.latest = latest
-        self.new_block_event = gevent.event.Event()
-
-        self.chainservice.on_new_head_candidate_cbs.append(self._new_block_cb)
-
-    def _new_block_cb(self, b):
-        # log.debug('newblock cb called', filter=self, ts=time.time())
-        self.new_block_event.set()
-
-    def __repr__(self):
-        return '<NewBlockFilter(latest=%r, pending=%r)>' % (self.latest, self.pending)
-
-    def uninstall(self):
-        log.debug('in NewBlockFilter.uninstall')
-        self.chainservice.on_new_head_candidate_cbs.remove(self._new_block_cb)
+        self.latest_block = self.chainservice.chain.head
 
     def check(self):
-        "returns changed block or None"
-        if self.pending:
-            block = self.chainservice.chain.head_candidate
+        """Check for new blocks.
+
+        :returns: a list of all blocks in the chain that are newer than :attr:`latest_block`.
+        """
+        log.debug('checking BlockFilter')
+        new_blocks = []
+        block = self.chainservice.chain.head
+        while block.number > self.latest_block.number:
+            new_blocks.append(block)
+            block = block.get_parent()
+        assert block.number == self.latest_block.number
+        if block != self.latest_block:
+            log.warning('previous latest block not in current chain',
+                        prev_latest=self.latest_block.hash, replaced_by=new_blocks[-1].hash)
+        if len(new_blocks) > 0:
+            self.latest_block = new_blocks[0]
+            log.debug('new blocks found', n=len(new_blocks))
         else:
-            block = self.chainservice.chain.head
-        if block not in self.blocks_done:
-            self.blocks_done.add(block)
-            # DEBUG('NewBlockFilter blocks', len(self.blocks_done))
-            return block
-        # wait for event
-        if self.new_block_event.is_set():
-            self.new_block_event.clear()
-        log.debug('NewBlockFilter, waiting for event', ts=time.time())
-        if self.new_block_event.wait(timeout=0.95):
-            log.debug('NewBlockFilter, got new_block event', ts=time.time())
-            return self.check()
-        log.debug('event timeout', ts=time.time())
+            log.debug('no new blocks found')
+        return reversed(new_blocks)
+
+
+class PendingTransactionFilter(object):
+
+    """A filter for new transactions. This includes transactions in the pending block."""
+
+    def __init__(self, chainservice):
+        self.chainservice = chainservice
+        self.latest_block = chainservice.chain.head_candidate
+        self.reported_txs = []  # needs only to contain txs from latest block
+
+    def check(self):
+        # check current pending block first
+        pending_txs = self.chainservice.chain.head_candidate.get_transactions()
+        new_txs = list(reversed([tx for tx in pending_txs if tx not in reported_txs]))
+        # now check all blocks which have already been finalized
+        block = self.chainservice.chain.head_candidate.get_parent()
+        while block.number > self.latest_block.number:
+            for tx in reversed(block.get_transactions()):
+                if tx not in self.reported_txs:
+                    new_txs.append(tx)
+            block = block.get_parent()
+        self.latest_block = self.chainservice.chain.head_candidate
+        self.reported_txs = pending_txs
+        return reversed(new_txs)
 
 
 class FilterManager(Subdispatcher):
@@ -1232,13 +1245,8 @@ class FilterManager(Subdispatcher):
 
     @public
     @encode_res(quantity_encoder)
-    def newBlockFilter(self, *args):
-        pending, latest = False, True
-        if args:
-            log.warn('newBlockFilter arg is deprecated', args=args)
-            if args[0] == 'pending':
-                pending, latest = True, False
-        filter_ = NewBlockFilter(self.chain, pending=pending, latest=latest)
+    def newBlockFilter(self):
+        filter_ = BlockFilter(self.chain)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1246,7 +1254,7 @@ class FilterManager(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def newPendingTransactionFilter(self):
-        filter_ = NewBlockFilter(self.chain, pending=True, latest=False)
+        filter_ = PendingTransactionFilter(self.chain)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1268,16 +1276,13 @@ class FilterManager(Subdispatcher):
             raise BadRequestError('Unknown filter')
         filter_ = self.filters[id_]
         logger.debug('filter found', filter=filter_)
-        if isinstance(filter_, NewBlockFilter):
-            # For filters created with eth_newBlockFilter the return are block hashes
-            # (DATA, 32 Bytes), e.g. ["0x3454645634534..."].
+        if isinstance(filter_, (BlockFilter, PendingTransactionFilter)):
+            # For filters created with eth_newBlockFilter or eth_newPendingTransactionFilter the
+            # return are hashes (DATA, 32 Bytes), e.g. ["0x3454645634534..."].
             r = filter_.check()
-            if r:
-                logger.debug('returning newblock', ts=time.time())
-                return [data_encoder(r.hash)]
-            else:
-                return []
+            return [data_encoder(block_or_tx.hash) for block_or_tx in r]
         else:
+            assert isinstance(filter_, Filter)
             return loglist_encoder(filter_.new_logs)
 
     @public
