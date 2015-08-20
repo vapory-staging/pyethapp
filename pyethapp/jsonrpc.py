@@ -431,9 +431,65 @@ def loglist_encoder(loglist):
             'blockNumber': quantity_encoder(l['block'].number),
             'address': address_encoder(l['log'].address),
             'data': data_encoder(l['log'].data),
-            'topics': [data_encoder(int_to_big_endian(topic), 32) for topic in l['log'].topics]
+            'topics': [data_encoder(int_to_big_endian(topic), 32) for topic in l['log'].topics],
+            'type': 'pending' if l['pending'] else 'mined'
         })
     return result
+
+
+def filter_decoder(filter_dict, chain):
+    """Decodes a filter as expected by eth_newFilter or eth_getLogs to a :class:`Filter`."""
+    if not isinstance(filter_dict, dict):
+        raise BadRequestError('Filter must be an object')
+    address = filter_dict.get('address', None)
+    if is_string(address):
+        addresses = [address_decoder(address)]
+    elif isinstance(address, Iterable):
+        addresses = [address_decoder(addr) for addr in address]
+    elif address is None:
+        addresses = None
+    else:
+        raise JSONRPCInvalidParamsError('Parameter must be address or list of addresses')
+    if 'topics' in filter_dict:
+        topics = []
+        for topic in filter_dict['topics']:
+            if topic is not None:
+                log.debug('with topic', topic=topic)
+                log.debug('decoded', topic=data_decoder(topic))
+                log.debug('int', topic=big_endian_to_int(data_decoder(topic)))
+                topics.append(big_endian_to_int(data_decoder(topic)))
+            else:
+                topics.append(None)
+    else:
+        topics = None
+
+    from_block = filter_dict.get('fromBlock') or 'latest'
+    to_block = filter_dict.get('toBlock') or 'latest'
+
+    try:
+        from_block = quantity_decoder(from_block)
+    except BadRequestError:
+        if from_block not in ('earliest', 'latest', 'pending'):
+            raise JSONRPCInvalidParamsError('fromBlock must be block number, "earliest", "latest" '
+                                            'or pending')
+    try:
+        to_block = quantity_decoder(to_block)
+    except BadRequestError:
+        if to_block not in ('earliest', 'latest', 'pending'):
+            raise JSONRPCInvalidParamsError('toBlock must be block number, "earliest", "latest" '
+                                            'or pending')
+
+    # check order
+    block_id_dict = {
+        'earliest': 0,
+        'latest': chain.head.number,
+        'pending': chain.head_candidate.number
+    }
+    range_ = [b if is_numeric(b) else block_id_dict[b] for b in (from_block, to_block)]
+    if range_[0] > range_[1]:
+        raise JSONRPCInvalidParamsError('fromBlock must be newer or equal to toBlock')
+
+    return LogFilter(chain, from_block, to_block, addresses, topics)
 
 
 def decode_arg(name, decoder):
@@ -1019,64 +1075,88 @@ class Chain(Subdispatcher):
         return test_block.gas_used - block.gas_used
 
 
-class Filter(object):
+class LogFilter(object):
 
     """A filter for logs.
 
-    :ivar blocks: a list of block numbers
-    :ivar addresses: a list of contract addresses or None to not consider
-                     addresses
+    :ivar chain: the blockchain object
+    :ivar first_block: number of the first block to check or 'latest', 'pending', 'earliest'
+    :ivar last_block: number of the last block to check or 'latest', 'pending', 'earliest'
+    :ivar addresses: a list of contract addresses or None to not consider addresses
     :ivar topics: a list of topics or `None` to not consider topics
-    :ivar pending: if `True` also look for logs from the current pending block
-    :ivar latest: if `True` also look for logs from the current head
-    :ivar blocks_done: a list of blocks that don't have to be searched again
-    :ivar logs: a list of (:class:`ethereum.processblock.Log`, int, :class:`ethereum.blocks.Block`)
-                triples that have been found
-    :ivar new_logs: same as :attr:`logs`, but is reset at every access
+    :ivar log_dict: a list of dicts for each found log (with keys `'log'`, `'log_idx'`, `'block'`,
+                    `'tx_hash'` and `'tx_idx'`)
+    :ivar last_block_checked: the highest block in the chain that has been checked for logs, or
+                              `None`)
     """
 
-    def __init__(self, chain, blocks=None, addresses=None, topics=None,
-                 pending=False, latest=False):
+    def __init__(self, chain, first_block, last_block, addresses=None, topics=None):
         self.chain = chain
-        if blocks is not None:
-            self.blocks = blocks
-        else:
-            self.blocks = []
+        assert is_numeric(first_block) or first_block in ('latest', 'pending', 'earliest')
+        assert is_numeric(last_block) or last_block in ('latest', 'pending', 'earliest')
+        self.first_block = first_block
+        self.last_block = last_block
         self.addresses = addresses
         self.topics = topics
         if self.topics:
             for topic in self.topics:
                 assert topic is None or is_numeric(topic)
-        self.pending = pending
-        self.latest = latest
+        self.finished = False
 
-        self.blocks_done = set()
-        self._logs = {}
-        self._new_logs = {}
+        self.last_block_checked = None
+        self.log_dict = {}
         log.debug('new filter', filter=self, topics=self.topics)
 
     def __repr__(self):
-        return '<Filter(addresses=%r, topics=%r latest=%r, pending=%r)>' \
-            % (self.addresses, self.topics, self.latest, self.pending)
-
-    def uninstall(self):
-        log.debug('in Filter.uninstall')
+        return '<LogFilter(addresses=%r, topics=%r, first=%r, last=%r)>' \
+            % (self.addresses, self.topics, self.first_block, self.last_block)
 
     def check(self):
-        """Check for new logs."""
+        """Check for logs, return new ones.
+
+        This method walks through the blocks given by :attr:`first_block` and :attr:`last_block`,
+        looks at the contained logs, and collects the ones that match the filter. On subsequent
+        runs blocks that have already been checked are skipped (except for the pending block, which
+        may have changed since).
+
+        :returns: dictionary of new the logs that have been added to :attr:`logs`.
+        """
         # DEBUG('Filter blocks', len(self.blocks_done), len(self.blocks))
-        blocks_to_check = self.blocks[:]
-        if self.pending:
+        block_id_dict = {
+            'earliest': 0,
+            'latest': self.chain.head.number,
+            'pending': self.chain.head_candidate.number
+        }
+        if is_numeric(self.first_block):
+            first = self.first_block
+        else:
+            first = block_id_dict[self.first_block]
+        if is_numeric(self.last_block):
+            last = self.last_block
+        else:
+            last = block_id_dict[self.last_block]
+        assert first <= last
+
+        # skip blocks that have already been checked
+        if self.last_block_checked is not None:
+            first = max(self.last_block_checked.number + 1, first)
+            if first > last:
+                return {}
+
+        blocks_to_check = [self.chain.get(self.chain.index.get_block_by_number(n))
+                           for n in range(first, last)]
+        # last block may be head candidate, which cannot be retrieved via get_block_by_number
+        if last == self.chain.head_candidate.number:
             blocks_to_check.append(self.chain.head_candidate)
-        if self.latest:
-            blocks_to_check.append(self.chain.head)
+        else:
+            blocks_to_check.append(self.chain.get(self.chain.index.get_block_by_number(last)))
+
         # go through all receipts of all blocks
         logger.debug('blocks to check', blocks=blocks_to_check)
+        new_logs = {}
         for block in blocks_to_check:
             logger.debug('-')
             logger.debug('with block', block=block)
-            if block in self.blocks_done:
-                continue
             receipts = block.get_receipts()
             logger.debug('receipts', block=block, receipts=receipts)
             for r_idx, receipt in enumerate(receipts):  # one receipt per tx
@@ -1098,27 +1178,31 @@ class Filter(object):
                         continue
                     # still here, so match was successful => add to log list
                     id_ = ethereum.utils.sha3rlp(log)
-                    assert id_ not in self._logs
                     tx = block.get_transaction(r_idx)
-                    r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx)
+                    pending = block == self.chain.head_candidate
+                    r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx,
+                             pending=pending)
                     logger.debug('FOUND LOG', id=id_.encode('hex'))
-                    self._logs[id_] = r
-                    self._new_logs[id_] = r  # (log, i, block)
+                    new_logs[id_] = r  # (log, i, block)
         # don't check blocks again, that have been checked already and won't change anymore
-        self.blocks_done |= set(blocks_to_check)
-        self.blocks_done -= set([self.chain.head_candidate])
+        self.last_block_checked = blocks_to_check[-1]
+        if blocks_to_check[-1] != self.chain.head_candidate:
+            self.last_block_checked = blocks_to_check[-1]
+        else:
+            self.last_block_checked = blocks_to_check[-2] if len(blocks_to_check) >= 2 else None
+        actually_new_ids = new_logs.viewkeys() - self.log_dict.viewkeys()
+        self.log_dict.update(new_logs)
+        return {id_: new_logs[id_] for id_ in actually_new_ids}
 
     @property
     def logs(self):
         self.check()
-        return self._logs.values()
+        return self.log_dict.values()
 
     @property
     def new_logs(self):
-        self.check()
-        ret = self._new_logs.copy()
-        self._new_logs = {}
-        return ret.values()
+        d = self.check()
+        return d.values()
 
 
 class BlockFilter(object):
@@ -1128,12 +1212,13 @@ class BlockFilter(object):
     Note that "new" refers to block numbers. In case of chain reorganizations this may mean that
     some blocks are missed.
 
+    :ivar chain: the block chain
     :ivar latest_block: the newest block that will not be returned when :meth:`check` is called
     """
 
-    def __init__(self, chainservice):
-        self.chainservice = chainservice
-        self.latest_block = self.chainservice.chain.head
+    def __init__(self, chain):
+        self.chain = chain
+        self.latest_block = self.chain.head
 
     def check(self):
         """Check for new blocks.
@@ -1142,7 +1227,7 @@ class BlockFilter(object):
         """
         log.debug('checking BlockFilter')
         new_blocks = []
-        block = self.chainservice.chain.head
+        block = self.chain.head
         while block.number > self.latest_block.number:
             new_blocks.append(block)
             block = block.get_parent()
@@ -1160,25 +1245,31 @@ class BlockFilter(object):
 
 class PendingTransactionFilter(object):
 
-    """A filter for new transactions. This includes transactions in the pending block."""
+    """A filter for new transactions. This includes transactions in the pending block.
 
-    def __init__(self, chainservice):
-        self.chainservice = chainservice
-        self.latest_block = chainservice.chain.head_candidate
+    :ivar chain: the block chain
+    :ivar latest_block: the latest block that has been checked for transactions at least once
+    :ivar reported_txs: txs from the (formerly) pending block which don't have to be reported again
+    """
+
+    def __init__(self, chain):
+        self.chain = chain
+        self.latest_block = self.chain.head_candidate
         self.reported_txs = []  # needs only to contain txs from latest block
 
     def check(self):
+        """Check for new transactions and return them."""
         # check current pending block first
-        pending_txs = self.chainservice.chain.head_candidate.get_transactions()
-        new_txs = list(reversed([tx for tx in pending_txs if tx not in reported_txs]))
+        pending_txs = self.chain.head_candidate.get_transactions()
+        new_txs = list(reversed([tx for tx in pending_txs if tx not in self.reported_txs]))
         # now check all blocks which have already been finalized
-        block = self.chainservice.chain.head_candidate.get_parent()
+        block = self.chain.head_candidate.get_parent()
         while block.number > self.latest_block.number:
             for tx in reversed(block.get_transactions()):
                 if tx not in self.reported_txs:
                     new_txs.append(tx)
             block = block.get_parent()
-        self.latest_block = self.chainservice.chain.head_candidate
+        self.latest_block = self.chain.head_candidate
         self.reported_txs = pending_txs
         return reversed(new_txs)
 
@@ -1195,50 +1286,7 @@ class FilterManager(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def newFilter(self, filter_dict):
-        log.debug('in newFilter', filter_dict=filter_dict)
-        if not isinstance(filter_dict, dict):
-            raise BadRequestError('Filter must be an object')
-        address = filter_dict.get('address', None)
-        if is_string(address):
-            addresses = [address_decoder(address)]
-        elif isinstance(address, Iterable):
-            addresses = [address_decoder(addr) for addr in address]
-        elif address is None:
-            addresses = None
-        else:
-            raise JSONRPCInvalidParamsError('Parameter must be address or list of addresses')
-        if 'topics' in filter_dict:
-            topics = []
-            for topic in filter_dict['topics']:
-                if topic is not None:
-                    log.debug('with topic', topic=topic)
-                    log.debug('decoded', topic=data_decoder(topic))
-                    log.debug('int', topic=big_endian_to_int(data_decoder(topic)))
-                    topics.append(big_endian_to_int(data_decoder(topic)))
-                else:
-                    topics.append(None)
-        else:
-            topics = None
-
-
-        fromBlock = filter_dict.get('fromBlock')
-        toBlock = filter_dict.get('toBlock') or 'latest'
-
-        if toBlock in ('latest', 'pending'):
-            assert fromBlock in (None, toBlock) , 'latest/pending does not support ranges'
-            filter_ = Filter(self.chain.chain, blocks=[], addresses=addresses, topics=topics,
-                pending=bool(toBlock==b'pending'), latest=bool(toBlock==b'latest'))
-        else:
-            assert fromBlock not in ('latest', 'pending')
-            b0 = self.json_rpc_server.get_block(block_id_decoder(fromBlock))
-            b1 = self.json_rpc_server.get_block(block_id_decoder(toBlock))
-            if b1.number < b0.number:
-                raise BadRequestError('fromBlock must be prior or equal to toBlock')
-            blocks = [b1]
-            while blocks[-1] != b0:
-                blocks.append(blocks[-1].get_parent())
-            filter_ = Filter(self.chain.chain, blocks=list(
-                reversed(blocks)), addresses=addresses, topics=topics)
+        filter_ = filter_decoder(filter_dict, self.chain.chain)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1246,7 +1294,7 @@ class FilterManager(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def newBlockFilter(self):
-        filter_ = BlockFilter(self.chain)
+        filter_ = BlockFilter(self.chain.chain)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1254,7 +1302,7 @@ class FilterManager(Subdispatcher):
     @public
     @encode_res(quantity_encoder)
     def newPendingTransactionFilter(self):
-        filter_ = PendingTransactionFilter(self.chain)
+        filter_ = PendingTransactionFilter(self.chain.chain)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
@@ -1264,7 +1312,6 @@ class FilterManager(Subdispatcher):
     def uninstallFilter(self, id_):
         try:
             f = self.filters.pop(id_)
-            f.uninstall()
             return True
         except KeyError:
             return False
@@ -1282,7 +1329,7 @@ class FilterManager(Subdispatcher):
             r = filter_.check()
             return [data_encoder(block_or_tx.hash) for block_or_tx in r]
         else:
-            assert isinstance(filter_, Filter)
+            assert isinstance(filter_, LogFilter)
             return loglist_encoder(filter_.new_logs)
 
     @public
@@ -1292,11 +1339,7 @@ class FilterManager(Subdispatcher):
         if id_ not in self.filters:
             raise BadRequestError('Unknown filter')
         filter_ = self.filters[id_]
-        if filter_.pending or filter_.latest:
-            raise NotImplementedError()
-            return [None] * len(filter_.logs)
-        else:
-            return self.filters[id_].logs
+        return filter_.logs
 
     # ########### Trace ############
     def _get_block_before_tx(self, txhash):
