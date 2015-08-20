@@ -1341,6 +1341,13 @@ class FilterManager(Subdispatcher):
         filter_ = self.filters[id_]
         return filter_.logs
 
+    @public
+    @encode_res(loglist_encoder)
+    def getLogs(self, filter_dict):
+        filter_ = filter_decoder(filter_dict, self.chain.chain)
+        return filter_.logs
+
+
     # ########### Trace ############
     def _get_block_before_tx(self, txhash):
         tx, blk, i = self.app.services.chain.chain.index.get_transaction(txhash)
