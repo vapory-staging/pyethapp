@@ -20,6 +20,7 @@ from ethereum.blocks import Block
 import ethereum.slogging as slogging
 import config as konfig
 from db_service import DBService
+from shh_service import WhisperService
 from jsonrpc import JSONRPCServer
 from pow_service import PoWService
 from accounts import AccountsService, Account
@@ -31,7 +32,10 @@ log = slogging.get_logger('app')
 
 
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
-            JSONRPCServer, Console]
+            JSONRPCServer, WhisperService, Console]
+
+services = [DBService, AccountsService, NodeDiscovery, PeerManager, WhisperService]
+
 
 
 class EthApp(BaseApp):
@@ -89,7 +93,7 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
         try:
             konfig.set_config_param(config, config_value)
             # check if this is part of the default config
-        except ValueError:
+        except (ValueError, KeyError):
             raise BadParameter('Config parameter must be of the form "a.b.c=d" where "a.b.c" '
                                'specifies the parameter to set and d is a valid yaml value '
                                '(example: "-c jsonrpc.port=5000")')
@@ -98,7 +102,7 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
-    if not config['pow']['activated']:
+    if 'pow' in config and not config['pow']['activated']:
         config['deactivated_services'].append(PoWService.name)
 
     ctx.obj = {'config': config,
