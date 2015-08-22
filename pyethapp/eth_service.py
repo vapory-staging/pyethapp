@@ -128,6 +128,7 @@ class ChainService(WiredService):
             _json = json.load(open(sce['genesis']))
         else:
             log.info('loaded default genesis alloc')
+            _json=None
         _genesis = genesis(self.db, json=_json)
         log.info('created genesis block', hash=encode_hex(_genesis.hash))
         self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
