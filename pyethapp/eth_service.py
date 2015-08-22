@@ -123,12 +123,10 @@ class ChainService(WiredService):
         super(ChainService, self).__init__(app)
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
-        try:
+        if sce['genesis']:
+            log.info('loading genesis', path=sce['genesis'])
             _json = json.load(open(sce['genesis']))
-            log.info('loading genesis', filename=sce['genesis'])
-        except Exception as e:
-            log.warn(str(e))
-            _json = GENESIS_JSON
+        else:
             log.info('loaded default genesis alloc')
         _genesis = genesis(self.db, json=_json)
         log.info('created genesis block', hash=encode_hex(_genesis.hash))
