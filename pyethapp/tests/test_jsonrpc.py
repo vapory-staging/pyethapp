@@ -56,6 +56,7 @@ def test_app(request, tmpdir):
             locked_account = Account.new('', tester.keys[2])
             locked_account.lock()
             self.services.accounts.add_account(locked_account, store=False)
+            assert set(acct.address for acct in self.services.accounts) == set(tester.accounts[:3])
 
         def mine_next_block(self):
             """Mine until a valid nonce is found."""
@@ -142,8 +143,13 @@ def test_send_transaction(test_app):
         'value': quantity_encoder(1)
     }
     tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
-    assert tx_hash in chain.head_candidate.get_transaction(0).hash
+    assert tx_hash == chain.head_candidate.get_transaction(0).hash
     assert chain.head_candidate.get_balance('\xff' * 20) == 1
     test_app.mine_next_block()
-    assert tx_hash in chain.head.get_transaction(0).hash
+    assert tx_hash == chain.head.get_transaction(0).hash
     assert chain.head.get_balance('\xff' * 20) == 1
+
+    # send transactions from account which can't pay gas
+    tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts()[1].address)
+    tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    assert chain.head_candidate.get_transactions() == []
