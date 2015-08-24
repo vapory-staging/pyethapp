@@ -79,8 +79,11 @@ def test_app(request, tmpdir):
                 >>> assert test_app.rpc_request('eth_getBalance', '0x' + 'ff' * 20) == '0x0'
 
             """
+            log.debug('simulating rpc request', method=method)
             method = self.services.jsonrpc.dispatcher.get_method(method)
-            return method(*args)
+            res = method(*args)
+            log.debug('got response', response=res)
+            return res
 
     # genesis block with reduced difficulty, increased gas limit, and allocaitons to test accounts
     genesis_block = {
@@ -153,3 +156,28 @@ def test_send_transaction(test_app):
     tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts()[1].address)
     tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
     assert chain.head_candidate.get_transactions() == []
+
+
+def test_pending_transaction_filter(test_app):
+    filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    # single transaction
+    tx = {
+        'from': address_encoder(test_app.services.accounts.unlocked_accounts()[0].address),
+        'to': address_encoder('\xff' * 20)
+    }
+    tx_hash = test_app.rpc_request('eth_sendTransaction', tx)
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == [tx_hash]
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+
+    # multiple transactions
+    tx_hashes = set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
+    assert set(test_app.rpc_request('eth_getFilterChanges', filter_id)) == tx_hashes
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+
+    # multiple transactions with new block in between
+    tx_hashes = set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
+    test_app.mine_next_block()
+    tx_hashes |= set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
+    assert set(test_app.rpc_request('eth_getFilterChanges', filter_id)) == tx_hashes
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
