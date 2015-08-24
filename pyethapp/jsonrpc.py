@@ -154,6 +154,7 @@ class JSONRPCServer(BaseService):
         self.listen_host = app.config['jsonrpc']['listen_host']
         self.wsgi_server = gevent.wsgi.WSGIServer((self.listen_host, self.listen_port),
                                                   transport.handle, log=WSGIServerLogger)
+        self.wsgi_thread = None
         self.rpc_server = RPCServerGreenlets(
             transport,
             JSONRPCProtocol(),
@@ -169,7 +170,8 @@ class JSONRPCServer(BaseService):
 
     def stop(self):
         log.info('stopping JSONRPCServer')
-        self.wsgi_thread.kill()
+        if self.wsgi_thread is not None:
+            self.wsgi_thread.kill()
 
     def get_block(self, block_id=None):
         """Return the block identified by `block_id`.
