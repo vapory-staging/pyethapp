@@ -161,23 +161,30 @@ def test_send_transaction(test_app):
 def test_pending_transaction_filter(test_app):
     filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
-    # single transaction
     tx = {
         'from': address_encoder(test_app.services.accounts.unlocked_accounts()[0].address),
         'to': address_encoder('\xff' * 20)
     }
-    tx_hash = test_app.rpc_request('eth_sendTransaction', tx)
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == [tx_hash]
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
 
-    # multiple transactions
-    tx_hashes = set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
-    assert set(test_app.rpc_request('eth_getFilterChanges', filter_id)) == tx_hashes
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    def test_sequence(s):
+        tx_hashes = []
+        for c in s:
+            if c == 't':
+                tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+            elif c == 'b':
+                test_app.mine_next_block()
+            else:
+                assert False
+        assert test_app.rpc_request('eth_getFilterChanges', filter_id) == tx_hashes
+        assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
 
-    # multiple transactions with new block in between
-    tx_hashes = set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
-    test_app.mine_next_block()
-    tx_hashes |= set(test_app.rpc_request('eth_sendTransaction', tx) for i in range(3))
-    assert set(test_app.rpc_request('eth_getFilterChanges', filter_id)) == tx_hashes
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    sequences = [
+        't',
+        'b',
+        'ttt',
+        'tbt',
+        'ttbttt',
+        'bttbtttbt',
+        'bttbtttbttbb',
+    ]
+    map(test_sequence, sequences)
