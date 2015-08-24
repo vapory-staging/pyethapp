@@ -396,6 +396,7 @@ class ChainService(WiredService):
         """
         log.debug('----------------------------------')
         log.debug("recv newnewblockhashes", num=len(newblockhashes), remote_id=proto)
+        assert len(newblockhashes) <= 32
         self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
     def on_receive_getblockhashes(self, proto, child_block_hash, count):
