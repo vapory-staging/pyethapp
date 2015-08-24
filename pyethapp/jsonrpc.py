@@ -1266,7 +1266,7 @@ class PendingTransactionFilter(object):
         new_txs = list(reversed([tx for tx in pending_txs if tx not in self.reported_txs]))
         # now check all blocks which have already been finalized
         block = self.chain.head_candidate.get_parent()
-        while block.number > self.latest_block.number:
+        while block.number >= self.latest_block.number:
             for tx in reversed(block.get_transactions()):
                 if tx not in self.reported_txs:
                     new_txs.append(tx)
