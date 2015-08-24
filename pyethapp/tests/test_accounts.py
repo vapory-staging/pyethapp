@@ -102,6 +102,16 @@ def test_lock(account, password, privkey):
     account.unlock(password)
 
 
+def test_address(keystore, password, privkey):
+    keystore_wo_address = keystore.copy()
+    keystore_wo_address.pop('address')
+    account = Account(keystore_wo_address)
+    assert account.address is None
+    account.unlock(password)
+    account.lock()
+    assert account.address == privtoaddr(privkey)
+
+
 def test_dump(account):
     keystore = json.loads(account.dump(include_address=True, include_id=True))
     required_keys = set(['crypto', 'version'])

@@ -105,6 +105,7 @@ class Account(object):
         if self.locked:
             self._privkey = keys.decode_keystore_json(self.keystore, password)
             self.locked = False
+            self.address  # get address such that it stays accessible after a subsequent lock
 
     def lock(self):
         """Relock an unlocked account.
