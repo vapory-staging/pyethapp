@@ -10,7 +10,8 @@ from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
-from pyethapp.jsonrpc import JSONRPCServer, quantity_encoder, address_encoder, data_decoder
+from pyethapp.jsonrpc import JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
+                             data_encoder
 from pyethapp.pow_service import PoWService
 
 log = get_logger('test.jsonrpc')
@@ -59,7 +60,10 @@ def test_app(request, tmpdir):
             assert set(acct.address for acct in self.services.accounts) == set(tester.accounts[:3])
 
         def mine_next_block(self):
-            """Mine until a valid nonce is found."""
+            """Mine until a valid nonce is found.
+
+            :returns: the new head
+            """
             log.debug('mining next block')
             block = self.services.chain.chain.head_candidate
             delta_nonce = 10**6
@@ -70,6 +74,7 @@ def test_app(request, tmpdir):
                     break
             self.services.pow.recv_found_nonce(bin_nonce, mixhash, block.mining_hash)
             log.debug('block mined')
+            return self.services.chain.chain.head
 
         def rpc_request(self, method, *args):
             """Simulate an incoming JSON RPC request and return the result.
@@ -188,3 +193,15 @@ def test_pending_transaction_filter(test_app):
         'bttbtttbttbb',
     ]
     map(test_sequence, sequences)
+
+
+def test_new_block_filter(test_app):
+    filter_id = test_app.rpc_request('eth_newBlockFilter')
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    h = test_app.mine_next_block().hash
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == [data_encoder(h)]
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    hashes = [data_encoder(test_app.mine_next_block().hash) for i in range(3)]
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == hashes
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
