@@ -4,7 +4,7 @@ PROPAGATE_ERRORS = False
 ###############################
 
 import time
-from copy import deepcopy
+from copy import copy, deepcopy
 from decorator import decorator
 from collections import Iterable
 import inspect
@@ -27,6 +27,7 @@ from tinyrpc.server.gevent import RPCServerGreenlets
 from tinyrpc.transports.wsgi import WsgiServerTransport
 from devp2p.service import BaseService
 from eth_protocol import ETHProtocol
+from ethereum.trie import Trie
 from ethereum.utils import denoms
 
 from ethereum.utils import DEBUG
@@ -272,7 +273,7 @@ def quantity_decoder(data):
 
 
 def quantity_encoder(i):
-    """Encode interger quantity `data`."""
+    """Encode integer quantity `data`."""
     assert is_numeric(i)
     data = int_to_big_endian(i)
     return '0x' + (encode_hex(data).lstrip('0') or '0')
@@ -296,7 +297,7 @@ def data_decoder(data):
 def data_encoder(data, length=None):
     """Encode unformatted binary `data`.
 
-    If `length` is given, the result will be padded like this: ``quantity_encoder(255, 3) ==
+    If `length` is given, the result will be padded like this: ``data_encoder('\xff', 3) ==
     '0x0000ff'``.
     """
     s = encode_hex(data)
@@ -704,12 +705,11 @@ class Chain(Subdispatcher):
     @decode_arg('address', address_decoder)
     @decode_arg('index', quantity_decoder)
     @decode_arg('block_id', block_id_decoder)
-    @encode_res(data_encoder)
     def getStorageAt(self, address, index, block_id=None):
         block = self.json_rpc_server.get_block(block_id)
         i = block.get_storage_data(address, index)
         assert is_numeric(i)
-        return int_to_big_endian(i)
+        return data_encoder(int_to_big_endian(i), length=32)
 
     @public
     @decode_arg('address', address_decoder)
@@ -950,6 +950,7 @@ class Chain(Subdispatcher):
     def call(self, data, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
         snapshot_before = block.snapshot()
+        tx_root_before = snapshot_before['txs'].root_hash  # trie object in snapshot is mutable
 
         # rebuild block state before finalization
         if block.has_parent():
@@ -960,13 +961,12 @@ class Chain(Subdispatcher):
                 success, output = processblock.apply_transaction(test_block, tx)
                 assert success
         else:
-            original = block.snapshot()
-            original['journal'] = deepcopy(original['journal'])  # do not alter original journal
+            test_block = ethereum.blocks.genesis(block.db)
+            original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
+            original = deepcopy(original)
+            original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
             test_block = ethereum.blocks.genesis(block.db)
             test_block.revert(original)
-
-        # DEBUG('block is', test_block)
-        # DEBUG('pending is', self.chain.chain.head_candidate)
 
         # validate transaction
         if not isinstance(data, dict):
@@ -1002,7 +1002,10 @@ class Chain(Subdispatcher):
             success, output = processblock.apply_transaction(test_block, tx)
         except processblock.InvalidTransaction as e:
             success = False
-        assert snapshot_before == block.snapshot()
+        # make sure we didn't change the real state
+        snapshot_after = block.snapshot()
+        assert snapshot_after == snapshot_before
+        assert snapshot_after['txs'].root_hash == tx_root_before
 
         if success:
             return output
@@ -1015,6 +1018,7 @@ class Chain(Subdispatcher):
     def estimateGas(self, data, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
         snapshot_before = block.snapshot()
+        tx_root_before = snapshot_before['txs'].root_hash  # trie object in snapshot is mutable
 
         # rebuild block state before finalization
         if block.has_parent():
@@ -1025,8 +1029,10 @@ class Chain(Subdispatcher):
                 success, output = processblock.apply_transaction(test_block, tx)
                 assert success
         else:
-            original = block.snapshot()
-            original['journal'] = deepcopy(original['journal'])  # do not alter original journal
+            test_block = ethereum.blocks.genesis(block.db)
+            original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
+            original = deepcopy(original)
+            original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
             test_block = ethereum.blocks.genesis(block.db)
             test_block.revert(original)
 
@@ -1064,7 +1070,10 @@ class Chain(Subdispatcher):
             success, output = processblock.apply_transaction(test_block, tx)
         except processblock.InvalidTransaction as e:
             success = False
-        assert snapshot_before == block.snapshot()
+        # make sure we didn't change the real state
+        snapshot_after = block.snapshot()
+        assert snapshot_after == snapshot_before
+        assert snapshot_after['txs'].root_hash == tx_root_before
 
         return test_block.gas_used - block.gas_used
 
