@@ -363,14 +363,15 @@ def block_encoder(block, include_transactions=False, pending=False, is_header=Fa
     """
     assert not (include_transactions and is_header)
     d = {
-        'number': quantity_encoder(block.number),
-        'hash': data_encoder(block.hash),
+        'number': quantity_encoder(block.number) if not pending else None,
+        'hash': data_encoder(block.hash) if not pending else None,
         'parentHash': data_encoder(block.prevhash),
-        'nonce': data_encoder(block.nonce),
+        'nonce': data_encoder(block.nonce) if not pending else None,
         'sha3Uncles': data_encoder(block.uncles_hash),
-        'logsBloom': data_encoder(int_to_big_endian(block.bloom), 256),
+        'logsBloom': data_encoder(int_to_big_endian(block.bloom), 256) if not pending else None,
         'transactionsRoot': data_encoder(block.tx_list_root),
         'stateRoot': data_encoder(block.state_root),
+        'miner': data_encoder(block.coinbase) if not pending else None,
         'difficulty': quantity_encoder(block.difficulty),
         'extraData': data_encoder(block.extra_data),
         'gasLimit': quantity_encoder(block.gas_limit),
@@ -387,12 +388,6 @@ def block_encoder(block, include_transactions=False, pending=False, is_header=Fa
                 d['transactions'].append(tx_encoder(tx, block, i, pending))
         else:
             d['transactions'] = [data_encoder(tx.hash) for tx in block.get_transactions()]
-    if not pending:
-        d['miner'] = data_encoder(block.coinbase)
-        d['nonce'] = data_encoder(block.nonce)
-    else:
-        d['miner'] = '0x0000000000000000000000000000000000000000'
-        d['nonce'] = '0x0000000000000000'
     return d
 
 
