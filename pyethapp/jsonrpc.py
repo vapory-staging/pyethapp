@@ -426,11 +426,11 @@ def loglist_encoder(loglist):
     result = []
     for l in loglist:
         result.append({
-            'logIndex': quantity_encoder(l['log_idx']),
-            'transactionIndex': quantity_encoder(l['tx_idx']),
-            'transactionHash': data_encoder(l['txhash']),
-            'blockHash': data_encoder(l['block'].hash),
-            'blockNumber': quantity_encoder(l['block'].number),
+            'logIndex': quantity_encoder(l['log_idx']) if not l['pending'] else None,
+            'transactionIndex': quantity_encoder(l['tx_idx']) if not l['pending'] else None,
+            'transactionHash': data_encoder(l['txhash']) if not l['pending'] else None,
+            'blockHash': data_encoder(l['block'].hash) if not l['pending'] else None,
+            'blockNumber': quantity_encoder(l['block'].number) if not l['pending'] else None,
             'address': address_encoder(l['log'].address),
             'data': data_encoder(l['log'].data),
             'topics': [data_encoder(int_to_big_endian(topic), 32) for topic in l['log'].topics],
@@ -489,7 +489,7 @@ def filter_decoder(filter_dict, chain):
     }
     range_ = [b if is_numeric(b) else block_id_dict[b] for b in (from_block, to_block)]
     if range_[0] > range_[1]:
-        raise JSONRPCInvalidParamsError('fromBlock must be newer or equal to toBlock')
+        raise JSONRPCInvalidParamsError('fromBlock must not be newer than toBlock')
 
     return LogFilter(chain, from_block, to_block, addresses, topics)
 
@@ -946,11 +946,8 @@ class Chain(Subdispatcher):
         self.app.services.chain.add_transaction(tx, origin=None)
 
         log.debug('decoded tx', tx=tx.log_dict())
+        return data_encoder(tx.hash)
 
-        if to == b'':  # create
-            return address_encoder(processblock.mk_contract_address(tx.sender, nonce))
-        else:
-            return data_encoder(tx.hash)
 
     @public
     @decode_arg('block_id', block_id_decoder)
@@ -1179,8 +1176,8 @@ class LogFilter(object):
                     if self.addresses is not None and log.address not in self.addresses:
                         continue
                     # still here, so match was successful => add to log list
-                    id_ = ethereum.utils.sha3rlp(log)
                     tx = block.get_transaction(r_idx)
+                    id_ = ethereum.utils.sha3(''.join((block.hash, tx.hash, str(l_idx))))
                     pending = block == self.chain.head_candidate
                     r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx,
                              pending=pending)
@@ -1436,7 +1433,8 @@ class FilterManager(Subdispatcher):
                 'log_idx': i,
                 'block': block,
                 'txhash': tx.hash,
-                'tx_idx': index
+                'tx_idx': index,
+                'pending': False
             })
         response['logs'] = loglist_encoder(logs)
         return response
