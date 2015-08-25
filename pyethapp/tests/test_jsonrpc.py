@@ -17,6 +17,23 @@ from pyethapp.pow_service import PoWService
 log = get_logger('test.jsonrpc')
 
 
+# EVM code corresponding to the following solidity code:
+#
+#     contract LogTest {
+#         event Log();
+#
+#         function () {
+#             Log();
+#         }
+#     }
+#
+# (compiled with online Solidity compiler at https://chriseth.github.io/browser-solidity/ version
+# 0.1.1-34172c3b/RelWithDebInfo-Emscripten/clang/int)
+LOG_EVM = ('606060405260448060116000396000f30060606040523615600d57600d565b60425b7f5e7df75d54'
+           'e493185612379c616118a4c9ac802de621b010c96f74d22df4b30a60405180905060405180910390'
+           'a15b565b00').decode('hex')
+
+
 solidity_code = "contract test { function multiply(uint a) returns(uint d) {   return a * 7;   } }"
 def test_compileSolidity():
     from pyethapp.jsonrpc import Compilers, data_encoder
@@ -90,7 +107,7 @@ def test_app(request, tmpdir):
             log.debug('got response', response=res)
             return res
 
-    # genesis block with reduced difficulty, increased gas limit, and allocaitons to test accounts
+    # genesis block with reduced difficulty, increased gas limit, and allocations to test accounts
     genesis_block = {
         "nonce": "0x0000000000000042",
         "difficulty": "0x1",
@@ -205,3 +222,95 @@ def test_new_block_filter(test_app):
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == hashes
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+
+
+def test_get_logs(test_app):
+    test_app.mine_next_block()  # start with a fresh block
+    n0 = test_app.services.chain.chain.head.number
+    sender = address_encoder(test_app.services.accounts.unlocked_accounts()[0].address)
+    contract_creation = {
+        'from': sender,
+        'data': data_encoder(LOG_EVM)
+    }
+    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    test_app.mine_next_block()
+    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    contract_address = receipt['contractAddress']
+    tx = {
+        'from': sender,
+        'to': contract_address
+    }
+
+    # single log in pending block
+    test_app.rpc_request('eth_sendTransaction', tx)
+    logs1 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'pending',
+        'toBlock': 'pending'
+    });
+    assert len(logs1) == 1
+    assert logs1[0]['type'] == 'pending'
+    assert logs1[0]['logIndex'] == None
+    assert logs1[0]['transactionIndex'] == None
+    assert logs1[0]['transactionHash'] == None
+    assert logs1[0]['blockHash'] == None
+    assert logs1[0]['blockNumber'] == None
+    assert logs1[0]['address'] == contract_address
+
+    logs2 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'pending',
+        'toBlock': 'pending'
+    });
+    assert logs2 == logs1
+
+    # same log, but now mined in head
+    test_app.mine_next_block()
+    logs3 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'latest',
+        'toBlock': 'latest'
+    });
+    assert len(logs3) == 1
+    assert logs3[0]['type'] == 'mined'
+    assert logs3[0]['logIndex'] == '0x0'
+    assert logs3[0]['transactionIndex'] == '0x0'
+    assert logs3[0]['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
+    assert logs3[0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
+    assert logs3[0]['address'] == contract_address
+
+    # another log in pending block
+    test_app.rpc_request('eth_sendTransaction', tx)
+    logs4 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'latest',
+        'toBlock': 'pending'
+    })
+    assert logs4 == [logs1[0], logs3[0]] or logs4 == [logs3[0], logs1[0]]
+
+    # two logs in pending block
+    test_app.rpc_request('eth_sendTransaction', tx)
+    logs5 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'pending',
+        'toBlock': 'pending'
+    })
+    assert len(logs5) == 2
+    assert logs5[0] == logs5[1] == logs1[0]
+
+    # two logs in head
+    test_app.mine_next_block()
+    logs6 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': 'latest',
+        'toBlock': 'pending'
+    })
+    for log in logs6:
+        assert log['type'] == 'mined'
+        assert log['logIndex'] == '0x0'
+        assert log['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
+        assert log['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
+        assert log['address'] == contract_address
+    assert sorted([log['transactionIndex'] for log in logs6]) == ['0x0', '0x1']
+
+    # everything together with another log in pending block
+    test_app.rpc_request('eth_sendTransaction', tx)
+    logs7 = test_app.rpc_request('eth_getLogs', {
+        'fromBlock': quantity_encoder(n0),
+        'toBlock': 'pending'
+    })
+    assert sorted(logs7) == sorted(logs3 + logs6 + logs1)
