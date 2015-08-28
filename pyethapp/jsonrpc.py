@@ -1089,8 +1089,9 @@ class LogFilter(object):
     :ivar topics: a list of topics or `None` to not consider topics
     :ivar log_dict: a list of dicts for each found log (with keys `'log'`, `'log_idx'`, `'block'`,
                     `'tx_hash'` and `'tx_idx'`)
-    :ivar last_block_checked: the highest block in the chain that has been checked for logs, or
-                              `None`)
+    :ivar last_head: head at the time of last check or initialization
+    :ivar last_block_checked: the highest block in the chain that does not have to be checked for
+                              logs again or `None` if no block has been checked yet
     """
 
     def __init__(self, chain, first_block, last_block, addresses=None, topics=None):
@@ -1104,8 +1105,8 @@ class LogFilter(object):
         if self.topics:
             for topic in self.topics:
                 assert topic is None or is_numeric(topic)
-        self.finished = False
 
+        self.last_head = self.chain.head
         self.last_block_checked = None
         self.log_dict = {}
         log.debug('new filter', filter=self, topics=self.topics)
@@ -1124,7 +1125,6 @@ class LogFilter(object):
 
         :returns: dictionary of new the logs that have been added to :attr:`logs`.
         """
-        # DEBUG('Filter blocks', len(self.blocks_done), len(self.blocks))
         block_id_dict = {
             'earliest': 0,
             'latest': self.chain.head.number,
@@ -1133,7 +1133,8 @@ class LogFilter(object):
         if is_numeric(self.first_block):
             first = self.first_block
         else:
-            first = block_id_dict[self.first_block]
+            # for latest and pending we check every new block that once has been latest or pending
+            first = min(self.last_head.number + 1, block_id_dict[self.first_block])
         if is_numeric(self.last_block):
             last = self.last_block
         else:
@@ -1181,7 +1182,7 @@ class LogFilter(object):
                         continue
                     # still here, so match was successful => add to log list
                     tx = block.get_transaction(r_idx)
-                    id_ = ethereum.utils.sha3(''.join((block.hash, tx.hash, str(l_idx))))
+                    id_ = ethereum.utils.sha3(''.join((tx.hash, str(l_idx))))
                     pending = block == self.chain.head_candidate
                     r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx,
                              pending=pending)

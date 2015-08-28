@@ -314,3 +314,95 @@ def test_get_logs(test_app):
         'toBlock': 'pending'
     })
     assert sorted(logs7) == sorted(logs3 + logs6 + logs1)
+
+
+def test_get_filter_changes(test_app):
+    test_app.mine_next_block()  # start with a fresh block
+    n0 = test_app.services.chain.chain.head.number
+    sender = address_encoder(test_app.services.accounts.unlocked_accounts()[0].address)
+    contract_creation = {
+        'from': sender,
+        'data': data_encoder(LOG_EVM)
+    }
+    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    test_app.mine_next_block()
+    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    contract_address = receipt['contractAddress']
+    tx = {
+        'from': sender,
+        'to': contract_address
+    }
+
+    pending_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 'pending',
+        'toBlock': 'pending'
+    });
+    latest_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 'latest',
+        'toBlock': 'latest'
+    });
+    tx_hashes = []
+    logs = []
+
+    # tx in pending block
+    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    assert len(logs[-1]) == 1
+    assert logs[-1][0]['type'] == 'pending'
+    assert logs[-1][0]['logIndex'] == None
+    assert logs[-1][0]['transactionIndex'] == None
+    assert logs[-1][0]['transactionHash'] == None
+    assert logs[-1][0]['blockHash'] == None
+    assert logs[-1][0]['blockNumber'] == None
+    assert logs[-1][0]['address'] == contract_address
+    pending_log = logs[-1][0]
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    assert logs[-1] == []
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert logs[-1] == []
+
+    test_app.mine_next_block()
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert len(logs[-1]) == 1  # log from before, but now mined
+    assert logs[-1][0]['type'] == 'mined'
+    assert logs[-1][0]['logIndex'] == '0x0'
+    assert logs[-1][0]['transactionIndex'] == '0x0'
+    assert logs[-1][0]['transactionHash'] == tx_hashes[-1]
+    assert logs[-1][0]['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
+    assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
+    assert logs[-1][0]['address'] == contract_address
+    logs_in_range = [logs[-1][0]]
+
+    # send tx and mine block
+    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    test_app.mine_next_block()
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    assert len(logs[-1]) == 1
+    assert logs[-1][0]['type'] == 'mined'
+    assert logs[-1][0]['logIndex'] == '0x0'
+    assert logs[-1][0]['transactionIndex'] == '0x0'
+    assert logs[-1][0]['transactionHash'] == tx_hashes[-1]
+    assert logs[-1][0]['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
+    assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
+    assert logs[-1][0]['address'] == contract_address
+    logs_in_range.append(logs[-1][0])
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert logs[-1] == logs[-2]  # latest and pending filter see same (mined) log
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert logs[-1] == []
+
+    test_app.mine_next_block()
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    assert logs[-1] == []
+
+    range_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': quantity_encoder(test_app.services.chain.chain.head.number - 3),
+        'toBlock': 'pending'
+    })
+    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    logs.append(test_app.rpc_request('eth_getFilterChanges', range_filter_id))
+    assert sorted(logs[-1]) == sorted(logs_in_range + [pending_log])
