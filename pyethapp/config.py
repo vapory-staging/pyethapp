@@ -133,6 +133,8 @@ def set_config_param(config, s, strict=True):
             raise KeyError('Unknown config option %s' % param)
         d = d.setdefault(key, {})
     try:
+        if strict and keys[-1] not in d:
+            raise KeyError('Unknown config option %s' % param)
         d[keys[-1]] = yaml.load(value)
     except yaml.parser.ParserError:
         raise ValueError('Invalid config value')
