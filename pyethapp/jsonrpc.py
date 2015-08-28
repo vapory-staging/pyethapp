@@ -32,7 +32,6 @@ from ethereum.utils import denoms
 from ethereum.utils import DEBUG
 
 logger = log = slogging.get_logger('jsonrpc')
-slogging.configure(config_string=':debug')
 
 # defaults
 default_startgas = 100 * 1000

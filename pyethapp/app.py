@@ -26,7 +26,6 @@ from accounts import AccountsService, Account
 from pyethapp import __version__
 import utils
 
-slogging.configure(config_string=':debug')
 log = slogging.get_logger('app')
 
 
@@ -48,8 +47,8 @@ class EthApp(BaseApp):
               help='Single configuration parameters (<param>=<value>)')
 @click.option('data_dir', '--data-dir', '-d', multiple=False, type=str,
               help='data directory')
-@click.option('log_config', '--log_config', '-l', multiple=False, type=str,
-              help='log_config string: e.g. ":info,eth:debug')
+@click.option('log_config', '--log_config', '-l', multiple=False, type=str, default=":info",
+              help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
               help='log as structured json output')
 @click.option('bootstrap_node', '--bootstrap_node', '-b', multiple=False, type=str,
@@ -64,7 +63,6 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
         mining_pct, unlock, password):
 
     # configure logging
-    log_config = log_config or ':info'
     slogging.configure(log_config, log_json=log_json)
 
     # data dir default or from cli option
