@@ -133,7 +133,10 @@ class JSONRPCServer(BaseService):
     """
 
     name = 'jsonrpc'
-    default_config = dict(jsonrpc=dict(listen_port=4000, listen_host='127.0.0.1'))
+    default_config = dict(jsonrpc=dict(
+        listen_port=4000,
+        listen_host='127.0.0.1',
+        corsdomain=''))
 
     @classmethod
     def subdispatcher_classes(cls):
@@ -149,10 +152,11 @@ class JSONRPCServer(BaseService):
         for subdispatcher in self.subdispatcher_classes():
             subdispatcher.register(self)
 
-        transport = WsgiServerTransport(queue_class=gevent.queue.Queue)
+        transport = WsgiServerTransport(queue_class=gevent.queue.Queue,
+                                        allow_origin=self.config['jsonrpc']['corsdomain'])
         # start wsgi server as a background-greenlet
-        self.listen_port = app.config['jsonrpc']['listen_port']
-        self.listen_host = app.config['jsonrpc']['listen_host']
+        self.listen_port = self.config['jsonrpc']['listen_port']
+        self.listen_host = self.config['jsonrpc']['listen_host']
         self.wsgi_server = gevent.wsgi.WSGIServer((self.listen_host, self.listen_port),
                                                   transport.handle, log=WSGIServerLogger)
         self.wsgi_thread = None
