@@ -1,0 +1,3 @@
+[submodule "pyethapp/tests/rpc-tests"]
+	path = pyethapp/tests/rpc-tests
+	url = https://github.com/ethereum/rpc-tests
