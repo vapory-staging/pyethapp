@@ -12,10 +12,12 @@ python:
 install:
  - pip install -r requirements.txt
  - pip install coveralls
+ - cd pyethapp/tests/rpc-tests/; npm install; cd ../../..
 
 # command to run tests, e.g. python setup.py test
 script:
   - coverage run --source pyethapp setup.py test
+  - cd pyethapp/tests/rpc-tests; ./run_tests.sh; cd ../../..
 
 after_success:
   - coveralls
