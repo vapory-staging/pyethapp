@@ -35,6 +35,8 @@ LOG_EVM = ('606060405260448060116000396000f30060606040523615600d57600d565b60425b
 
 
 solidity_code = "contract test { function multiply(uint a) returns(uint d) {   return a * 7;   } }"
+
+
 def test_compileSolidity():
     from pyethapp.jsonrpc import Compilers, data_encoder
     import ethereum._solidity
@@ -45,17 +47,26 @@ def test_compileSolidity():
         c = Compilers()
         bc = s.compile(solidity_code)
         abi = s.mk_full_signature(solidity_code)
-        r = dict(code=data_encoder(bc),
-             info=dict(source=solidity_code,
-                       language='Solidity',
-                       languageVersion='0',
-                       compilerVersion='0',
-                       abiDefinition=abi,
-                       userDoc=dict(methods=dict()),
-                       developerDoc=dict(methods=dict()),
-                       )
-             )
-        assert r == c.compileSolidity(solidity_code)
+        A = dict(test=dict(code=data_encoder(bc),
+                           info=dict(source=solidity_code,
+                                     language='Solidity',
+                                     languageVersion='0',
+                                     compilerVersion='0',
+                                     abiDefinition=abi,
+                                     userDoc=dict(methods=dict()),
+                                     developerDoc=dict(methods=dict()),
+                                     )
+                           )
+                 )
+        B = c.compileSolidity(solidity_code)
+        assert A.keys() == B.keys()
+        At = A['test']
+        Bt = B['test']
+        assert At['code'] == Bt['code']
+        for k, Av in At['info'].items():
+            if k == 'compilerVersion':
+                continue
+            assert Av == Bt['info'][k]
 
 
 @pytest.fixture
