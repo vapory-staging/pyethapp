@@ -144,7 +144,7 @@ def test_uuid_setting(account):
 
 
 def test_sign(account, password):
-    tx = Transaction(1, 0, 0, account.address, 0, '')
+    tx = Transaction(1, 0, 10**6, account.address, 0, '')
     account.sign_tx(tx)
     assert tx.sender == account.address
     account.lock()
