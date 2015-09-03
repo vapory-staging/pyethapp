@@ -2,11 +2,15 @@ import os
 import shutil
 import tempfile
 from uuid import uuid4
+import ethereum.keys
 from ethereum.slogging import get_logger
 from devp2p.app import BaseApp
 import pytest
 from pyethapp.accounts import Account, AccountsService
 
+
+# reduce key derivation iterations
+ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
 
 log = get_logger('tests.account_service')
 
@@ -26,23 +30,22 @@ def app(request):
     return app
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def privkey():
     return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def password():
     return 'secret'
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def uuid():
     return str(uuid4())
 
 
-# keystore generation takes a while, so make this module scoped
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def account(privkey, password, uuid):
     return Account.new(password, privkey, uuid)
 

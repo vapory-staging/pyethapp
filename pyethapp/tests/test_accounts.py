@@ -1,33 +1,37 @@
 import json
 from uuid import uuid4
+import ethereum.keys
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
 from pyethapp.accounts import Account
 import pytest
 
+# reduce key derivation iterations
+ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture()
 def privkey():
     return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'.decode('hex')
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def password():
     return 'secret'
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def uuid():
     return str(uuid4())
 
 
 # keystore generation takes a while, so make this module scoped
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def account(privkey, password, uuid):
     return Account.new(password, privkey, uuid)
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture()
 def keystore(account):
     # `account.keystore` might not contain address and id
     return json.loads(account.dump())
