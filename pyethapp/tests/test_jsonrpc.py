@@ -4,6 +4,7 @@ import pytest
 from devp2p.peermanager import PeerManager
 from ethereum import tester
 from ethereum.ethpow import mine
+import ethereum.keys
 from ethereum.slogging import get_logger
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
 from pyethapp.app import EthApp
@@ -13,6 +14,10 @@ from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
                              data_encoder
 from pyethapp.pow_service import PoWService
+
+# reduce key derivation iterations
+ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
+
 
 log = get_logger('test.jsonrpc')
 
