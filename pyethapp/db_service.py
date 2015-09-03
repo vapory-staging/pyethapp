@@ -1,4 +1,5 @@
 from devp2p.service import BaseService
+from ethereum.db import BaseDB
 from ethereum.slogging import get_logger
 log = get_logger('db')
 import sys
@@ -25,7 +26,7 @@ from ephemdb_service import EphemDB
 dbs['EphemDB'] = EphemDB
 
 
-class DBService(BaseService):
+class DBService(BaseDB, BaseService):
 
     name = 'db'
     default_config = dict(db=dict(implementation='LevelDB'))

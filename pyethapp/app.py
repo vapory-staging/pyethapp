@@ -1,3 +1,4 @@
+from ethereum import blocks
 import monkeypatches
 import json
 import os
@@ -24,28 +25,11 @@ from jsonrpc import JSONRPCServer
 from pow_service import PoWService
 from accounts import AccountsService, Account
 from pyethapp import __version__
+from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
+from pyethapp.utils import update_config_from_genesis_json, merge_dict
 import utils
 
 log = slogging.get_logger('app')
-
-
-# FIXME: Meh, should be somewhere else. Also needs actual content.
-NETWORK_DEFAULTS = {
-    'frontier': {
-        'config': {
-            'eth.network': 1,
-            'eth.genesis': "",
-        },
-        'genesis_hash': "",
-    },
-    'olympic': {
-        'config': {
-            'eth.network': 0,
-            'eth.genesis': "",
-        },
-        'genesis_hash': "",
-    }
-}
 
 
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
@@ -62,8 +46,8 @@ class EthApp(BaseApp):
 
 # Separators should be underscore!
 @click.group(help='Welcome to ethapp version:{}'.format(EthApp.client_version))
-@click.option('--network', type=click.Choice(['frontier', 'olympic']), default='frontier',
-              help="Which network to use.", show_default=True)
+@click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
+              help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=click.File(), help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
@@ -81,7 +65,7 @@ class EthApp(BaseApp):
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
-def app(ctx, network, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
+def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock, password):
 
     # configure logging
@@ -104,9 +88,14 @@ def app(ctx, network, alt_config, config_values, data_dir, log_config, bootstrap
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
 
-    # Set defaults based on network selection
-    for key, value in NETWORK_DEFAULTS[network]['config'].items():
-        konfig.set_config_param(key, value)
+    log.DEV("Move to EthApp.default_config")
+    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
+
+    # Set config values based on profile selection
+    merge_dict(config, PROFILES[profile])
+
+    # Load genesis config
+    update_config_from_genesis_json(config, config['eth']['genesis'])
 
     # override values with values from cmd line
     for config_value in config_values:
@@ -151,9 +140,7 @@ def run(ctx, dev, nodial, fake):
         from ethereum import blocks
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
-        blocks.MIN_GAS_LIMIT = blocks.GENESIS_GAS_LIMIT / 2
-        # workaround for genesis.json hack
-        blocks.GENESIS_JSON["difficulty"] = blocks.int_to_hex(blocks.GENESIS_DIFFICULTY)
+        blocks.MIN_GAS_LIMIT = blocks.default_config['GENESIS_GAS_LIMIT'] / 2
 
     # create app
     app = EthApp(config)

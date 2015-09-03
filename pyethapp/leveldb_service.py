@@ -1,9 +1,9 @@
 import os
 from devp2p.service import BaseService
+from ethereum.db import BaseDB
 from gevent.event import Event
 import leveldb
 from ethereum import slogging
-import time
 
 slogging.set_level('db', 'debug')
 log = slogging.get_logger('db')
@@ -45,7 +45,8 @@ reading all entries == 400MB
 
 """
 
-class LevelDB(object):
+
+class LevelDB(BaseDB):
     """
     filename                                    the database directory
     block_cache_size  (default: 8 * (2 << 20))  maximum allowed size for the block cache in bytes

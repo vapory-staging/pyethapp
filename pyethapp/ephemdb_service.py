@@ -1,6 +1,9 @@
 from devp2p.service import BaseService
 from gevent.event import Event
 from ethereum.db import _EphemDB
+from logging import getLogger
+
+log = getLogger(__name__)
 
 
 class EphemDB(_EphemDB, BaseService):

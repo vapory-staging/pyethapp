@@ -4,6 +4,7 @@ from CodernityDB.database import Database, DatabasePathException,  \
     RecordNotFound
 from CodernityDB.hash_index import HashIndex
 from devp2p.service import BaseService
+from ethereum.db import BaseDB
 from gevent.event import Event
 from ethereum import compress
 from ethereum.slogging import get_logger
@@ -25,7 +26,7 @@ class MD5Index(HashIndex):
         return md5(key).digest()
 
 
-class CodernityDB(BaseService):
+class CodernityDB(BaseDB, BaseService):
 
     """A service providing a codernity db interface."""
 
