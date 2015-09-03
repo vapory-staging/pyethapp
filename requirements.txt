@@ -9,9 +9,9 @@ ipython
 gipc==0.4.0
 statistics
 requests
-https://github.com/ethereum/pyrlp/tarball/develop
-https://github.com/ethereum/pydevp2p/tarball/master
-https://github.com/ethereum/pyethereum/tarball/develop
+https://github.com/ethereum/pyrlp/tarball/develop#egg=rlp
+https://github.com/ethereum/pydevp2p/tarball/master#egg=devp2p
+https://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum
 pbkdf2
 gevent==1.1b3
 scrypt

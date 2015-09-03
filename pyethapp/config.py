@@ -25,7 +25,6 @@ from devp2p.service import BaseService
 from devp2p.app import BaseApp
 from accounts import mk_random_privkey
 
-slogging.configure(config_string=':debug')
 log = slogging.get_logger('config')
 
 default_data_dir = click.get_app_dir('pyethapp')

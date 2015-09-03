@@ -26,8 +26,26 @@ from accounts import AccountsService, Account
 from pyethapp import __version__
 import utils
 
-slogging.configure(config_string=':debug')
 log = slogging.get_logger('app')
+
+
+# FIXME: Meh, should be somewhere else. Also needs actual content.
+NETWORK_DEFAULTS = {
+    'frontier': {
+        'config': {
+            'eth.network': 1,
+            'eth.genesis': "",
+        },
+        'genesis_hash': "",
+    },
+    'olympic': {
+        'config': {
+            'eth.network': 0,
+            'eth.genesis': "",
+        },
+        'genesis_hash': "",
+    }
+}
 
 
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
@@ -42,14 +60,17 @@ class EthApp(BaseApp):
     default_config['post_app_start_callback'] = None
 
 
+# Separators should be underscore!
 @click.group(help='Welcome to ethapp version:{}'.format(EthApp.client_version))
+@click.option('--network', type=click.Choice(['frontier', 'olympic']), default='frontier',
+              help="Which network to use.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=click.File(), help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('data_dir', '--data-dir', '-d', multiple=False, type=str,
               help='data directory')
-@click.option('log_config', '--log_config', '-l', multiple=False, type=str,
-              help='log_config string: e.g. ":info,eth:debug')
+@click.option('log_config', '--log_config', '-l', multiple=False, type=str, default=":info",
+              help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
               help='log as structured json output')
 @click.option('bootstrap_node', '--bootstrap_node', '-b', multiple=False, type=str,
@@ -60,11 +81,10 @@ class EthApp(BaseApp):
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
-def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
+def app(ctx, network, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock, password):
 
     # configure logging
-    log_config = log_config or ':info'
     slogging.configure(log_config, log_json=log_json)
 
     # data dir default or from cli option
@@ -83,6 +103,10 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
 
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
+
+    # Set defaults based on network selection
+    for key, value in NETWORK_DEFAULTS[network]['config'].items():
+        konfig.set_config_param(key, value)
 
     # override values with values from cmd line
     for config_value in config_values:

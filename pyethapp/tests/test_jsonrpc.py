@@ -34,6 +34,9 @@ LOG_EVM = ('606060405260448060116000396000f30060606040523615600d57600d565b60425b
            'a15b565b00').decode('hex')
 
 
+from pyethapp.jsonrpc import Compilers
+
+
 solidity_code = "contract test { function multiply(uint a) returns(uint d) {   return a * 7;   } }"
 
 
@@ -67,6 +70,17 @@ def test_compileSolidity():
             if k == 'compilerVersion':
                 continue
             assert Av == Bt['info'][k]
+
+
+@pytest.mark.skipif('solidity' not in Compilers().compilers, reason="solidity compiler not available")
+def test_compileSolidity_2():
+    result = Compilers().compileSolidity(solidity_code)
+    assert set(result.keys()) == {'test'}
+    assert set(result['test'].keys()) == {'info', 'code'}
+    assert set(result['test']['info']) == {
+        'language', 'languageVersion', 'abiDefinition', 'source',
+        'compilerVersion', 'developerDoc', 'userDoc'
+    }
 
 
 @pytest.fixture
