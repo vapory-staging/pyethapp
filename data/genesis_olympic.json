@@ -1,0 +1,53 @@
+from ethereum.utils import to_string
+
+GENESIS_INITIAL_ALLOC = {
+    "dbdbdb2cbd23b783741e8d7fcf51e459b497e4a6": {"wei": to_string(2 ** 200)},
+    "e6716f9544a56c530d868e4bfbacb172315bdead": {"wei": to_string(2 ** 200)},
+    "b9c015918bdaba24b4ff057a92a3873d6eb201be": {"wei": to_string(2 ** 200)},
+    "1a26338f0d905e295fccb71fa9ea849ffa12aaf4": {"wei": to_string(2 ** 200)},
+    "2ef47100e0787b915105fd5e3f4ff6752079d5cb": {"wei": to_string(2 ** 200)},
+    "cd2a3d9f938e13cd947ec05abc7fe734df8dd826": {"wei": to_string(2 ** 200)},
+    "6c386a4b26f73c802f34673f7248bb118f97424a": {"wei": to_string(2 ** 200)},
+    "e4157b34ea9615cfbde6b4fda419828124b70c78": {"wei": to_string(2 ** 200)},
+    "0000000000000000000000000000000000000001": {"wei": to_string(1)},
+    "0000000000000000000000000000000000000002": {"wei": to_string(1)},
+    "0000000000000000000000000000000000000003": {"wei": to_string(1)},
+    "0000000000000000000000000000000000000004": {"wei": to_string(1)},
+}
+olympic_params = dict(
+    GENESIS_DIFFICULTY=131072,
+    GENESIS_GAS_LIMIT=3141592,
+    GENESIS_PREVHASH=b'\x00' * 32,
+    GENESIS_COINBASE=b'\x00' * 20,
+    GENESIS_NONCE=utils.zpad(utils.encode_int(42), 8),
+    GENESIS_MIXHASH=b'\x00' * 32,
+    MIN_GAS_LIMIT=125000,
+    GASLIMIT_EMA_FACTOR=1024,
+    GASLIMIT_ADJMAX_FACTOR=1024,
+    BLKLIM_FACTOR_NOM=3,
+    BLKLIM_FACTOR_DEN=2,
+    BLOCK_REWARD=1500 * utils.denoms.finney,
+    UNCLE_DEPTH_PENALTY_FACTOR=8,
+    NEPHEW_REWARD=BLOCK_REWARD / 32,
+    MAX_UNCLE_DEPTH=6,
+    MAX_UNCLES=2,
+    DIFF_ADJUSTMENT_CUTOFF=8,
+    BLOCK_DIFF_FACTOR=2048,
+    MIN_DIFF=131072,
+    POW_EPOCH_LENGTH=30000)
+
+{
+    "nonce": "0x0000000000000042",
+    "difficulty": "0x400000000",
+    "alloc": {
+        "756f45e3fa69347a9a973a725e3c98bc4db0b5a0": {
+            "balance": "200000000000000000000"
+        }
+    },
+    "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "timestamp": "0x00",
+    "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "extraData": "0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa",
+    "gasLimit": "0x1388"
+}
