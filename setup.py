@@ -5,7 +5,8 @@
 try:
     from setuptools import setup
 except ImportError:
-    from distutils.core import setup
+    raise
+#     from distutils.core import setup
 from setuptools.command.test import test as TestCommand
 
 
@@ -54,8 +55,10 @@ setup(
     packages=[
         'pyethapp',
     ],
-    package_dir={'pyethapp':
-                 'pyethapp'},
+    package_dir={'pyethapp': 'pyethapp'},
+    package_data={
+        'pyethapp': ['data/*.json']
+    },
     include_package_data=True,
     license="BSD",
     zip_safe=False,

@@ -4,6 +4,7 @@ from ethereum.utils import sha3
 import rlp
 from rlp.utils import encode_hex
 from ethereum import processblock
+from ethereum import config as ethereum_config
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
 from ethereum.processblock import validate_transaction
@@ -87,7 +88,10 @@ class ChainService(WiredService):
     """
     # required by BaseService
     name = 'chain'
-    default_config = dict(eth=dict(network_id=0, genesis='', pruning=-1))
+    default_config = dict(
+        eth=dict(network_id=0, genesis='', pruning=-1),
+        block=ethereum_config.default_config
+    )
 
     # required by WiredService
     wire_protocol = eth_protocol.ETHProtocol  # create for each peer
