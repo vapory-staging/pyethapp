@@ -95,18 +95,21 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
 
-    # Load genesis config
-    update_config_from_genesis_json(config, config['eth']['genesis'])
-
     # override values with values from cmd line
     for config_value in config_values:
         try:
             konfig.set_config_param(config, config_value)
             # check if this is part of the default config
+            if config_value.startswith("eth.genesis"):
+                del config['eth']['genesis_hash']
         except ValueError:
             raise BadParameter('Config parameter must be of the form "a.b.c=d" where "a.b.c" '
                                'specifies the parameter to set and d is a valid yaml value '
                                '(example: "-c jsonrpc.port=5000")')
+
+    # Load genesis config
+    update_config_from_genesis_json(config, config['eth']['genesis'])
+
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
     if mining_pct > 0:
