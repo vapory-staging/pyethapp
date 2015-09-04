@@ -6,6 +6,7 @@ from pyethapp import leveldb_service
 from pyethapp import codernitydb_service
 from pyethapp import eth_protocol
 from ethereum import slogging
+from ethereum import config as eth_config
 import rlp
 import tempfile
 slogging.configure(config_string=':info')
@@ -20,14 +21,18 @@ class AppMock(object):
         db=dict(path='_db'),
         eth=dict(
             pruning=-1,
+            network_id=1,
+            block=eth_config.default_config
         ),
     )
 
     class Services(dict):
+
         class accounts:
             coinbase = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
         class peermanager:
+
             @classmethod
             def broadcast(*args, **kwargs):
                 pass
@@ -93,9 +98,11 @@ def test_receive_newblock():
 def receive_blocks(rlp_data, leveldb=False, codernitydb=False):
     app = AppMock()
     if leveldb:
-        app.db = leveldb_service.LevelDB(os.path.join(app.config['app']['dir'], app.config['db']['path']))
+        app.db = leveldb_service.LevelDB(
+            os.path.join(app.config['app']['dir'], app.config['db']['path']))
     if codernitydb:
-        app.db = codernitydb_service.CodernityDB(os.path.join(app.config['app']['dir'], app.config['db']['path']))
+        app.db = codernitydb_service.CodernityDB(
+            os.path.join(app.config['app']['dir'], app.config['db']['path']))
 
     eth = eth_service.ChainService(app)
     proto = eth_protocol.ETHProtocol(PeerMock(app), eth)
