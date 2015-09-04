@@ -5,14 +5,13 @@ import rlp
 from rlp.utils import encode_hex
 from ethereum import processblock
 from synchronizer import Synchronizer
-#from ethereum.db import BaseDB
 from ethereum.slogging import get_logger
 from ethereum.processblock import validate_transaction
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
-from ethereum.blocks import Block, VerificationFailed, genesis
+from ethereum.blocks import Block, VerificationFailed
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
@@ -24,7 +23,7 @@ from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
 from pyethapp.canary import canary_addresses
-import json
+
 
 log = get_logger('eth.chainservice')
 
@@ -137,11 +136,14 @@ class ChainService(WiredService):
         super(ChainService, self).__init__(app)
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
-
         env = Env(self.db, sce['block'])
-
         self.chain = Chain(env, new_head_cb=self._on_new_head, coinbase=coinbase)
+
         log.info('chain at', number=self.chain.head.number)
+        assert 'genesis_hash' in sce['block']  # FIXME remove this later
+        if 'genesis_hash' in sce['block']:
+            assert sce['block']['genesis_hash'].decode('hex') == self.chain.genesis.hash
+
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
@@ -204,7 +206,6 @@ class ChainService(WiredService):
         self.add_transaction_lock.release()
         if success:
             self._on_new_head_candidate()
-
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
@@ -494,7 +495,7 @@ class ChainService(WiredService):
         for h in hashes:
             try:
                 found.append(utils.encode_hex(self.chain.db.get(
-                             'node:'+utils.decode_hex(h))))
+                             'node:' + utils.decode_hex(h))))
             except KeyError:
                 found.append('')
         proto.send_hashlookupresponse(h)
