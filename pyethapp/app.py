@@ -1,8 +1,10 @@
+from ethereum import blocks
 import monkeypatches
 import json
 import os
 import signal
 import sys
+import copy
 from uuid import uuid4
 import click
 from click import BadParameter
@@ -24,9 +26,10 @@ from jsonrpc import JSONRPCServer
 from pow_service import PoWService
 from accounts import AccountsService, Account
 from pyethapp import __version__
+from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
+from pyethapp.utils import update_config_from_genesis_json, merge_dict
 import utils
 
-slogging.configure(config_string=':debug')
 log = slogging.get_logger('app')
 
 
@@ -42,14 +45,17 @@ class EthApp(BaseApp):
     default_config['post_app_start_callback'] = None
 
 
+# Separators should be underscore!
 @click.group(help='Welcome to ethapp version:{}'.format(EthApp.client_version))
+@click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
+              help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=click.File(), help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('data_dir', '--data-dir', '-d', multiple=False, type=str,
               help='data directory')
-@click.option('log_config', '--log_config', '-l', multiple=False, type=str,
-              help='log_config string: e.g. ":info,eth:debug')
+@click.option('log_config', '--log_config', '-l', multiple=False, type=str, default=":info",
+              help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
               help='log as structured json output')
 @click.option('bootstrap_node', '--bootstrap_node', '-b', multiple=False, type=str,
@@ -60,11 +66,10 @@ class EthApp(BaseApp):
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
-def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
+def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock, password):
 
     # configure logging
-    log_config = log_config or ':info'
     slogging.configure(log_config, log_json=log_json)
 
     # data dir default or from cli option
@@ -83,6 +88,15 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
 
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
+
+    log.DEV("Move to EthApp.default_config")
+    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
+
+    # Set config values based on profile selection
+    merge_dict(config, PROFILES[profile])
+
+    # Load genesis config
+    update_config_from_genesis_json(config, config['eth']['genesis'])
 
     # override values with values from cmd line
     for config_value in config_values:
@@ -104,7 +118,8 @@ def app(ctx, alt_config, config_values, data_dir, log_config, bootstrap_node, lo
     ctx.obj = {'config': config,
                'unlock': unlock,
                'password': password.read().rstrip() if password else None}
-    assert (password and ctx.obj['password'] is not None and len(ctx.obj['password'])) or not password, "empty password file"
+    assert (password and ctx.obj['password'] is not None and len(
+        ctx.obj['password'])) or not password, "empty password file"
 
 
 @app.command()
@@ -127,9 +142,7 @@ def run(ctx, dev, nodial, fake):
         from ethereum import blocks
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
-        blocks.MIN_GAS_LIMIT = blocks.GENESIS_GAS_LIMIT / 2
-        # workaround for genesis.json hack
-        blocks.GENESIS_JSON["difficulty"] = blocks.int_to_hex(blocks.GENESIS_DIFFICULTY)
+        blocks.MIN_GAS_LIMIT = blocks.default_config['GENESIS_GAS_LIMIT'] / 2
 
     # create app
     app = EthApp(config)
@@ -144,7 +157,7 @@ def run(ctx, dev, nodial, fake):
             pass
 
     # dump config
-    konfig.dump_config(config)
+    dump_config(config)
 
     # register services
     for service in services:
@@ -174,11 +187,20 @@ def run(ctx, dev, nodial, fake):
     app.stop()
 
 
+def dump_config(config):
+    cfg = copy.deepcopy(config)
+    alloc = cfg.get('eth', {}).get('block', {}).get('GENESIS_INITIAL_ALLOC', {})
+    if len(alloc) > 100:
+        log.info('omitting reporting of %d accounts in genesis' % len(alloc))
+        del cfg['eth']['block']['GENESIS_INITIAL_ALLOC']
+    konfig.dump_config(cfg)
+
+
 @app.command()
 @click.pass_context
 def config(ctx):
     """Show the config"""
-    konfig.dump_config(ctx.obj['config'])
+    dump_config(ctx.obj['config'])
 
 
 @app.command()

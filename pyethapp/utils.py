@@ -1,6 +1,15 @@
+from collections import Mapping
+import json
+import yaml
+import os
 import ethereum
 from ethereum.blocks import Block, genesis
+from ethereum.keys import decode_hex
+from ethereum.utils import parse_int_or_hex, remove_0x_head
+import re
 import rlp
+import sys
+
 
 def _load_contrib_services(config):  # FIXME
     # load contrib services
@@ -57,3 +66,43 @@ def load_block_tests(data, db):
         block = rlp.decode(rlpdata, Block, db=db, parent=parent)
         blocks[block.hash] = block
     return sorted(blocks.values(), key=lambda b: b.number)
+
+
+def update_config_from_genesis_json(config, genesis_json_filename):
+    with open(genesis_json_filename, "r") as genesis_json_file:
+        genesis_dict = yaml.load(genesis_json_file)
+
+    config.setdefault('eth', {}).setdefault('block', {})
+    cfg = config['eth']['block']
+    cfg['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
+    cfg['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
+    cfg['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
+    cfg['GENESIS_EXTRA_DATA'] = decode_hex(remove_0x_head(genesis_dict['extraData']))
+    cfg['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
+    cfg['GENESIS_MIXHASH'] = decode_hex(remove_0x_head(genesis_dict['mixhash']))
+    cfg['GENESIS_PREVHASH'] = decode_hex(remove_0x_head(genesis_dict['parentHash']))
+    cfg['GENESIS_COINBASE'] = decode_hex(remove_0x_head(genesis_dict['coinbase']))
+    cfg['GENESIS_NONCE'] = decode_hex(remove_0x_head(genesis_dict['nonce']))
+
+    return config
+
+
+def merge_dict(dest, source):
+    stack = [(dest, source)]
+    while stack:
+        curr_dest, curr_source = stack.pop()
+        for key in curr_source:
+            if key not in curr_dest:
+                curr_dest[key] = curr_source[key]
+            else:
+                if isinstance(curr_source[key], Mapping):
+                    if isinstance(curr_dest[key], Mapping):
+                        stack.append((curr_dest[key], curr_source[key]))
+                    else:
+                        raise ValueError('Incompatible types during merge: {} and {}'.format(
+                            type(curr_source[key]),
+                            type(curr_dest[key])
+                        ))
+                else:
+                    curr_dest[key] = curr_source[key]
+    return dest

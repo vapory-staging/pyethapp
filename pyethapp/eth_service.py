@@ -1,4 +1,5 @@
 import time
+from ethereum.config import Env
 from ethereum.utils import sha3
 import rlp
 from rlp.utils import encode_hex
@@ -10,8 +11,7 @@ from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
-from ethereum.blocks import Block, VerificationFailed, genesis, \
-    GENESIS_JSON
+from ethereum.blocks import Block, VerificationFailed
 from ethereum.transactions import Transaction
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
@@ -23,8 +23,7 @@ from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
 from pyethapp.canary import canary_addresses
-from ethereum.utils import DEBUG
-import json
+
 
 log = get_logger('eth.chainservice')
 
@@ -119,21 +118,32 @@ class ChainService(WiredService):
                 raise Exception("This database was initialized as pruning."
                                 " Kinda hard to stop pruning now.")
             self.db.put("I am not pruning", "1")
+
+        if 'network_id' in self.db:
+            db_network_id = self.db.get('network_id')
+            if db_network_id != str(sce['network_id']):
+                raise Exception("This database was initialized with network_id {} "
+                                "and can not be used when connecting to network_id {}".format(
+                                    db_network_id, sce['network_id'])
+                                )
+
+        else:
+            self.db.put('network_id', str(sce['network_id']))
+            self.db.commit()
+
         assert self.db is not None
+
         super(ChainService, self).__init__(app)
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
-        if sce['genesis']:
-            log.info('loading genesis', path=sce['genesis'])
-            _json = json.load(open(sce['genesis']))
-        else:
-            log.info('loaded default genesis alloc')
-            _json=None
-        _genesis = genesis(self.db, json=_json)
-        log.info('created genesis block', hash=encode_hex(_genesis.hash))
-        self.chain = Chain(self.db, genesis=_genesis, new_head_cb=self._on_new_head,
-                           coinbase=coinbase)
+        env = Env(self.db, sce['block'])
+        self.chain = Chain(env, new_head_cb=self._on_new_head, coinbase=coinbase)
+
         log.info('chain at', number=self.chain.head.number)
+        assert 'genesis_hash' in sce  # FIXME remove this later
+        if 'genesis_hash' in sce:
+            assert sce['genesis_hash'] == self.chain.genesis.hex_hash()
+
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
@@ -196,7 +206,6 @@ class ChainService(WiredService):
         self.add_transaction_lock.release()
         if success:
             self._on_new_head_candidate()
-
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
@@ -486,7 +495,7 @@ class ChainService(WiredService):
         for h in hashes:
             try:
                 found.append(utils.encode_hex(self.chain.db.get(
-                             'node:'+utils.decode_hex(h))))
+                             'node:' + utils.decode_hex(h))))
             except KeyError:
                 found.append('')
         proto.send_hashlookupresponse(h)
