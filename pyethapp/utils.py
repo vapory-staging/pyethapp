@@ -1,5 +1,6 @@
 from collections import Mapping
 import json
+import yaml
 import os
 import ethereum
 from ethereum.blocks import Block, genesis
@@ -69,7 +70,7 @@ def load_block_tests(data, db):
 
 def update_config_from_genesis_json(config, genesis_json_filename):
     with open(genesis_json_filename, "r") as genesis_json_file:
-        genesis_dict = json.load(genesis_json_file)
+        genesis_dict = yaml.load(genesis_json_file)
 
     config.setdefault('eth', {}).setdefault('block', {})
     cfg = config['eth']['block']
