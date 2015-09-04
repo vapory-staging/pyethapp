@@ -140,9 +140,9 @@ class ChainService(WiredService):
         self.chain = Chain(env, new_head_cb=self._on_new_head, coinbase=coinbase)
 
         log.info('chain at', number=self.chain.head.number)
-        assert 'genesis_hash' in sce['block']  # FIXME remove this later
-        if 'genesis_hash' in sce['block']:
-            assert sce['block']['genesis_hash'].decode('hex') == self.chain.genesis.hash
+        assert 'genesis_hash' in sce  # FIXME remove this later
+        if 'genesis_hash' in sce:
+            assert sce['genesis_hash'] == self.chain.genesis.hex_hash()
 
         self.synchronizer = Synchronizer(self, force_sync=None)
 
