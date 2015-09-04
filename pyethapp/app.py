@@ -4,6 +4,7 @@ import json
 import os
 import signal
 import sys
+import copy
 from uuid import uuid4
 import click
 from click import BadParameter
@@ -117,7 +118,8 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     ctx.obj = {'config': config,
                'unlock': unlock,
                'password': password.read().rstrip() if password else None}
-    assert (password and ctx.obj['password'] is not None and len(ctx.obj['password'])) or not password, "empty password file"
+    assert (password and ctx.obj['password'] is not None and len(
+        ctx.obj['password'])) or not password, "empty password file"
 
 
 @app.command()
@@ -155,7 +157,7 @@ def run(ctx, dev, nodial, fake):
             pass
 
     # dump config
-    konfig.dump_config(config)
+    dump_config(config)
 
     # register services
     for service in services:
@@ -185,11 +187,20 @@ def run(ctx, dev, nodial, fake):
     app.stop()
 
 
+def dump_config(config):
+    cfg = copy.deepcopy(config)
+    alloc = cfg.get('eth', {}).get('block', {}).get('GENESIS_INITIAL_ALLOC', {})
+    if len(alloc) > 100:
+        log.info('omitting reporting of %d accounts in genesis' % len(alloc))
+        del cfg['eth']['block']['GENESIS_INITIAL_ALLOC']
+    konfig.dump_config(cfg)
+
+
 @app.command()
 @click.pass_context
 def config(ctx):
     """Show the config"""
-    konfig.dump_config(ctx.obj['config'])
+    dump_config(ctx.obj['config'])
 
 
 @app.command()
