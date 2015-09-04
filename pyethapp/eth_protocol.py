@@ -217,9 +217,9 @@ class TransientBlock(rlp.Serializable):
         self.transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
         self.uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
 
-    def to_block(self, db, parent=None):
+    def to_block(self, env, parent=None):
         """Convert the transient block to a :class:`ethereum.blocks.Block`"""
-        return Block(self.header, self.transaction_list, self.uncles, db=db, parent=parent)
+        return Block(self.header, self.transaction_list, self.uncles, env=env, parent=parent)
 
     @property
     def hex_hash(self):

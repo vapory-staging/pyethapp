@@ -257,7 +257,7 @@ class ChainService(WiredService):
                     continue
                 try:  # deserialize
                     st = time.time()
-                    block = t_block.to_block(db=self.chain.db)
+                    block = t_block.to_block(env=self.chain.env)
                     elapsed = time.time() - st
                     log.debug('deserialized', elapsed='%.4fs' % elapsed, ts=time.time(),
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
