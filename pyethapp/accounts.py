@@ -24,6 +24,7 @@ def mk_random_privkey():
 
 
 class Account(object):
+
     """Represents an account.
 
     :ivar keystore: the key store as a dictionary (as decoded from json)
@@ -189,6 +190,7 @@ class Account(object):
 
 
 class AccountsService(BaseService):
+
     """Service that manages accounts.
 
     At initialization, this service collects the accounts stored as key files in the keystore
@@ -209,10 +211,6 @@ class AccountsService(BaseService):
         self.keystore_dir = app.config['accounts']['keystore_dir']
         if not os.path.isabs(self.keystore_dir):
             self.keystore_dir = os.path.join(app.config['data_dir'], self.keystore_dir)
-        try:
-            self.coinbase = app.config['pow']['coinbase'] or DEFAULT_COINBASE
-        except:
-            self.coinbase = DEFAULT_COINBASE
         self.accounts = []
         if not os.path.exists(self.keystore_dir):
             log.warning('keystore directory does not exist', directory=self.keystore_dir)
@@ -234,8 +232,15 @@ class AccountsService(BaseService):
             log.warn('no accounts found')
         else:
             log.info('found account(s)', accounts=self.accounts)
-        if self.accounts:
-            self.coinbase = self.accounts[0].address
+
+    @property
+    def coinbase(self):
+        cb = self.app.config.get('pow', {}).get('coinbase')
+        if cb:
+            return cb
+        elif self.accounts:
+            return self.accounts[0].address
+        return DEFAULT_COINBASE
 
     def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.
@@ -457,12 +462,17 @@ class AccountsService(BaseService):
         assert len(address) == 20
         return address in [a.address for a in self.accounts]
 
-    def __getitem__(self, address):
-        assert len(address) == 20
-        for a in self.accounts:
-            if a.address == address:
-                return a
-        raise KeyError
+    def __getitem__(self, address_or_idx):
+        if isinstance(address_or_idx, bytes):
+            address = address_or_idx
+            assert len(address) == 20
+            for a in self.accounts:
+                if a.address == address:
+                    return a
+            raise KeyError
+        else:
+            assert isinstance(address_or_idx, int)
+            return self.accounts[address_or_idx]
 
     def __iter__(self):
         return iter(self.accounts)
