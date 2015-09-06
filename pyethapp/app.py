@@ -1,4 +1,5 @@
 from ethereum import blocks
+from IPython.core import ultratb
 import monkeypatches
 import json
 import os
@@ -126,7 +127,7 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 
 
 @app.command()
-@click.option('--dev/--nodev', default=False, help='Exit at unhandled exceptions')
+@click.option('--dev/--nodev', default=False, help='Drop into interactive debugger on unhandled exceptions')
 @click.option('--nodial/--dial',  default=False, help='do not dial nodes')
 @click.option('--fake/--nofake',  default=False, help='fake genesis difficulty')
 @click.pass_context
@@ -153,6 +154,7 @@ def run(ctx, dev, nodial, fake):
     # development mode
     if dev:
         gevent.get_hub().SYSTEM_ERROR = BaseException
+        sys.excepthook = ultratb.VerboseTB(call_pdb=True, tb_offset=6)
         try:
             config['client_version'] += '/' + os.getlogin()
         except:
