@@ -72,6 +72,8 @@ class Account(object):
         """
         with open(path) as f:
             keystore = json.load(f)
+        if not keys.check_keystore_json(keystore):
+            raise ValueError('Invalid keystore file')
         return Account(keystore, password, path=path)
 
     def dump(self, include_address=True, include_id=True):
