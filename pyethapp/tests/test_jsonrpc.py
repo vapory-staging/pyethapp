@@ -2,6 +2,7 @@ from itertools import count
 import json
 import pytest
 from devp2p.peermanager import PeerManager
+import ethereum
 from ethereum import tester
 from ethereum.ethpow import mine
 import ethereum.keys
@@ -122,6 +123,7 @@ def test_app(request, tmpdir):
                     break
             self.services.pow.recv_found_nonce(bin_nonce, mixhash, block.mining_hash)
             log.debug('block mined')
+            assert self.services.chain.chain.head.difficulty == 1
             return self.services.chain.chain.head
 
         def rpc_request(self, method, *args):
@@ -138,25 +140,6 @@ def test_app(request, tmpdir):
             log.debug('got response', response=res)
             return res
 
-    # genesis block with reduced difficulty, increased gas limit, and allocations to test accounts
-    genesis_block = {
-        "nonce": "0x0000000000000042",
-        "difficulty": "0x1",
-        "alloc": {
-            tester.accounts[0].encode('hex'): {'balance': 10**24},
-            tester.accounts[1].encode('hex'): {'balance': 1},
-            tester.accounts[2].encode('hex'): {'balance': 10**24},
-        },
-        "mixhash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "coinbase": "0x0000000000000000000000000000000000000000",
-        "timestamp": "0x00",
-        "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-        "extraData": "0x",
-        "gasLimit": "0x2fefd8"
-    }
-    genesis_block_file = tmpdir.join('test_genesis_block.json')
-    genesis_block_file.write(json.dumps(genesis_block))
-
     config = {
         'data_dir': str(tmpdir),
         'db': {'implementation': 'EphemDB'},
@@ -171,11 +154,23 @@ def test_app(request, tmpdir):
             'boostrap_nodes': [],
             'listen_port': 29873
         },
-        'eth': {'genesis': str(genesis_block_file), 'block': ethereum.config.default_config},
+        'eth': {
+            'block': {  # reduced difficulty, increased gas limit, allocations to test accounts
+                'GENESIS_DIFFICULTY': 1,
+                'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
+                'GENESIS_GAS_LIMIT': 3141592,
+                'GENESIS_INITIAL_ALLOC': {
+                    tester.accounts[0].encode('hex'): {'balance': 10**24},
+                    tester.accounts[1].encode('hex'): {'balance': 1},
+                    tester.accounts[2].encode('hex'): {'balance': 10**24},
+                }
+            }
+        },
         'jsonrpc': {'listen_port': 29873}
     }
     services = [DBService, AccountsService, PeerManager, ChainService, PoWService, JSONRPCServer]
     update_config_with_defaults(config, get_default_config([TestApp] + services))
+    update_config_with_defaults(config, {'eth': {'block': ethereum.config.default_config}})
     app = TestApp(config)
     for service in services:
         service.register_with_app(app)
@@ -190,7 +185,6 @@ def test_app(request, tmpdir):
     return app
 
 
-@pytest.mark.xfail  # sender has not funds
 def test_send_transaction(test_app):
     chain = test_app.services.chain.chain
     assert chain.head_candidate.get_balance('\xff' * 20) == 0
@@ -214,7 +208,6 @@ def test_send_transaction(test_app):
     assert chain.head_candidate.get_transactions() == []
 
 
-@pytest.mark.skipif(True, reason='must timeout if it fails')
 def test_pending_transaction_filter(test_app):
     filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
@@ -247,7 +240,6 @@ def test_pending_transaction_filter(test_app):
     map(test_sequence, sequences)
 
 
-@pytest.mark.skipif(True, reason='must timeout if it fails')
 def test_new_block_filter(test_app):
     filter_id = test_app.rpc_request('eth_newBlockFilter')
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
@@ -260,7 +252,6 @@ def test_new_block_filter(test_app):
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
 
 
-@pytest.mark.skipif(True, reason='must timeout if it fails')
 def test_get_logs(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
@@ -353,7 +344,6 @@ def test_get_logs(test_app):
     assert sorted(logs7) == sorted(logs3 + logs6 + logs1)
 
 
-@pytest.mark.skipif(True, reason='must timeout if it fails')
 def test_get_filter_changes(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
