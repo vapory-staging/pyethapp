@@ -39,15 +39,17 @@ services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService
 
 
 class EthApp(BaseApp):
-    client_version = 'pyethapp/v%s/%s/%s' % (__version__, sys.platform,
-                                             'py%d.%d.%d' % sys.version_info[:3])
+    client_name = 'pyethapp'
+    client_version = '%s/%s/%s' % (__version__, sys.platform,
+                                   'py%d.%d.%d' % sys.version_info[:3])
+    client_version_string = '%s/v%s' % (client_name, client_version)
     default_config = dict(BaseApp.default_config)
-    default_config['client_version'] = client_version
+    default_config['client_version_string'] = client_version_string
     default_config['post_app_start_callback'] = None
 
 
 # Separators should be underscore!
-@click.group(help='Welcome to ethapp version:{}'.format(EthApp.client_version))
+@click.group(help='Welcome to {}  version: {}'.format(EthApp.client_name, EthApp.client_version))
 @click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
               help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=click.File(), help='Alternative config file')
@@ -94,7 +96,9 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
 
     # Set config values based on profile selection
+    log.DEV("loading profile", profile=profile)
     merge_dict(config, PROFILES[profile])
+    log.DEV("done")
 
     # override values with values from cmd line
     for config_value in config_values:
@@ -109,14 +113,16 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
                                '(example: "-c jsonrpc.port=5000")')
 
     # Load genesis config
+    log.DEV("update genesis config")
     update_config_from_genesis_json(config, config['eth']['genesis'])
+    log.DEV("done")
 
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
-    if not config['pow']['activated']:
+    if not config.get('pow', {}).get('activated'):
         config['deactivated_services'].append(PoWService.name)
 
     ctx.obj = {'config': config,
@@ -164,15 +170,18 @@ def run(ctx, dev, nodial, fake):
     # dump config
     dump_config(config)
 
+    # init accounts first, as we need (and set by copy) the coinbase early FIXME
+    if AccountsService in services:
+        AccountsService.register_with_app(app)
+    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
+
     # register services
     for service in services:
         assert issubclass(service, BaseService)
-        if service.name not in app.config['deactivated_services']:
+        if service.name not in app.config['deactivated_services'] + [AccountsService.name]:
             assert service.name not in app.services
             service.register_with_app(app)
             assert hasattr(app.services, service.name)
-
-    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
 
     # start app
     log.info('starting')

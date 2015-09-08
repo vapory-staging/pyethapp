@@ -321,7 +321,7 @@ class AccountsService(BaseService):
             i += 1
         assert not os.path.exists(backup_path)
         log.info('moving old keystore file to backup location', **{'from': account.path,
-                                                                    'to': backup_path})
+                                                                   'to': backup_path})
         try:
             shutil.move(account.path, backup_path)
         except:
