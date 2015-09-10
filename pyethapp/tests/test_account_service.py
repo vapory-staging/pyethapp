@@ -4,9 +4,10 @@ import tempfile
 from uuid import uuid4
 import ethereum.keys
 from ethereum.slogging import get_logger
+from ethereum.utils import decode_hex, remove_0x_head
 from devp2p.app import BaseApp
 import pytest
-from pyethapp.accounts import Account, AccountsService
+from pyethapp.accounts import Account, AccountsService, DEFAULT_COINBASE
 
 
 # reduce key derivation iterations
@@ -320,3 +321,15 @@ def test_update(app, account, password):
     s.update_account(account, 'pw3')
     assert set(os.listdir(app.config['accounts']['keystore_dir'])) == set(files + ['update_test'])
     account.path = None
+
+
+def test_coinbase(app, account):
+    s = app.services.accounts
+    assert s.coinbase == DEFAULT_COINBASE
+    for invalid_coinbase in [123, '\x00' * 20, '\x00' * 40, '', 'aabbcc', 'aa' * 19, 'ff' * 21]:
+        app.config['pow'] = {'coinbase_hex': invalid_coinbase}
+        with pytest.raises(ValueError):
+            s.coinbase
+    for valid_coinbase in ['00' * 20, 'ff' * 20, '0x' + 'aa' * 20]:
+        app.config['pow'] = {'coinbase_hex': valid_coinbase}
+        assert s.coinbase == decode_hex(remove_0x_head(valid_coinbase))

@@ -25,7 +25,7 @@ import config as konfig
 from db_service import DBService
 from jsonrpc import JSONRPCServer
 from pow_service import PoWService
-from accounts import AccountsService, Account
+from accounts import AccountsService, Account, DEFAULT_COINBASE
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import update_config_from_genesis_json, merge_dict
@@ -170,10 +170,19 @@ def run(ctx, dev, nodial, fake):
     # dump config
     dump_config(config)
 
-    # init accounts first, as we need (and set by copy) the coinbase early FIXME
+    # init accounts first and check if there's an account for the coinbase
     if AccountsService in services:
         AccountsService.register_with_app(app)
-    unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
+        unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
+        try:
+            coinbase = app.services.accounts.coinbase
+        except ValueError:
+            log.fatal('invalid coinbase', coinbase=config.get('pow', {}).get('coinbase_hex'))
+            sys.exit()
+        if (not any(acct.address == coinbase for acct in app.services.accounts) and
+                coinbase != DEFAULT_COINBASE):
+            log.fatal('no account for configured coinbase', coinbase=coinbase.encode('hex'))
+            sys.exit()
 
     # register services
     for service in services:

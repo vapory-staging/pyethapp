@@ -7,7 +7,7 @@ from devp2p.service import BaseService
 from ethereum import keys
 from ethereum.slogging import get_logger
 from ethereum.utils import privtopub  # this is different  than the one used in devp2p.crypto
-from ethereum.utils import sha3
+from ethereum.utils import sha3, is_string, decode_hex, remove_0x_head
 log = get_logger('accounts')
 
 DEFAULT_COINBASE = 'de0b295669a9fd93d5f28d9ec85e40f4cb697bae'.decode('hex')
@@ -237,12 +237,28 @@ class AccountsService(BaseService):
 
     @property
     def coinbase(self):
-        cb = self.app.config.get('pow', {}).get('coinbase')
-        if cb:
+        """Return the address that should be used as coinbase for new blocks.
+
+        The coinbase address is given by the config field pow.coinbase_hex. If this does not exist,
+        a default value is used.
+
+        :raises: :exc:`ValueError` if the coinbase is invalid (no string, wrong length)
+        """
+        cb = self.app.config.get('pow', {}).get('coinbase_hex')
+        if cb is not None:
+            if not is_string(cb):
+                raise ValueError('coinbase must be string')
+            try:
+                cb = decode_hex(remove_0x_head(cb))
+                if len(cb) != 20:
+                    raise ValueError
+            except (ValueError, TypeError):
+                raise ValueError('invalid coinbase')
+            if len(cb) != 20:
+                raise ValueError('wrong coinbase length')
             return cb
-        elif self.accounts:
-            return self.accounts[0].address
-        return DEFAULT_COINBASE
+        else:
+            return DEFAULT_COINBASE
 
     def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.

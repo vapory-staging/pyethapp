@@ -109,7 +109,7 @@ def powworker_process(cpipe, cpu_pct):
 class PoWService(BaseService):
 
     name = 'pow'
-    default_config = dict(pow=dict(activated=False, cpu_pct=100))
+    default_config = dict(pow=dict(activated=False, cpu_pct=100, coinbase_hex=None))
 
     def __init__(self, app):
         super(PoWService, self).__init__(app)
