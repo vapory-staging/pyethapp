@@ -54,8 +54,8 @@ def account(privkey, password, uuid):
 def test_empty(app):
     s = app.services.accounts
     assert len(s) == 0
-    assert len(s.accounts_with_address()) == 0
-    assert len(s.unlocked_accounts()) == 0
+    assert len(s.accounts_with_address) == 0
+    assert len(s.unlocked_accounts) == 0
     assert s.accounts == []
 
 
@@ -66,8 +66,8 @@ def test_add_account(app, account):
     assert len(s) == 1
     assert s.accounts == [account]
     assert s[account.address] == account
-    assert s.unlocked_accounts() == [account]
-    assert s.accounts_with_address() == [account]
+    assert s.unlocked_accounts == [account]
+    assert s.accounts_with_address == [account]
     assert s.get_by_id(account.uuid) == account
 
 
@@ -78,11 +78,11 @@ def test_add_locked_account(app, account, password):
     s.add_account(account, store=False)
     assert s.accounts == [account]
     assert s[account.address] == account
-    assert len(s.unlocked_accounts()) == 0
-    assert s.accounts_with_address() == [account]
+    assert len(s.unlocked_accounts) == 0
+    assert s.accounts_with_address == [account]
     assert s.get_by_id(account.uuid) == account
     account.unlock(password)
-    assert s.unlocked_accounts() == [account]
+    assert s.unlocked_accounts == [account]
 
 
 def test_add_account_without_address(app, account, password):
@@ -92,8 +92,8 @@ def test_add_account_without_address(app, account, password):
     account._address = None
     s.add_account(account, store=False)
     assert s.accounts == [account]
-    assert len(s.unlocked_accounts()) == 0
-    assert len(s.accounts_with_address()) == 0
+    assert len(s.unlocked_accounts) == 0
+    assert len(s.accounts_with_address) == 0
     with pytest.raises(KeyError):
         s[address]
     assert s.get_by_id(account.uuid) == account
@@ -113,19 +113,19 @@ def test_add_account_twice(app, account):
     assert len(s) == 2
     assert s.accounts == [account, account]
     assert s[account.address] == account
-    assert s.unlocked_accounts() == [account, account]
-    assert s.accounts_with_address() == [account, account]
+    assert s.unlocked_accounts == [account, account]
+    assert s.accounts_with_address == [account, account]
     account.uuid = uuid
 
 
 def test_lock_after_adding(app, account, password):
     s = app.services.accounts
     s.add_account(account, store=False)
-    assert s.unlocked_accounts() == [account]
+    assert s.unlocked_accounts == [account]
     account.lock()
-    assert len(s.unlocked_accounts()) == 0
+    assert len(s.unlocked_accounts) == 0
     account.unlock(password)
-    assert s.unlocked_accounts() == [account]
+    assert s.unlocked_accounts == [account]
 
 
 def test_find(app, account):
@@ -325,11 +325,35 @@ def test_update(app, account, password):
 
 def test_coinbase(app, account):
     s = app.services.accounts
+    # coinbase not configured at all
     assert s.coinbase == DEFAULT_COINBASE
+
+    # coinbase from first account
+    s.add_account(account, store=False)
+    app.config['accounts']['must_include_coinbase'] = True
+    assert s.coinbase == account.address
+    app.config['accounts']['must_include_coinbase'] = False
+    assert s.coinbase == account.address
+
+    # coinbase configured
+    app.config['pow'] = {'coinbase_hex': account.address.encode('hex')}
+    app.config['accounts']['must_include_coinbase'] = True
+    assert s.coinbase == account.address
+    app.config['accounts']['must_include_coinbase'] = False
+    assert s.coinbase == account.address
+
     for invalid_coinbase in [123, '\x00' * 20, '\x00' * 40, '', 'aabbcc', 'aa' * 19, 'ff' * 21]:
         app.config['pow'] = {'coinbase_hex': invalid_coinbase}
+        app.config['accounts']['must_include_coinbase'] = False
+        with pytest.raises(ValueError):
+            s.coinbase
+        app.config['accounts']['must_include_coinbase'] = True
         with pytest.raises(ValueError):
             s.coinbase
     for valid_coinbase in ['00' * 20, 'ff' * 20, '0x' + 'aa' * 20]:
         app.config['pow'] = {'coinbase_hex': valid_coinbase}
+        app.config['accounts']['must_include_coinbase'] = False
         assert s.coinbase == decode_hex(remove_0x_head(valid_coinbase))
+        app.config['accounts']['must_include_coinbase'] = True
+        with pytest.raises(ValueError):
+            s.coinbase

@@ -188,7 +188,7 @@ def test_app(request, tmpdir):
 def test_send_transaction(test_app):
     chain = test_app.services.chain.chain
     assert chain.head_candidate.get_balance('\xff' * 20) == 0
-    sender = test_app.services.accounts.unlocked_accounts()[0].address
+    sender = test_app.services.accounts.unlocked_accounts[0].address
     assert chain.head_candidate.get_balance(sender) > 0
     tx = {
         'from': address_encoder(sender),
@@ -203,7 +203,7 @@ def test_send_transaction(test_app):
     assert chain.head.get_balance('\xff' * 20) == 1
 
     # send transactions from account which can't pay gas
-    tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts()[1].address)
+    tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts[1].address)
     tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
     assert chain.head_candidate.get_transactions() == []
 
@@ -212,7 +212,7 @@ def test_pending_transaction_filter(test_app):
     filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
     tx = {
-        'from': address_encoder(test_app.services.accounts.unlocked_accounts()[0].address),
+        'from': address_encoder(test_app.services.accounts.unlocked_accounts[0].address),
         'to': address_encoder('\xff' * 20)
     }
 
@@ -255,7 +255,7 @@ def test_new_block_filter(test_app):
 def test_get_logs(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
-    sender = address_encoder(test_app.services.accounts.unlocked_accounts()[0].address)
+    sender = address_encoder(test_app.services.accounts.unlocked_accounts[0].address)
     contract_creation = {
         'from': sender,
         'data': data_encoder(LOG_EVM)
@@ -347,7 +347,7 @@ def test_get_logs(test_app):
 def test_get_filter_changes(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
-    sender = address_encoder(test_app.services.accounts.unlocked_accounts()[0].address)
+    sender = address_encoder(test_app.services.accounts.unlocked_accounts[0].address)
     contract_creation = {
         'from': sender,
         'data': data_encoder(LOG_EVM)

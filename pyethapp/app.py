@@ -170,18 +170,15 @@ def run(ctx, dev, nodial, fake):
     # dump config
     dump_config(config)
 
-    # init accounts first and check if there's an account for the coinbase
+    # init and unlock accounts first to check coinbase
     if AccountsService in services:
         AccountsService.register_with_app(app)
         unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
         try:
             coinbase = app.services.accounts.coinbase
-        except ValueError:
-            log.fatal('invalid coinbase', coinbase=config.get('pow', {}).get('coinbase_hex'))
-            sys.exit()
-        if (not any(acct.address == coinbase for acct in app.services.accounts) and
-                coinbase != DEFAULT_COINBASE):
-            log.fatal('no account for configured coinbase', coinbase=coinbase.encode('hex'))
+        except ValueError as e:
+            log.fatal('invalid coinbase', coinbase=config.get('pow', {}).get('coinbase_hex'),
+                      error=e.message)
             sys.exit()
 
     # register services

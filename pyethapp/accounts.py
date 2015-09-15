@@ -206,7 +206,7 @@ class AccountsService(BaseService):
     """
 
     name = 'accounts'
-    default_config = dict(accounts=dict(keystore_dir='keystore'))
+    default_config = dict(accounts=dict(keystore_dir='keystore', must_include_coinbase=True))
 
     def __init__(self, app):
         super(AccountsService, self).__init__(app)
@@ -239,26 +239,32 @@ class AccountsService(BaseService):
     def coinbase(self):
         """Return the address that should be used as coinbase for new blocks.
 
-        The coinbase address is given by the config field pow.coinbase_hex. If this does not exist,
-        a default value is used.
+        The coinbase address is given by the config field pow.coinbase_hex. If this does not exist
+        or is `None`, the address of the first account is used instead. If there are no accounts,
+        the coinbase is `DEFAULT_COINBASE`.
 
-        :raises: :exc:`ValueError` if the coinbase is invalid (no string, wrong length)
+        :raises: :exc:`ValueError` if the coinbase is invalid (no string, wrong length) or there is
+                 no account for it and the config flag `accounts.check_coinbase` is set (does not
+                 apply to the default coinbase)
         """
-        cb = self.app.config.get('pow', {}).get('coinbase_hex')
-        if cb is not None:
-            if not is_string(cb):
+        cb_hex = self.app.config.get('pow', {}).get('coinbase_hex')
+        if cb_hex is None:
+            if not self.accounts_with_address:
+                return DEFAULT_COINBASE
+            cb = self.accounts_with_address[0].address
+        else:
+            if not is_string(cb_hex):
                 raise ValueError('coinbase must be string')
             try:
-                cb = decode_hex(remove_0x_head(cb))
-                if len(cb) != 20:
-                    raise ValueError
+                cb = decode_hex(remove_0x_head(cb_hex))
             except (ValueError, TypeError):
                 raise ValueError('invalid coinbase')
-            if len(cb) != 20:
-                raise ValueError('wrong coinbase length')
-            return cb
-        else:
-            return DEFAULT_COINBASE
+        if len(cb) != 20:
+            raise ValueError('wrong coinbase length')
+        if self.config['accounts']['must_include_coinbase']:
+            if cb not in (acct.address for acct in self.accounts):
+                raise ValueError('no account for coinbase')
+        return cb
 
     def add_account(self, account, store=True, include_address=True, include_id=True):
         """Add an account.
@@ -383,10 +389,12 @@ class AccountsService(BaseService):
         self.accounts.sort(key=lambda account: account.path)
         log.debug('account update successful')
 
+    @property
     def accounts_with_address(self):
         """Return a list of accounts whose address is known."""
         return [account for account in self if account.address]
 
+    @property
     def unlocked_accounts(self):
         """Return a list of all unlocked accounts."""
         return [account for account in self if not account.locked]
