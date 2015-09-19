@@ -2,6 +2,10 @@
 pyethapp
 ===============================
 
+.. image:: https://badges.gitter.im/Join%20Chat.svg
+   :alt: Join the chat at https://gitter.im/ethereum/pyethapp
+   :target: https://gitter.im/ethereum/pyethapp?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge
+
 .. image:: https://img.shields.io/travis/ethereum/pyethapp.svg
         :target: https://travis-ci.org/ethereum/pyethapp
 
