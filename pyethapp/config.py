@@ -19,11 +19,15 @@ todo:
 import os
 import click
 from devp2p.utils import update_config_with_defaults
+import errno
 import yaml
 import ethereum.slogging as slogging
 from devp2p.service import BaseService
 from devp2p.app import BaseApp
 from accounts import mk_random_privkey
+
+
+CONFIG_FILE_NAME = 'config.yaml'
 
 log = slogging.get_logger('config')
 
@@ -31,14 +35,20 @@ default_data_dir = click.get_app_dir('pyethapp')
 
 
 def get_config_path(data_dir=default_data_dir):
-    return os.path.join(data_dir, 'config.yaml')
+    return os.path.join(data_dir, CONFIG_FILE_NAME)
 
 default_config_path = get_config_path(default_data_dir)
 
 
 def setup_data_dir(data_dir=None):
-    if data_dir and not os.path.exists(data_dir):
-        os.makedirs(data_dir)
+    config_file_path = get_config_path(data_dir)
+    if data_dir and not os.path.exists(config_file_path):
+        try:
+            os.makedirs(data_dir)
+        except OSError as ex:
+            # Ignore "File exists" errors
+            if ex.errno != errno.EEXIST:
+                raise
         setup_required_config(data_dir)
 
 
@@ -61,7 +71,8 @@ def setup_required_config(data_dir=default_data_dir):
     log.info('setup default config', path=data_dir)
     config_path = get_config_path(data_dir)
     assert not os.path.exists(config_path)
-    setup_data_dir(data_dir)
+    if not os.path.exists(data_dir):
+        setup_data_dir(data_dir)
     config = dict(node=dict(privkey_hex=mk_random_privkey().encode('hex')),
                   accounts=dict(privkeys_hex=[mk_random_privkey().encode('hex')]))
     write_config(config, config_path)

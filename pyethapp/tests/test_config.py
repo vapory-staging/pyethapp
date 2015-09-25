@@ -1,6 +1,7 @@
 from devp2p.peermanager import PeerManager
 from devp2p.discovery import NodeDiscovery
 from devp2p.app import BaseApp
+from py._path.local import LocalPath
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import JSONRPCServer
 from pyethapp.db_service import DBService
@@ -58,10 +59,29 @@ def test_set_config_param():
     assert conf['p2p']['min_peers']
     conf = config.set_config_param(conf, 'p2p.min_peers=3')  # strict
     assert conf['p2p']['min_peers'] == 3
-    try:
+    with pytest.raises(KeyError):
         conf = config.set_config_param(conf, 'non.existent=1')
-    except KeyError:
-        errored = True
-    assert errored
     conf = config.set_config_param(conf, 'non.existent=1', strict=False)
     assert conf['non']['existent'] == 1
+
+
+def test_setup_data_dir(tmpdir):
+    data_dir = tmpdir.join('data')
+    config.setup_data_dir(str(data_dir))
+
+    assert data_dir.join(config.CONFIG_FILE_NAME).exists()
+
+
+def test_setup_data_dir_existing_empty(tmpdir):
+    data_dir = tmpdir.join('data').ensure_dir()
+    config.setup_data_dir(str(data_dir))
+
+    assert data_dir.join(config.CONFIG_FILE_NAME).exists()
+
+
+def test_setup_data_dir_existing_config(tmpdir):
+    data_dir = tmpdir.join('data')
+    data_dir.ensure('config.yaml')
+    config.setup_data_dir(str(data_dir))
+
+    assert data_dir.join(config.CONFIG_FILE_NAME).exists()
