@@ -104,7 +104,7 @@ class LoggingDispatcher(RPCDispatcher):
             request_list = [request]
         for req in request_list:
             self.logger('------------------------------')
-            self.logger('RPC call', method=req.method, args=req.args, kwargs=req.kwargs,
+            self.logger('RPC call', method=req.method, args_=req.args, kwargs=req.kwargs,
                         id=req.unique_id)
         response = super(LoggingDispatcher, self).dispatch(request)
         if isinstance(response, Iterable):
