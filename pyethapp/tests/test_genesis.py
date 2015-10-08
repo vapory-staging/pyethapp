@@ -1,3 +1,4 @@
+from pprint import pprint
 import pytest
 from ethereum import blocks
 from ethereum.db import DB
@@ -8,8 +9,11 @@ import pyethapp.config as konfig
 from pyethapp.profiles import PROFILES
 
 
-def check_genesis(profile):
+@pytest.mark.parametrize('profile', PROFILES.keys())
+def test_profile(profile):
     config = dict(eth=dict())
+
+    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
 
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
@@ -17,27 +21,9 @@ def check_genesis(profile):
     # Load genesis config
     update_config_from_genesis_json(config, config['eth']['genesis'])
 
-    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
-
-    print config['eth'].keys()
     bc = config['eth']['block']
-    print bc.keys()
+    pprint(bc)
     env = Env(DB(), bc)
 
     genesis = blocks.genesis(env)
-    print 'genesis.hash', genesis.hash.encode('hex')
-    print 'expected', config['eth']['genesis_hash']
-    assert genesis.hash == config['eth']['genesis_hash'].decode('hex')
-
-
-@pytest.mark.xfail  # FIXME
-def test_olympic():
-    check_genesis('olympic')
-
-
-def test_frontier():
-    check_genesis('frontier')
-
-
-if __name__ == '__main__':
-    test_genesis()
+    assert genesis.hash.encode('hex') == config['eth']['genesis_hash']
