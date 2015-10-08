@@ -145,7 +145,8 @@ class ChainService(WiredService):
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
-            assert sce['genesis_hash'] == self.chain.genesis.hex_hash()
+            assert sce['genesis_hash'] == self.chain.genesis.hex_hash(), \
+                "Genesis hash mismatch.\n  Expected: %s\n  Got: %s" % (sce['genesis_hash'], self.chain.genesis.hex_hash())
 
         self.synchronizer = Synchronizer(self, force_sync=None)
 
