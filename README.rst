@@ -51,19 +51,31 @@ Installation and invocation
 
 There is also Dockerfile in the repo.
 
-Invocation on the Frontier Main Net
------------------------------------
-In order to sync with the current live ethereum network, you need to provide some extra arguments. Note, that these will not be necessary in future releases.
 
-```pyethapp -c eth.network_id=1 -c eth.genesis=/full/path/to/genesis_w_extradata.json run```
+Available Networks
+------------------
 
-Warning: If you invoked pyethapp without above `eth.genesis` arg, then there is already a wrong genesis block in the chain. You'll need to delete your data directory (which is reported on startup). You can set a custom data directory with the `-d <path>` option.
+* Frontier
+* Morden
 
-`genesis_w_extradata.json` can be found in main dir of this repository.
+Currently there are two official networks available. The "Main Network" is
+called *Frontier* and this is what the client will connect to if you start it
+without any additional options.
+
+Additionally there is the official test network Morden_ which can be used to
+test new code or otherwise experiment without having to risk real money.
+Use the `--profile` command line option to select the test network:
+
+.. code:: shell
+
+   $ pyethapp --profile morden run
 
 
+.. note:: If you've previously connected to the main network you will also need
+   to specify a new data directory by using the `--data-dir` option.
 
 
+.. _Morden: https://github.com/ethereum/wiki/wiki/Morden
 
 Interacting
 -----------
