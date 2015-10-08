@@ -43,11 +43,33 @@ pyethapp leverages two ethereum core components to implement the client:
 Installation and invocation
 ---------------------------
 
-* git clone https://github.com/ethereum/pyethapp
-* cd pyethapp
-* python setup.py install
-* pyethapp      (shows help)
-* pyethapp run  (starts the client)
+Install from source:
+
+.. code:: shell
+
+    $ git clone https://github.com/ethereum/pyethapp
+    $ cd pyethapp
+    $ python setup.py install
+
+Install the latest realease from PyPI:
+
+.. code:: shell
+
+    $ pip install pyethapp
+
+Show available commands and options:
+
+.. code:: shell
+
+    $ pyethapp
+
+
+Connect to the default network (see below for more information on networks):
+
+.. code:: shell
+
+    $ pyethapp run
+
 
 There is also Dockerfile in the repo.
 
