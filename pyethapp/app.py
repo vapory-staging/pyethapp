@@ -1,4 +1,5 @@
 from ethereum import blocks
+from logging import StreamHandler
 from IPython.core import ultratb
 import monkeypatches
 import json
@@ -62,6 +63,8 @@ class EthApp(BaseApp):
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
               help='log as structured json output')
+@click.option('--log-file', type=click.Path(dir_okay=False, writable=True, resolve_path=True),
+              help="Log to file instead of stderr.")
 @click.option('-b', '--bootstrap_node', multiple=False, type=str,
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
@@ -71,10 +74,10 @@ class EthApp(BaseApp):
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, unlock, password):
+        mining_pct, unlock, password, log_file):
 
     # configure logging
-    slogging.configure(log_config, log_json=log_json)
+    slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
     # data dir default or from cli option
     data_dir = data_dir or konfig.default_data_dir
@@ -97,9 +100,7 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
 
     # Set config values based on profile selection
-    log.DEV("loading profile", profile=profile)
     merge_dict(config, PROFILES[profile])
-    log.DEV("done")
 
     # override values with values from cmd line
     for config_value in config_values:
@@ -114,9 +115,7 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
                                '(example: "-c jsonrpc.port=5000")')
 
     # Load genesis config
-    log.DEV("update genesis config")
     update_config_from_genesis_json(config, config['eth']['genesis'])
-    log.DEV("done")
 
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
@@ -128,7 +127,8 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 
     ctx.obj = {'config': config,
                'unlock': unlock,
-               'password': password.read().rstrip() if password else None}
+               'password': password.read().rstrip() if password else None,
+               'log_file': log_file}
     assert (password and ctx.obj['password'] is not None and len(
         ctx.obj['password'])) or not password, "empty password file"
 
@@ -196,6 +196,15 @@ def run(ctx, dev, nodial, fake, console):
     # start app
     log.info('starting')
     app.start()
+
+    if ctx.obj['log_file']:
+        log.info("Logging to file %s", ctx.obj['log_file'])
+        # User requested file logging - remove stderr handler
+        root_logger = slogging.getLogger()
+        for hndlr in root_logger.handlers:
+            if isinstance(hndlr, StreamHandler) and hndlr.stream == sys.stderr:
+                root_logger.removeHandler(hndlr)
+                break
 
     if config['post_app_start_callback'] is not None:
         config['post_app_start_callback'](app)

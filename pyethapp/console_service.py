@@ -255,7 +255,7 @@ class Console(BaseService):
     def _run(self):
         self.interrupt.wait()
         print('\n' * 2)
-        print( "Entering Console" + bc.OKGREEN)
+        print("Entering Console" + bc.OKGREEN)
         print("Tip:" + bc.OKBLUE)
         print("\tuse `{}lastlog(n){}` to see n lines of log-output. [default 10] ".format(
             bc.HEADER, bc.OKBLUE))
@@ -264,9 +264,11 @@ class Console(BaseService):
             bc.HEADER, bc.OKBLUE))
         print("\n" + bc.ENDC)
 
+        # Remove handlers that log to stderr
         root = getLogger()
-        for handler in root.handlers:
-            root.removeHandler(handler)
+        for handler in root.handlers[:]:
+            if isinstance(handler, StreamHandler) and handler.stream == sys.stderr:
+                root.removeHandler(handler)
 
         stream = cStringIO.StringIO()
         handler = StreamHandler(stream=stream)
