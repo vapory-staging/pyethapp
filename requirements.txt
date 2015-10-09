@@ -1,3 +1,5 @@
+gevent>=1.1b3
+gipc==0.6.0
 CodernityDB
 leveldb
 click
@@ -6,13 +8,11 @@ wheel
 pyyaml
 werkzeug
 ipython
-gipc==0.4.0
 statistics
 requests
 https://github.com/ethereum/pyrlp/tarball/develop#egg=rlp
 https://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p
 https://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum
 pbkdf2
-gevent==1.1b3
 scrypt
 pexpect
