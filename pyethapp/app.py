@@ -43,6 +43,7 @@ class EthApp(BaseApp):
     client_version = '%s/%s/%s' % (__version__, sys.platform,
                                    'py%d.%d.%d' % sys.version_info[:3])
     client_version_string = '%s/v%s' % (client_name, client_version)
+    start_console = False
     default_config = dict(BaseApp.default_config)
     default_config['client_version_string'] = client_version_string
     default_config['post_app_start_callback'] = None
@@ -133,11 +134,12 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 
 
 @app.command()
-@click.option('--dev/--nodev', default=False, help='Drop into interactive debugger on unhandled exceptions')
-@click.option('--nodial/--dial',  default=False, help='do not dial nodes')
-@click.option('--fake/--nofake',  default=False, help='fake genesis difficulty')
+@click.option('--dev/--nodev', default=False, help='Drop into interactive debugger on unhandled exceptions.')
+@click.option('--nodial/--dial',  default=False, help='Do not dial nodes.')
+@click.option('--fake/--nofake',  default=False, help='Fake genesis difficulty.')
+@click.option('--console',  is_flag=True, help='Immediately drop into interactive console.')
 @click.pass_context
-def run(ctx, dev, nodial, fake):
+def run(ctx, dev, nodial, fake, console):
     """Start the client ( --dev to stop on error)"""
     config = ctx.obj['config']
     if nodial:
@@ -181,6 +183,8 @@ def run(ctx, dev, nodial, fake):
                       error=e.message)
             sys.exit()
 
+    app.start_console = console
+
     # register services
     for service in services:
         assert issubclass(service, BaseService)
@@ -200,7 +204,6 @@ def run(ctx, dev, nodial, fake):
     evt = Event()
     gevent.signal(signal.SIGQUIT, evt.set)
     gevent.signal(signal.SIGTERM, evt.set)
-    gevent.signal(signal.SIGINT, evt.set)
     evt.wait()
 
     # finally stop

@@ -1,20 +1,32 @@
 """
 Essential parts borrowed from https://github.com/ipython/ipython/pull/1654
 """
+from logging import StreamHandler, Formatter
+import os
 import signal
+import errno
+from ethereum import processblock
+import select
+import time
+import sys
+import cStringIO
+
 from devp2p.service import BaseService
 import gevent
 from gevent.event import Event
 import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
-from ethereum import slogging
+from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms
-from ethereum import processblock
+from ethereum.utils import denoms, bcolors as bc
+
 from rpc_client import ABIContract, address20
 
-import sys
+
+log = getLogger(__name__)
+
+ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
 
 
@@ -59,6 +71,73 @@ class GeventInputHook(object):
 IPython.core.shellapp.InteractiveShellApp.gui.values += ('gevent',)
 
 
+class SigINTHandler(object):
+    def __init__(self, event):
+        self.event = event
+        self.installed = None
+        self.installed_force = None
+        self.install_handler()
+
+    def install_handler(self):
+        if self.installed_force:
+            self.installed_force.cancel()
+            self.installed_force = None
+        self.installed = gevent.signal(signal.SIGINT, self.handle_int)
+
+    def install_handler_force(self):
+        if self.installed:
+            self.installed.cancel()
+            self.installed = None
+        self.installed_force = gevent.signal(signal.SIGINT, self.handle_force)
+
+    def handle_int(self):
+        self.install_handler_force()
+
+        gevent.spawn(self._confirm_enter_console)
+
+    def handle_force(self):
+        """
+        User pressed ^C a second time. Send SIGTERM to ourself.
+        """
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    def _confirm_enter_console(self):
+        start = time.time()
+        sys.stdout.write("\n")
+        enter_console = False
+        while time.time() - start < ENTER_CONSOLE_TIMEOUT:
+            sys.stdout.write(
+                "\r{}{}Hit [ENTER], to launch console; [Ctrl+C] again to quit! [{:1.0f}s]{}".format(
+                    bc.OKGREEN, bc.BOLD, ENTER_CONSOLE_TIMEOUT - (time.time() - start),
+                    bc.ENDC))
+            sys.stdout.flush()
+            try:
+                r, _, _ = select.select([sys.stdin], [], [], .5)
+            except select.error as ex:
+                sys.stdout.write("\n")
+                # "Interrupted sytem call" means the user pressed ^C again
+                if ex.args[0] == errno.EINTR:
+                    self.handle_force()
+                    return
+                else:
+                    raise
+            if r:
+                sys.stdin.readline()
+                enter_console = True
+                break
+        if enter_console:
+            sys.stdout.write("\n")
+            self.installed_force.cancel()
+            self.event.set()
+        else:
+            sys.stdout.write(
+                "\n{}{}No answer after {}s. Resuming.{}\n".format(
+                    bc.WARNING, bc.BOLD, ENTER_CONSOLE_TIMEOUT, bc.ENDC))
+            sys.stdout.flush()
+            # Restore regular handler
+            self.install_handler()
+
+
 class Console(BaseService):
 
     """A service starting an interactive ipython session when receiving the
@@ -70,8 +149,12 @@ class Console(BaseService):
     def __init__(self, app):
         super(Console, self).__init__(app)
         self.interrupt = Event()
-        gevent.signal(signal.SIGTSTP, self.interrupt.set)
         self.console_locals = {}
+        if app.start_console:
+            self.start()
+            self.interrupt.set()
+        else:
+            SigINTHandler(self.interrupt)
 
     def _stop_app(self):
         try:
@@ -99,7 +182,7 @@ class Console(BaseService):
                 this.app = app
 
             def transact(this, to, value=0, data='', sender=None,
-                         startgas=25000, gasprice=10*denoms.szabo):
+                         startgas=25000, gasprice=10 * denoms.szabo):
                 sender = address20(sender or this.coinbase)
                 to = address20(to)
                 nonce = this.pending.get_nonce(sender)
@@ -110,7 +193,7 @@ class Console(BaseService):
                 return tx
 
             def call(this, to, value=0, data='',  sender=None,
-                     startgas=25000, gasprice=10*denoms.szabo):
+                     startgas=25000, gasprice=10 * denoms.szabo):
                 sender = address20(sender or this.coinbase)
                 to = address20(to)
                 block = this.head_candidate
@@ -130,7 +213,7 @@ class Console(BaseService):
                 tx.sender = sender
                 try:
                     success, output = processblock.apply_transaction(test_block, tx)
-                except processblock.InvalidTransaction as e:
+                except processblock.InvalidTransaction:
                     success = False
                 assert block.state_root == state_root_before
                 if success:
@@ -171,10 +254,53 @@ class Console(BaseService):
 
     def _run(self):
         self.interrupt.wait()
-        print('\n' * 3)
-        print("Entering Console")
-        print("Tip: use loglevel `-l:error` to avoid logs")
-        print(">> help(eth)")
+        print('\n' * 2)
+        print( "Entering Console" + bc.OKGREEN)
+        print("Tip:" + bc.OKBLUE)
+        print("\tuse `{}lastlog(n){}` to see n lines of log-output. [default 10] ".format(
+            bc.HEADER, bc.OKBLUE))
+        print("\tuse `{}lasterr(n){}` to see n lines of stderr.".format(bc.HEADER, bc.OKBLUE))
+        print("\tuse `{}help(eth){}` for help on accessing the live chain.".format(
+            bc.HEADER, bc.OKBLUE))
+        print("\n" + bc.ENDC)
+
+        root = getLogger()
+        for handler in root.handlers:
+            root.removeHandler(handler)
+
+        stream = cStringIO.StringIO()
+        handler = StreamHandler(stream=stream)
+        handler.formatter = Formatter("%(levelname)s:%(name)s %(message)s")
+        root.addHandler(handler)
+
+        def lastlog(n=10, prefix=None, level=None):
+            """Print the last `n` log lines to stdout.
+            Use `prefix='p2p'` to filter for a specific logger.
+            Use `level=INFO` to filter for a specific level.
+
+            Level- and prefix-filtering are applied before tailing the log.
+            """
+            lines = (stream.getvalue().strip().split('\n') or [])
+            if prefix:
+                lines = filter(lambda line: line.split(':')[1].startswith(prefix), lines)
+            if level:
+                lines = filter(lambda line: line.split(':')[0] == level, lines)
+            for line in lines[-n:]:
+                print(line)
+
+        self.console_locals['lastlog'] = lastlog
+
+        err = cStringIO.StringIO()
+        sys.stderr = err
+
+        def lasterr(n=1):
+            """Print the last `n` entries of stderr to stdout.
+            """
+            for line in (err.getvalue().strip().split('\n') or [])[-n:]:
+                print(line)
+
+        self.console_locals['lasterr'] = lasterr
+
         IPython.start_ipython(argv=['--gui', 'gevent'], user_ns=self.console_locals)
         self.interrupt.clear()
 
