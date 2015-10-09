@@ -56,15 +56,15 @@ class EthApp(BaseApp):
 @click.option('alt_config', '--Config', '-C', type=click.File(), help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
-@click.option('data_dir', '--data-dir', '-d', multiple=False, type=str,
+@click.option('-d', '--data-dir', multiple=False, type=str,
               help='data directory')
-@click.option('log_config', '--log_config', '-l', multiple=False, type=str, default=":info",
+@click.option('-l', '--log_config', multiple=False, type=str, default=":info",
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
               help='log as structured json output')
-@click.option('bootstrap_node', '--bootstrap_node', '-b', multiple=False, type=str,
+@click.option('-b', '--bootstrap_node', multiple=False, type=str,
               help='single bootstrap_node as enode://pubkey@host:port')
-@click.option('mining_pct', '--mining_pct', '-m', multiple=False, type=int, default=0,
+@click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
