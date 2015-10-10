@@ -52,7 +52,7 @@ setup(
         'pyethapp',
     ],
     package_data={
-        'pyethapp': ['data/*.json']
+        'pyethapp': ['genesisdata/*.json']
     },
     license="BSD",
     zip_safe=False,
