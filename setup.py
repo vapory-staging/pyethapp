@@ -35,10 +35,9 @@ install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master#egg=pyethash': 'pyethash'}
 
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
-
 test_requirements = ['ethereum-serpent>=1.8.1']
 
-version = '1.0.6'  # preserve format, this is read from __init__.py
+version = '1.0.7'  # preserve format, this is read from __init__.py
 
 setup(
     name='pyethapp',
