@@ -29,7 +29,7 @@ from pow_service import PoWService
 from accounts import AccountsService, Account, DEFAULT_COINBASE
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
-from pyethapp.utils import update_config_from_genesis_json, merge_dict
+from pyethapp.utils import update_config_from_genesis_json, merge_dict, load_contrib_services
 import utils
 
 log = slogging.get_logger('app')
@@ -185,6 +185,7 @@ def run(ctx, dev, nodial, fake, console):
 
     app.start_console = console
 
+    services.extend(load_contrib_services(config))
     # register services
     for service in services:
         assert issubclass(service, BaseService)
