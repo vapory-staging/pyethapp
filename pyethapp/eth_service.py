@@ -146,7 +146,8 @@ class ChainService(WiredService):
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
             assert sce['genesis_hash'] == self.chain.genesis.hex_hash(), \
-                "Genesis hash mismatch.\n  Expected: %s\n  Got: %s" % (sce['genesis_hash'], self.chain.genesis.hex_hash())
+                "Genesis hash mismatch.\n  Expected: %s\n  Got: %s" % (
+                    sce['genesis_hash'], self.chain.genesis.hex_hash())
 
         self.synchronizer = Synchronizer(self, force_sync=None)
 
@@ -171,6 +172,10 @@ class ChainService(WiredService):
 
     def _on_new_head(self, block):
         # DEBUG('new head cbs', len(self.on_new_head_cbs))
+
+        # relase the lock, so that the cb, can create transactions
+        # this is safe, as all transactions are added already
+        self.add_transaction_lock.release()
         for cb in self.on_new_head_cbs:
             cb(block)
         self._on_new_head_candidate()  # we implicitly have a new head_candidate
@@ -210,6 +215,7 @@ class ChainService(WiredService):
         self.add_transaction_lock.release()
         if success:
             self._on_new_head_candidate()
+        return success
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
