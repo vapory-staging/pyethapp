@@ -20,13 +20,10 @@ log = slogging.get_logger('db')
 def load_contrib_services(config):  # FIXME
     # load contrib services
     config_directory = config['data_dir']
-    print 'dir', config_directory
     contrib_directory = os.path.join(config_directory, 'contrib')  # change to pyethapp/contrib
     contrib_modules = []
-    print 'dir', contrib_directory
     if not os.path.exists(contrib_directory):
         log.info('No contrib directory found, so not loading any user services')
-        sys.exit()
         return []
     x = os.getcwd()
     os.chdir(config_directory)
@@ -39,23 +36,19 @@ def load_contrib_services(config):  # FIXME
             except:
                 library_conflict = False
             if library_conflict:
-                raise Exception("Library conflict: please rename "+filename+" in contribs")
+                raise Exception("Library conflict: please rename " + filename + " in contribs")
             sys.path.append(contrib_directory)
             contrib_modules.append(__import__(filename[:-3]))
             sys.path.pop()
-    print 'modules', contrib_modules
     contrib_services = []
     for module in contrib_modules:
-        print 'm', module, dir(module)
         for variable in dir(module):
             cls = getattr(module, variable)
             if isinstance(cls, (type, types.ClassType)):
-                print 'class', issubclass(cls, BaseService)
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
             if variable == 'on_block':
                 contrib_services.append(OnBlockClassFactory(getattr(module, variable)))
-                
     log.info('Loaded contrib services', services=contrib_services)
     print contrib_services
     return contrib_services
@@ -63,13 +56,13 @@ def load_contrib_services(config):  # FIXME
 
 def OnBlockClassFactory(_cb):
     class MyService(devp2p.service.BaseService):
-    
+
         name = 'a name'
-    
+
         def start(self):
             super(MyService, self).start()
             self.app.services.chain.on_new_head_cbs.append(self.cb)
-    
+
         def cb(self, blk):
             _cb(blk)
 
