@@ -47,6 +47,7 @@ def load_contrib_services(config):  # FIXME
     contrib_services = []
     for module in contrib_modules:
         print 'm', module, dir(module)
+        on_start, on_block = None, None
         for variable in dir(module):
             cls = getattr(module, variable)
             if isinstance(cls, (type, types.ClassType)):
@@ -54,24 +55,36 @@ def load_contrib_services(config):  # FIXME
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
             if variable == 'on_block':
-                contrib_services.append(OnBlockClassFactory(getattr(module, variable)))
-                
+                on_block = getattr(module, variable)
+            if variable  == 'on_start':
+                on_start = getattr(module, variable)
+        if on_start or on_block:
+            contrib_services.append(OnBlockClassFactory(on_start, on_block))
     log.info('Loaded contrib services', services=contrib_services)
     print contrib_services
     return contrib_services
 
+services_registered = 0
 
-def OnBlockClassFactory(_cb):
-    class MyService(devp2p.service.BaseService):
+
+def OnBlockClassFactory(on_start, on_block):
+    global services_registered
+    x = [services_registered]
+    services_registered += 1
+    class MyService(BaseService):
     
-        name = 'a name'
+        name = 'factory generated service %d' % x[0]
     
         def start(self):
             super(MyService, self).start()
             self.app.services.chain.on_new_head_cbs.append(self.cb)
+            if on_start:
+                on_start(self.app)
     
         def cb(self, blk):
-            _cb(blk)
+            if on_block:
+                on_block(blk)
+    return MyService
 
 
 def load_block_tests(data, db):
