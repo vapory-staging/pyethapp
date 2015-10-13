@@ -20,13 +20,10 @@ log = slogging.get_logger('db')
 def load_contrib_services(config):  # FIXME
     # load contrib services
     config_directory = config['data_dir']
-    print 'dir', config_directory
     contrib_directory = os.path.join(config_directory, 'contrib')  # change to pyethapp/contrib
     contrib_modules = []
-    print 'dir', contrib_directory
     if not os.path.exists(contrib_directory):
         log.info('No contrib directory found, so not loading any user services')
-        sys.exit()
         return []
     x = os.getcwd()
     os.chdir(config_directory)
@@ -39,11 +36,10 @@ def load_contrib_services(config):  # FIXME
             except:
                 library_conflict = False
             if library_conflict:
-                raise Exception("Library conflict: please rename "+filename+" in contribs")
+                raise Exception("Library conflict: please rename " + filename + " in contribs")
             sys.path.append(contrib_directory)
             contrib_modules.append(__import__(filename[:-3]))
             sys.path.pop()
-    print 'modules', contrib_modules
     contrib_services = []
     for module in contrib_modules:
         print 'm', module, dir(module)
@@ -51,7 +47,6 @@ def load_contrib_services(config):  # FIXME
         for variable in dir(module):
             cls = getattr(module, variable)
             if isinstance(cls, (type, types.ClassType)):
-                print 'class', issubclass(cls, BaseService)
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
             if variable == 'on_block':
@@ -65,7 +60,6 @@ def load_contrib_services(config):  # FIXME
     return contrib_services
 
 services_registered = 0
-
 
 def OnBlockClassFactory(on_start, on_block):
     global services_registered

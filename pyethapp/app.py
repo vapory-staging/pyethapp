@@ -185,9 +185,10 @@ def run(ctx, dev, nodial, fake, console):
 
     app.start_console = console
 
-    services.extend(load_contrib_services(config))
     # register services
-    for service in services:
+    contrib_services = load_contrib_services(config)
+
+    for service in services + contrib_services:
         assert issubclass(service, BaseService)
         if service.name not in app.config['deactivated_services'] + [AccountsService.name]:
             assert service.name not in app.services
