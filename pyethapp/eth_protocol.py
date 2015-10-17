@@ -23,7 +23,7 @@ class ETHProtocol(BaseProtocol):
     network_id = 0
     max_cmd_id = 15  # FIXME
     name = 'eth'
-    version = 60
+    version = 61
 
     max_getblocks_count = 64
     max_getblockhashes_count = 2048
@@ -164,6 +164,14 @@ class ETHProtocol(BaseProtocol):
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
 
+    class blockhashesfromnumber(BaseProtocol.command):
+        """
+        Requests block hashes starting from a particular block number
+        """
+        cmd_id = 8
+        structure = [('number', rlp.sedes.big_endian_int),
+                     ('maxBlocks', rlp.sedes.big_endian_int)]
+
     class getblockheaders(BaseProtocol.command):
 
         """
@@ -171,11 +179,11 @@ class ETHProtocol(BaseProtocol):
         each referred to by a hash. Note: Don't expect that the peer necessarily give you all
         these block headers in a single message - you might have to re-request them.
         """
-        cmd_id = 8
+        cmd_id = 9
         structure = rlp.sedes.CountableList(rlp.sedes.binary)
 
     class blockheaders(BaseProtocol.command):
-        cmd_id = 9
+        cmd_id = 10
         structure = rlp.sedes.CountableList(Block)
 
         @classmethod
@@ -193,11 +201,11 @@ class ETHProtocol(BaseProtocol):
             return blockheaders
 
     class hashlookup(BaseProtocol.command):
-        cmd_id = 10
+        cmd_id = 11
         structure = rlp.sedes.CountableList(rlp.sedes.binary)
 
     class hashlookupresponse(BaseProtocol.command):
-        cmd_id = 11
+        cmd_id = 12
         structure = rlp.sedes.CountableList(rlp.sedes.binary)
 
 

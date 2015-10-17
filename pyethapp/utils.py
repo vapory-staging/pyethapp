@@ -37,13 +37,42 @@ def load_contrib_services(config):  # FIXME
             sys.path.pop()
     contrib_services = []
     for module in contrib_modules:
+        print 'm', module, dir(module)
+        on_start, on_block = None, None
         for variable in dir(module):
             cls = getattr(module, variable)
             if isinstance(cls, (type, types.ClassType)):
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
+            if variable == 'on_block':
+                on_block = getattr(module, variable)
+            if variable == 'on_start':
+                on_start = getattr(module, variable)
+        if on_start or on_block:
+            contrib_services.append(on_block_callback_service_factory(on_start, on_block))
     log.info('Loaded contrib services', services=contrib_services)
     return contrib_services
+
+
+def on_block_callback_service_factory(on_start, on_block):
+
+    class _OnBlockCallbackService(BaseService):
+
+        name = 'onblockservice%d' % on_block_callback_service_factory.created
+
+        def start(self):
+            super(_OnBlockCallbackService, self).start()
+            self.app.services.chain.on_new_head_cbs.append(self.cb)
+            if on_start:
+                on_start(self.app)
+
+        def cb(self, blk):
+            if on_block:
+                on_block(blk)
+    on_block_callback_service_factory.created += 1
+    return _OnBlockCallbackService
+
+on_block_callback_service_factory.created = 0
 
 
 def load_block_tests(data, db):

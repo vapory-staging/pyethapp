@@ -19,7 +19,7 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms, bcolors as bc
+from ethereum.utils import denoms, normalize_address, bcolors as bc
 
 from rpc_client import ABIContract, address20
 
@@ -182,9 +182,9 @@ class Console(BaseService):
                 this.app = app
 
             def transact(this, to, value=0, data='', sender=None,
-                         startgas=25000, gasprice=10 * denoms.szabo):
-                sender = address20(sender or this.coinbase)
-                to = address20(to)
+                         startgas=25000, gasprice=60 * denoms.shannon):
+                sender = normalize_address(sender or this.coinbase)
+                to = normalize_address(to, allow_blank=True)
                 nonce = this.pending.get_nonce(sender)
                 tx = Transaction(nonce, gasprice, startgas, to, value, data)
                 this.app.services.accounts.sign_tx(sender, tx)
@@ -194,8 +194,8 @@ class Console(BaseService):
 
             def call(this, to, value=0, data='',  sender=None,
                      startgas=25000, gasprice=10 * denoms.szabo):
-                sender = address20(sender or this.coinbase)
-                to = address20(to)
+                sender = normalize_address(sender or this.coinbase)
+                to = normalize_address(to, allow_blank=True)
                 block = this.head_candidate
                 state_root_before = block.state_root
                 assert block.has_parent()
@@ -250,7 +250,7 @@ class Console(BaseService):
             pass
 
         self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
-                                   denoms=denoms)
+                                   denoms=denoms, true=True, false=False)
 
     def _run(self):
         self.interrupt.wait()
