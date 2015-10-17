@@ -42,24 +42,8 @@ def load_contrib_services(config):  # FIXME
             if isinstance(cls, (type, types.ClassType)):
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
-            if variable == 'on_block':
-                contrib_services.append(OnBlockClassFactory(getattr(module, variable)))
     log.info('Loaded contrib services', services=contrib_services)
-    print contrib_services
     return contrib_services
-
-
-def OnBlockClassFactory(_cb):
-    class MyService(devp2p.service.BaseService):
-
-        name = 'a name'
-
-        def start(self):
-            super(MyService, self).start()
-            self.app.services.chain.on_new_head_cbs.append(self.cb)
-
-        def cb(self, blk):
-            _cb(blk)
 
 
 def load_block_tests(data, db):
