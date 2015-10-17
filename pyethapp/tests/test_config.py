@@ -14,12 +14,6 @@ import pytest
 base_services = [DBService, NodeDiscovery, PeerManager, ChainService, JSONRPCServer]
 
 
-@pytest.mark.xfail  # no idea what this test wants to call?
-def test_mk_privkey():
-    for i in range(512):
-        config.mk_privkey_hex()
-
-
 def test_default_config():
     conf = config.get_default_config([BaseApp] + base_services)
     assert 'p2p' in conf

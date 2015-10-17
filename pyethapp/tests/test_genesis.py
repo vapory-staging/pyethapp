@@ -4,7 +4,7 @@ from ethereum import blocks
 from ethereum.db import DB
 from ethereum.config import Env
 from pyethapp.utils import merge_dict
-from pyethapp.utils import update_config_from_genesis_json
+from pyethapp.config import update_config_from_genesis_json
 import pyethapp.config as konfig
 from pyethapp.profiles import PROFILES
 
