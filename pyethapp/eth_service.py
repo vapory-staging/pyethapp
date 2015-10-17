@@ -364,7 +364,8 @@ class ChainService(WiredService):
         proto.receive_getblocks_callbacks.append(self.on_receive_getblocks)
         proto.receive_blocks_callbacks.append(self.on_receive_blocks)
         proto.receive_newblock_callbacks.append(self.on_receive_newblock)
-        proto.receive_blockhashesfromnumber_callbacks.append(self.on_receive_blockhashesfromnumber)
+        proto.receive_getblockhashesfromnumber_callbacks.append(
+            self.on_receive_getblockhashesfromnumber)
 
         # send status
         head = self.chain.head
@@ -485,45 +486,47 @@ class ChainService(WiredService):
         log.debug("recv newblock", block=block, remote_id=proto)
         self.synchronizer.receive_newblock(proto, block, chain_difficulty)
 
-    def on_receive_blockhashesfromnumber(self, proto, number, maxBlocks):
+    def on_receive_getblockhashesfromnumber(self, proto, number, count):
         log.debug('----------------------------------')
-        log.debug("recv newblock", block=block, remote_id=proto)
-        found = [] 
-        for i in range(number, number + maxBlocks):
+        log.debug("recv getblockhashesfromnumber", number=number, remote_id=proto)
+        found = []
+        count = min(count, self.wire_protocol.max_getblockhashes_count)
+        for i in range(number, number + count):
             h = self.chain.index.get_block_by_number(i)
             if not h:
-                log.debug("sending: found block_hashes", count=len(found))
-                proto.send_blockhashes(*found)
-                return
+                break
             found.append(h)
+        log.debug("sending: found block_hashes", count=len(found))
+        proto.send_blockhashes(*found)
+        return
 
-    def on_receive_getblockheaders(self, proto, blockhashes):
-        log.debug('----------------------------------')
-        log.debug("on_receive_getblockheaders", count=len(blockhashes))
-        found = []
-        for bh in blockhashes[:self.wire_protocol.max_getblocks_count]:
-            try:
-                found.append(rlp.encode(rlp.decode(self.chain.db.get(bh))[0]))
-            except KeyError:
-                log.debug("unknown block requested", block_hash=encode_hex(bh))
-        if found:
-            log.debug("found", count=len(found))
-            proto.send_blockheaders(*found)
+    # def on_receive_getblockheaders(self, proto, blockhashes):
+    #     log.debug('----------------------------------')
+    #     log.debug("on_receive_getblockheaders", count=len(blockhashes))
+    #     found = []
+    #     for bh in blockhashes[:self.wire_protocol.max_getblocks_count]:
+    #         try:
+    #             found.append(rlp.encode(rlp.decode(self.chain.db.get(bh))[0]))
+    #         except KeyError:
+    #             log.debug("unknown block requested", block_hash=encode_hex(bh))
+    #     if found:
+    #         log.debug("found", count=len(found))
+    #         proto.send_blockheaders(*found)
 
-    def on_receive_blockheaders(self, proto, transient_blocks):
-        log.debug('----------------------------------')
-        pass
-        # TODO: implement headers first syncing
+    # def on_receive_blockheaders(self, proto, transient_blocks):
+    #     log.debug('----------------------------------')
+    #     pass
+    # TODO: implement headers first syncing
 
-    def on_receive_hashlookup(self, proto, hashes):
-        found = []
-        for h in hashes:
-            try:
-                found.append(utils.encode_hex(self.chain.db.get(
-                             'node:' + utils.decode_hex(h))))
-            except KeyError:
-                found.append('')
-        proto.send_hashlookupresponse(h)
+    # def on_receive_hashlookup(self, proto, hashes):
+    #     found = []
+    #     for h in hashes:
+    #         try:
+    #             found.append(utils.encode_hex(self.chain.db.get(
+    #                          'node:' + utils.decode_hex(h))))
+    #         except KeyError:
+    #             found.append('')
+    #     proto.send_hashlookupresponse(h)
 
-    def on_receive_hashlookupresponse(self, proto, hashresponses):
-        pass
+    # def on_receive_hashlookupresponse(self, proto, hashresponses):
+    #     pass
