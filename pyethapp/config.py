@@ -25,6 +25,8 @@ import ethereum.slogging as slogging
 from devp2p.service import BaseService
 from devp2p.app import BaseApp
 from accounts import mk_random_privkey
+from ethereum.keys import decode_hex
+from ethereum.utils import parse_int_or_hex, remove_0x_head
 
 
 CONFIG_FILE_NAME = 'config.yaml'
@@ -153,3 +155,22 @@ def set_config_param(config, s, strict=True):
 
 def dump_config(config):
     print yaml.dump(config)
+
+
+def update_config_from_genesis_json(config, genesis_json_filename):
+    with open(genesis_json_filename, "r") as genesis_json_file:
+        genesis_dict = yaml.load(genesis_json_file)
+
+    config.setdefault('eth', {}).setdefault('block', {})
+    cfg = config['eth']['block']
+    cfg['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
+    cfg['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
+    cfg['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
+    cfg['GENESIS_EXTRA_DATA'] = decode_hex(remove_0x_head(genesis_dict['extraData']))
+    cfg['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
+    cfg['GENESIS_MIXHASH'] = decode_hex(remove_0x_head(genesis_dict['mixhash']))
+    cfg['GENESIS_PREVHASH'] = decode_hex(remove_0x_head(genesis_dict['parentHash']))
+    cfg['GENESIS_COINBASE'] = decode_hex(remove_0x_head(genesis_dict['coinbase']))
+    cfg['GENESIS_NONCE'] = decode_hex(remove_0x_head(genesis_dict['nonce']))
+
+    return config

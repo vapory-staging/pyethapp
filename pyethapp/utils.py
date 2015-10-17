@@ -1,13 +1,8 @@
 from collections import Mapping
-import json
-import yaml
 import os
 import ethereum
 from ethereum.blocks import Block, genesis
-from ethereum.keys import decode_hex
-from ethereum.utils import parse_int_or_hex, remove_0x_head
 from devp2p.service import BaseService
-import re
 import rlp
 import sys
 from ethereum import slogging
@@ -98,25 +93,6 @@ def load_block_tests(data, db):
         block = rlp.decode(rlpdata, Block, db=db, parent=parent)
         blocks[block.hash] = block
     return sorted(blocks.values(), key=lambda b: b.number)
-
-
-def update_config_from_genesis_json(config, genesis_json_filename):
-    with open(genesis_json_filename, "r") as genesis_json_file:
-        genesis_dict = yaml.load(genesis_json_file)
-
-    config.setdefault('eth', {}).setdefault('block', {})
-    cfg = config['eth']['block']
-    cfg['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
-    cfg['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
-    cfg['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
-    cfg['GENESIS_EXTRA_DATA'] = decode_hex(remove_0x_head(genesis_dict['extraData']))
-    cfg['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
-    cfg['GENESIS_MIXHASH'] = decode_hex(remove_0x_head(genesis_dict['mixhash']))
-    cfg['GENESIS_PREVHASH'] = decode_hex(remove_0x_head(genesis_dict['parentHash']))
-    cfg['GENESIS_COINBASE'] = decode_hex(remove_0x_head(genesis_dict['coinbase']))
-    cfg['GENESIS_NONCE'] = decode_hex(remove_0x_head(genesis_dict['nonce']))
-
-    return config
 
 
 def merge_dict(dest, source):
