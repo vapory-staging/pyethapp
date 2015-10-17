@@ -26,10 +26,10 @@ import config as konfig
 from db_service import DBService
 from jsonrpc import JSONRPCServer
 from pow_service import PoWService
-from accounts import AccountsService, Account, DEFAULT_COINBASE
+from accounts import AccountsService, Account
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
-from pyethapp.utils import update_config_from_genesis_json, merge_dict, load_contrib_services
+from pyethapp.utils import merge_dict, load_contrib_services
 import utils
 
 log = slogging.get_logger('app')
