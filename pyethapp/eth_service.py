@@ -357,13 +357,14 @@ class ChainService(WiredService):
         assert isinstance(proto, self.wire_protocol)
         # register callbacks
         proto.receive_status_callbacks.append(self.on_receive_status)
+        proto.receive_newblockhashes_callbacks.append(self.on_newblockhashes)
         proto.receive_transactions_callbacks.append(self.on_receive_transactions)
         proto.receive_getblockhashes_callbacks.append(self.on_receive_getblockhashes)
         proto.receive_blockhashes_callbacks.append(self.on_receive_blockhashes)
         proto.receive_getblocks_callbacks.append(self.on_receive_getblocks)
         proto.receive_blocks_callbacks.append(self.on_receive_blocks)
         proto.receive_newblock_callbacks.append(self.on_receive_newblock)
-        proto.receive_newblockhashes_callbacks.append(self.on_newblockhashes)
+        proto.receive_blockhashesfromnumber_callbacks.append(self.on_receive_blockhashesfromnumber)
 
         # send status
         head = self.chain.head
@@ -483,6 +484,18 @@ class ChainService(WiredService):
         log.debug('----------------------------------')
         log.debug("recv newblock", block=block, remote_id=proto)
         self.synchronizer.receive_newblock(proto, block, chain_difficulty)
+
+    def on_receive_blockhashesfromnumber(self, proto, number, maxBlocks):
+        log.debug('----------------------------------')
+        log.debug("recv newblock", block=block, remote_id=proto)
+        found = [] 
+        for i in range(number, number + maxBlocks):
+            h = self.chain.index.get_block_by_number(i)
+            if not h:
+                log.debug("sending: found block_hashes", count=len(found))
+                proto.send_blockhashes(*found)
+                return
+            found.append(h)
 
     def on_receive_getblockheaders(self, proto, blockhashes):
         log.debug('----------------------------------')
