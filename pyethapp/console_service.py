@@ -19,15 +19,19 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms, normalize_address, bcolors as bc
+from ethereum.utils import denoms, normalize_address as _normalize_address, bcolors as bc
 
-from rpc_client import ABIContract, address20
-
+from rpc_client import ABIContract
 
 log = getLogger(__name__)
 
 ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
+
+
+def normalize_address(a, allow_blank=True):
+    a = a or '\0' * 20 if allow_blank else a
+    return _normalize_address(a)
 
 
 def inputhook_gevent():
@@ -72,6 +76,7 @@ IPython.core.shellapp.InteractiveShellApp.gui.values += ('gevent',)
 
 
 class SigINTHandler(object):
+
     def __init__(self, event):
         self.event = event
         self.installed = None
@@ -166,6 +171,7 @@ class Console(BaseService):
         super(Console, self).start()
 
         class Eth(object):
+
             """
             convenience object to interact with the live chain
             """
