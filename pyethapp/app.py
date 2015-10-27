@@ -30,7 +30,9 @@ from accounts import AccountsService, Account
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services
+from pyethapp.jsonrpc import LogFilter
 import utils
+from ethereum.utils import normalize_address
 
 log = slogging.get_logger('app')
 

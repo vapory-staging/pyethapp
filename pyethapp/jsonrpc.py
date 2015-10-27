@@ -29,8 +29,9 @@ from devp2p.service import BaseService
 from eth_protocol import ETHProtocol
 from ethereum.trie import Trie
 from ethereum.utils import denoms
+import ethereum.bloom as bloom
 
-from ethereum.utils import DEBUG
+from ethereum.utils import DEBUG, int32
 
 logger = log = slogging.get_logger('jsonrpc')
 
@@ -941,6 +942,7 @@ class Chain(Subdispatcher):
         if not signed:
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
+        self.app.services.chain.broadcast_transaction(tx, origin=None)
         self.app.services.chain.add_transaction(tx, origin=None)
 
         log.debug('decoded tx', tx=tx.log_dict())
@@ -1150,18 +1152,36 @@ class LogFilter(object):
             if first > last:
                 return {}
 
-        blocks_to_check = [self.chain.get(self.chain.index.get_block_by_number(n))
-                           for n in range(first, last)]
+        blocks_to_check = []
+        for n in range(first, last):
+            blocks_to_check.append(self.chain.index.get_block_by_number(n))
         # last block may be head candidate, which cannot be retrieved via get_block_by_number
         if last == self.chain.head_candidate.number:
             blocks_to_check.append(self.chain.head_candidate)
         else:
             blocks_to_check.append(self.chain.get(self.chain.index.get_block_by_number(last)))
+        logger.debug('obtained block hashes to check with filter', numhashes=len(blocks_to_check))
 
         # go through all receipts of all blocks
-        logger.debug('blocks to check', blocks=blocks_to_check)
+        # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
-        for block in blocks_to_check:
+        for i, block in enumerate(blocks_to_check):
+            if not isinstance(block, ethereum.blocks.Block) and not isinstance(block, ethereum.blocks.CachedBlock):
+                _bloom = self.chain.get_bloom(block)
+                # Check that the bloom for this block contains at least one of the desired addresses
+                if self.addresses:
+                    pass_address_check = False
+                    for address in self.addresses:
+                        if bloom.bloom_query(_bloom, address):
+                            pass_address_check = True
+                    if not pass_address_check:
+                        continue
+                # Check that the bloom for this block contains all of the desired topics
+                _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics))
+                if bloom.bloom_combine(_bloom, _topic_bloom) != _bloom:
+                    continue
+                block = self.chain.get(block)
+                print 'bloom filter passed'
             logger.debug('-')
             logger.debug('with block', block=block)
             receipts = block.get_receipts()
