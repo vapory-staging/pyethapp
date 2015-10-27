@@ -978,7 +978,7 @@ class Chain(Subdispatcher):
         try:
             startgas = quantity_decoder(data['gas'])
         except KeyError:
-            startgas = block.gas_limit - block.gas_used
+            startgas = test_block.gas_limit - test_block.gas_used
         try:
             gasprice = quantity_decoder(data['gasPrice'])
         except KeyError:
