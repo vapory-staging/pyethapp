@@ -3,8 +3,10 @@ from pyethapp.config import default_data_dir
 from ethereum.chain import Chain
 from ethereum.ethpow import check_pow
 from ethereum.utils import big_endian_to_int, sha3
+from ethereum.config import Env
 import rlp
 import os
+import sys
 
 
 def get_chain(data_dir=default_data_dir):
@@ -13,7 +15,8 @@ def get_chain(data_dir=default_data_dir):
     """
     dbfile = os.path.join(data_dir, 'leveldb')
     db = LevelDB(dbfile)
-    return Chain(db)
+    return Chain(Env(db))
+
 
 def _check_pow(header):
     number = big_endian_to_int(header[8])
@@ -22,6 +25,7 @@ def _check_pow(header):
     nonce = header[14]
     mining_hash = sha3(rlp.encode(header[:13]))
     assert check_pow(number, mining_hash, mixhash, nonce, difficulty)
+
 
 def read_raw_blocks(chain, check_pow=False):
     """
@@ -40,6 +44,7 @@ def read_raw_blocks(chain, check_pow=False):
         if i % 1000 == 0:
             print i
 
+
 def read_blocks(chain):
     """
     reads all blocks from the database
@@ -56,4 +61,3 @@ def read_blocks(chain):
 if __name__ == '__main__':
     chain = get_chain()
     read_blocks(chain)
-
