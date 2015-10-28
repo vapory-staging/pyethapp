@@ -36,8 +36,8 @@ from ethereum.utils import DEBUG, int32
 logger = log = slogging.get_logger('jsonrpc')
 
 # defaults
-default_startgas = 100 * 1000
-default_gasprice = 10 * denoms.szabo
+default_startgas = 500 * 1000
+default_gasprice = 60 * denoms.shannon
 
 
 def _fail_on_error_dispatch(self, request):
@@ -938,10 +938,10 @@ class Chain(Subdispatcher):
 
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
         tx._sender = None
-        print tx.log_dict()
         if not signed:
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
+        print tx.log_dict(), rlp.encode(tx).encode('hex')
         self.app.services.chain.broadcast_transaction(tx, origin=None)
         self.app.services.chain.add_transaction(tx, origin=None)
 
