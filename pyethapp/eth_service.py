@@ -181,10 +181,10 @@ class ChainService(WiredService):
         for cb in self.on_new_head_candidate_cbs:
             cb(self.chain.head_candidate)
 
-    def add_transaction(self, tx, origin=None, broadcast_only=False):
-        if self.is_syncing and not broadcast_only:
+    def add_transaction(self, tx, origin=None):
+        if self.is_syncing:
             return  # we can not evaluate the tx based on outdated state
-        log.debug('add_transaction', locked=self.add_transaction_lock.locked(), tx=tx)
+        log.debug('add_transaction', locked=(not self.add_transaction_lock.locked()), tx=tx)
         assert isinstance(tx, Transaction)
         assert origin is None or isinstance(origin, BaseProtocol)
 
@@ -200,8 +200,6 @@ class ChainService(WiredService):
         except InvalidTransaction as e:
             log.debug('invalid tx', error=e)
             return
-        if broadcast_only:
-            return True
 
         if origin is not None:  # not locally added via jsonrpc
             if not self.is_mining or self.is_syncing:
