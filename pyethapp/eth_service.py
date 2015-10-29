@@ -171,11 +171,7 @@ class ChainService(WiredService):
         return False
 
     def _on_new_head(self, block):
-        # DEBUG('new head cbs', len(self.on_new_head_cbs))
-
-        # relase the lock, so that the cb, can create transactions
-        # this is safe, as all transactions are added already
-        self.add_transaction_lock.release()
+        log.debug('new head cbs', num=len(self.on_new_head_cbs))
         for cb in self.on_new_head_cbs:
             cb(block)
         self._on_new_head_candidate()  # we implicitly have a new head_candidate
