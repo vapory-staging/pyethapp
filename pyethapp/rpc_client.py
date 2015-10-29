@@ -103,11 +103,15 @@ class JSONRPCClient(object):
         elif isinstance(changes, bytes):
             return data_decoder(changes)
         else:
-            decoders = dict(blockHash=data_decoder, transactionHash=data_decoder, data=data_decoder,
-                            address=address_decoder, topics=lambda x: [topic_decoder(t) for t in x],
-                            blockNumber=quantity_decoder, logIndex=quantity_decoder, transactionIndex=quantity_decoder)
-            return [{k: decoders[k](v) for k, v in c.items() if v is not None} for c  in changes]
-
+            decoders = dict(blockHash=data_decoder,
+                            transactionHash=data_decoder,
+                            data=data_decoder,
+                            address=address_decoder,
+                            topics=lambda x: [topic_decoder(t) for t in x],
+                            blockNumber=quantity_decoder,
+                            logIndex=quantity_decoder,
+                            transactionIndex=quantity_decoder)
+            return [{k: decoders[k](v) for k, v in c.items() if v is not None} for c in changes]
 
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
@@ -161,7 +165,8 @@ class JSONRPCClient(object):
     def lastgasprice(self):
         return quantity_decoder(self.call('eth_lastGasPrice'))
 
-    def send_transaction(self, sender, to, value=0, data='', startgas=0, gasprice=10 * denoms.szabo):
+    def send_transaction(self, sender, to, value=0, data='', startgas=0,
+                         gasprice=10 * denoms.szabo, nonce=None):
         "can send a locally signed transaction if privkey is given"
         assert self.privkey or sender
         if self.privkey:
@@ -170,7 +175,7 @@ class JSONRPCClient(object):
             assert sender == _sender
         assert sender
         # fetch nonce
-        nonce = self.nonce(sender)
+        nonce = nonce or self.nonce(sender)
         if not startgas:
             startgas = quantity_decoder(self.call('eth_gasLimit')) - 1
 

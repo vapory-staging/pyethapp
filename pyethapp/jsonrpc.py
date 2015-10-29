@@ -934,7 +934,7 @@ class Chain(Subdispatcher):
             assert nonce is not None, 'signed but no nonce provided'
             assert v and r and s
         else:
-            nonce = self.app.services.chain.chain.head_candidate.get_nonce(sender)
+            nonce = nonce or self.app.services.chain.chain.head_candidate.get_nonce(sender)
 
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
         tx._sender = None
