@@ -39,7 +39,7 @@ def apply_transaction(block, tx):
     log.debug('apply_transaction ctx switch', tx=tx.hash.encode('hex')[:8])
     gevent.sleep(0.001)
     return processblock_apply_transaction(block, tx)
-processblock.apply_transaction = apply_transaction
+#processblock.apply_transaction = apply_transaction
 
 
 rlp_hash_hex = lambda data: encode_hex(sha3(rlp.encode(data)))
