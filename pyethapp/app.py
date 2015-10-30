@@ -50,6 +50,7 @@ class EthApp(BaseApp):
     default_config = dict(BaseApp.default_config)
     default_config['client_version_string'] = client_version_string
     default_config['post_app_start_callback'] = None
+    script_globals = {}
 
 
 # Separators should be underscore!

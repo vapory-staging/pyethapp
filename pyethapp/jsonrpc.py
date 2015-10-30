@@ -942,8 +942,10 @@ class Chain(Subdispatcher):
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
         print tx.log_dict(), rlp.encode(tx).encode('hex')
-        # self.app.services.chain.broadcast_transaction(tx, origin=None)
-        self.app.services.chain.add_transaction(tx, origin=None)
+        try:
+            self.app.services.chain.add_transaction(tx, origin=None)
+        except:
+            self.app.services.chain.broadcast_transaction(tx, origin=None)
 
         log.debug('decoded tx', tx=tx.log_dict())
         return data_encoder(tx.hash)

@@ -199,7 +199,7 @@ class Console(BaseService):
                 return tx
 
             def call(this, to, value=0, data='',  sender=None,
-                     startgas=25000, gasprice=10 * denoms.szabo):
+                     startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
                 to = normalize_address(to, allow_blank=True)
                 block = this.head_candidate
@@ -257,6 +257,8 @@ class Console(BaseService):
 
         self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
                                    denoms=denoms, true=True, false=False)
+        for k, v in self.app.script_globals.items():
+            self.console_locals[k] = v
 
     def _run(self):
         self.interrupt.wait()
