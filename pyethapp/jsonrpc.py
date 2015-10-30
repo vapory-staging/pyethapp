@@ -942,7 +942,7 @@ class Chain(Subdispatcher):
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
         print tx.log_dict(), rlp.encode(tx).encode('hex')
-        self.app.services.chain.broadcast_transaction(tx, origin=None)
+        # self.app.services.chain.broadcast_transaction(tx, origin=None)
         self.app.services.chain.add_transaction(tx, origin=None)
 
         log.debug('decoded tx', tx=tx.log_dict())
@@ -1148,6 +1148,7 @@ class LogFilter(object):
 
         # skip blocks that have already been checked
         if self.last_block_checked is not None:
+            print self.last_block_checked
             first = max(self.last_block_checked.number + 1, first)
             if first > last:
                 return {}
@@ -1166,7 +1167,7 @@ class LogFilter(object):
         # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
         for i, block in enumerate(blocks_to_check):
-            if not isinstance(block, ethereum.blocks.Block) and not isinstance(block, ethereum.blocks.CachedBlock):
+            if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
                 _bloom = self.chain.get_bloom(block)
                 # Check that the bloom for this block contains at least one of the desired addresses
                 if self.addresses:
@@ -1177,7 +1178,7 @@ class LogFilter(object):
                     if not pass_address_check:
                         continue
                 # Check that the bloom for this block contains all of the desired topics
-                _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics))
+                _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics or []))
                 if bloom.bloom_combine(_bloom, _topic_bloom) != _bloom:
                     continue
                 block = self.chain.get(block)
@@ -1217,6 +1218,8 @@ class LogFilter(object):
             self.last_block_checked = blocks_to_check[-1]
         else:
             self.last_block_checked = blocks_to_check[-2] if len(blocks_to_check) >= 2 else None
+        if self.last_block_checked and not isinstance(self.last_block_checked, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
+            self.last_block_checked = self.chain.get(self.last_block_checked)
         actually_new_ids = new_logs.viewkeys() - self.log_dict.viewkeys()
         self.log_dict.update(new_logs)
         return {id_: new_logs[id_] for id_ in actually_new_ids}
