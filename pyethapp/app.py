@@ -78,7 +78,6 @@ class EthApp(BaseApp):
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock, password, log_file):
-
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 

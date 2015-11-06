@@ -48,7 +48,7 @@ class Account(object):
             self.path = None
 
     @classmethod
-    def new(cls, password, key=None, uuid=None):
+    def new(cls, password, key=None, uuid=None, path=None):
         """Create a new account.
 
         Note that this creates the account in memory and does not store it on disk.
@@ -61,7 +61,7 @@ class Account(object):
             key = mk_random_privkey()
         keystore = keys.make_keystore_json(key, password)
         keystore['id'] = uuid
-        return Account(keystore, password, None)
+        return Account(keystore, password, path)
 
     @classmethod
     def load(cls, path, password=None):
@@ -485,6 +485,9 @@ class AccountsService(BaseService):
 
     def sign_tx(self, address, tx):
         self.get_by_address(address).sign_tx(tx)
+
+    def propose_path(self, address):
+        return os.path.join(self.keystore_dir, address.encode('hex'))
 
     def __contains__(self, address):
         assert len(address) == 20
