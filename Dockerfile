@@ -17,22 +17,20 @@ FROM python:2.7.9
 RUN apt-get update
 RUN apt-get install -y git-core
 
-RUN git clone https://github.com/ethereum/pyrlp
-WORKDIR pyrlp
-RUN git checkout develop
+RUN git clone https://github.com/ethereum/pyrlp /apps/pyrlp
+WORKDIR /apps/pyrlp
 RUN pip install -e .
 
-RUN git clone https://github.com/ethereum/pydevp2p
-WORKDIR pydevp2p
+RUN git clone https://github.com/ethereum/pydevp2p /apps/pydevp2p
+WORKDIR /apps/pydevp2p
 RUN pip install -e .
 
-RUN git clone https://github.com/ethereum/pyethereum
-WORKDIR pyethereum
-RUN git checkout develop
+RUN git clone https://github.com/ethereum/pyethereum /apps/pyethereum
+WORKDIR /apps/pyethereum
 RUN pip install -e .
 
-RUN git clone https://github.com/ethereum/pyethapp
-WORKDIR pyethapp
+RUN git clone https://github.com/ethereum/pyethapp /apps/pyethapp
+WORKDIR /apps/pyethapp
 RUN pip install -e .
 
 # Fix debian's ridiculous gevent-breaking constant removal
