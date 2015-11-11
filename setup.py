@@ -29,9 +29,9 @@ with open('HISTORY.rst') as history_file:
 
 install_requires = set(x.strip() for x in open('requirements.txt'))
 install_requires_replacements = {
-    'https://github.com/ethereum/pyrlp/tarball/develop#egg=rlp': 'rlp>=0.3.9',
-    'https://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p': 'devp2p>=0.5.2',
-    'https://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum': 'ethereum>=1.0.5',
+    'https://github.com/ethereum/pyrlp/tarball/develop#egg=rlp': 'rlp>=0.4.3',
+    'https://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p': 'devp2p>=0.5.9',
+    'https://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum': 'ethereum>=1.0.6',
     'https://github.com/ethereum/ethash/tarball/master#egg=pyethash': 'pyethash'}
 
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
