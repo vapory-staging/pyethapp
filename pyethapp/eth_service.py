@@ -112,24 +112,28 @@ class ChainService(WiredService):
         if int(sce['pruning']) >= 0:
             self.db = RefcountDB(app.services.db)
             if "I am not pruning" in self.db.db:
-                raise Exception("This database was initialized as non-pruning."
-                                " Kinda hard to start pruning now.")
+                raise RuntimeError(
+                    "The database in '{}' was initialized as non-pruning. "
+                    "Can not enable pruning now.".format(self.config['data_dir']))
             self.db.ttl = int(sce['pruning'])
             self.db.db.put("I am pruning", "1")
         else:
             self.db = app.services.db
             if "I am pruning" in self.db:
-                raise Exception("This database was initialized as pruning."
-                                " Kinda hard to stop pruning now.")
+                raise RuntimeError(
+                    "The database in '{}' was initialized as pruning. "
+                    "Can not disable pruning now".format(self.config['data_dir']))
             self.db.put("I am not pruning", "1")
 
         if 'network_id' in self.db:
             db_network_id = self.db.get('network_id')
             if db_network_id != str(sce['network_id']):
-                raise Exception("This database was initialized with network_id {} "
-                                "and can not be used when connecting to network_id {}".format(
-                                    db_network_id, sce['network_id'])
-                                )
+                raise RuntimeError(
+                    "The database in '{}' was initialized with network id {} and can not be used "
+                    "when connecting to network id {}. Please choose a different data directory.".format(
+                        self.config['data_dir'], db_network_id, sce['network_id']
+                    )
+                )
 
         else:
             self.db.put('network_id', str(sce['network_id']))
