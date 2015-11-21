@@ -941,15 +941,9 @@ class Chain(Subdispatcher):
         if not signed:
             assert sender in self.app.services.accounts, 'no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
-        print tx.log_dict(), rlp.encode(tx).encode('hex')
-        try:
-            self.app.services.chain.add_transaction(tx, origin=None)
-        except:
-            self.app.services.chain.broadcast_transaction(tx, origin=None)
-
+        self.app.services.chain.add_transaction(tx, origin=None, force_broadcast=True)
         log.debug('decoded tx', tx=tx.log_dict())
         return data_encoder(tx.hash)
-
 
     @public
     @decode_arg('block_id', block_id_decoder)
@@ -1378,7 +1372,6 @@ class FilterManager(Subdispatcher):
     def getLogs(self, filter_dict):
         filter_ = filter_decoder(filter_dict, self.chain.chain)
         return filter_.logs
-
 
     # ########### Trace ############
     def _get_block_before_tx(self, txhash):

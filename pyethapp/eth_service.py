@@ -185,8 +185,12 @@ class ChainService(WiredService):
         for cb in self.on_new_head_candidate_cbs:
             cb(self.chain.head_candidate)
 
-    def add_transaction(self, tx, origin=None):
+    def add_transaction(self, tx, origin=None, force_broadcast=False):
         if self.is_syncing:
+            if force_broadcast:
+                assert origin is None  # only allowed for local txs
+                log.debug('force broadcasting unvalidated tx')
+                self.broadcast_transaction(tx, origin=origin)
             return  # we can not evaluate the tx based on outdated state
         log.debug('add_transaction', locked=(not self.add_transaction_lock.locked()), tx=tx)
         assert isinstance(tx, Transaction)
