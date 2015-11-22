@@ -38,13 +38,14 @@ def block_tag_encoder(val):
     else:
         assert not val
 
+
 def topic_encoder(t):
     assert isinstance(t, (int, long))
     return data_encoder(int_to_big_endian(t))
 
+
 def topic_decoder(t):
     return big_endian_to_int(data_decoder(t))
-
 
 
 class JSONRPCClient(object):
@@ -56,6 +57,10 @@ class JSONRPCClient(object):
         self.print_communication = print_communication
         self.privkey = privkey
         self._sender = sender
+        self.port = port
+
+    def __repr__(self):
+        return '<JSONRPCClient @%d>' % self.port
 
     @property
     def sender(self):
@@ -175,7 +180,7 @@ class JSONRPCClient(object):
             assert sender == _sender
         assert sender
         # fetch nonce
-        nonce = nonce or self.nonce(sender)
+        nonce = nonce if nonce is not None else self.nonce(sender)
         if not startgas:
             startgas = quantity_decoder(self.call('eth_gasLimit')) - 1
 
