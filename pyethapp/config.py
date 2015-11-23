@@ -157,20 +157,36 @@ def dump_config(config):
     print yaml.dump(config)
 
 
-def update_config_from_genesis_json(config, genesis_json_filename):
-    with open(genesis_json_filename, "r") as genesis_json_file:
-        genesis_dict = yaml.load(genesis_json_file)
+def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
+    if isinstance(genesis_json_filename_or_dict, dict):
+        genesis_dict = genesis_json_filename_or_dict
+    else:
+        with open(genesis_json_filename_or_dict, "r") as genesis_json_file:
+            genesis_dict = yaml.load(genesis_json_file)
 
     config.setdefault('eth', {}).setdefault('block', {})
     cfg = config['eth']['block']
-    cfg['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
-    cfg['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
-    cfg['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
-    cfg['GENESIS_EXTRA_DATA'] = decode_hex(remove_0x_head(genesis_dict['extraData']))
-    cfg['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
-    cfg['GENESIS_MIXHASH'] = decode_hex(remove_0x_head(genesis_dict['mixhash']))
-    cfg['GENESIS_PREVHASH'] = decode_hex(remove_0x_head(genesis_dict['parentHash']))
-    cfg['GENESIS_COINBASE'] = decode_hex(remove_0x_head(genesis_dict['coinbase']))
-    cfg['GENESIS_NONCE'] = decode_hex(remove_0x_head(genesis_dict['nonce']))
+
+    # map external to internal keys and decoders
+    def _dec(x):
+        return decode_hex(remove_0x_head(x))
+
+    m = [
+        ('GENESIS_INITIAL_ALLOC', 'alloc', lambda x: x),
+        ('GENESIS_DIFFICULTY',  'difficulty', parse_int_or_hex),
+        ('GENESIS_TIMESTAMP',  'timestamp', parse_int_or_hex),
+        ('GENESIS_EXTRA_DATA',  'extraData', _dec),
+        ('GENESIS_GAS_LIMIT',  'gasLimit', parse_int_or_hex),
+        ('GENESIS_MIXHASH', 'mixhash', _dec),
+        ('GENESIS_PREVHASH',  'parentHash', _dec),
+        ('GENESIS_COINBASE',  'coinbase', _dec),
+        ('GENESIS_NONCE',  'nonce', _dec)
+    ]
+
+    m = dict((in_key, (target_key, translator_func)) for target_key, in_key, translator_func in m)
+
+    for k, v in genesis_dict.items():
+        target_key, translator_func = m[k]
+        cfg[target_key] = translator_func(v)
 
     return config

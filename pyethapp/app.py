@@ -116,7 +116,8 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
                                '(example: "-c jsonrpc.port=5000")')
 
     # Load genesis config
-    konfig.update_config_from_genesis_json(config, genesis_json_filename=config['eth']['genesis'])
+    konfig.update_config_from_genesis_json(config,
+                                           genesis_json_filename_or_dict=config['eth']['genesis'])
 
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
