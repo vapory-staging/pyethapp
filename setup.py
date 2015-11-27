@@ -37,7 +37,7 @@ install_requires_replacements = {
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 test_requirements = ['ethereum-serpent>=1.8.1']
 
-version = '1.0.10'  # preserve format, this is read from __init__.py
+version = '1.0.11'  # preserve format, this is read from __init__.py
 
 setup(
     name='pyethapp',
