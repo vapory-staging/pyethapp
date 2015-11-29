@@ -95,6 +95,9 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 
     config['data_dir'] = data_dir
 
+    # Store custom genesis to restore if overrided by profile value
+    genesis_custom = config.get('eth', {}).get('genesis')
+
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
 
@@ -102,6 +105,10 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
 
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
+
+    if genesis_custom:
+        del config['eth']['genesis_hash']
+        config['eth']['genesis'] = genesis_custom
 
     # override values with values from cmd line
     for config_value in config_values:
