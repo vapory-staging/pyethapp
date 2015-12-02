@@ -90,12 +90,14 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     # config files only contain required config (privkeys) and config different from the default
     if alt_config:  # specified config file
         config = konfig.load_config(alt_config)
+        if not config:
+            log.warning('invalid or empty config given')
     else:  # load config from default or set data_dir
         config = konfig.load_config(data_dir)
 
     config['data_dir'] = data_dir
 
-    # Store custom genesis to restore if overrided by profile value
+    # Store custom genesis to restore if overridden by profile value
     genesis_custom = config.get('eth', {}).get('genesis')
 
     # add default config
@@ -107,6 +109,7 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     merge_dict(config, PROFILES[profile])
 
     if genesis_custom:
+        # Part of the default config was overridden
         del config['eth']['genesis_hash']
         config['eth']['genesis'] = genesis_custom
 
@@ -114,9 +117,6 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     for config_value in config_values:
         try:
             konfig.set_config_param(config, config_value)
-            # check if this is part of the default config
-            if config_value.startswith("eth.genesis"):
-                del config['eth']['genesis_hash']
         except ValueError:
             raise BadParameter('Config parameter must be of the form "a.b.c=d" where "a.b.c" '
                                'specifies the parameter to set and d is a valid yaml value '
