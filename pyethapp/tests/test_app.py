@@ -1,3 +1,4 @@
+import os
 import pytest
 from pyethapp import app
 from click.testing import CliRunner
@@ -26,7 +27,30 @@ eth:
 def test_show_usage():
     runner = CliRunner()
     result = runner.invoke(app.app, [])
-    assert "Usage: app " in result.output
+    assert "Usage: app " in result.output, result.output
+
+
+def test_no_such_option():
+    runner = CliRunner()
+    result = runner.invoke(app.app, ['--WTF'])
+    assert 'no such option: --WTF' in result.output, result.output
+
+
+def test_no_such_command():
+    runner = CliRunner()
+    result = runner.invoke(app.app, ['eat'])
+    assert 'Error: No such command "eat"' in result.output, result.output
+
+
+@pytest.mark.parametrize('content', ['', '<html/>', 'print "hello world"'])
+def test_non_dict_yaml_as_config_file(content):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open('config.yaml', 'w') as text_file:
+            text_file.write(content)
+
+        result = runner.invoke(app.app, ['-C', 'config.yaml'])
+        assert 'content of config should be an yaml dictionary' in result.output, result.output
 
 
 @pytest.mark.parametrize('param', [('--Config', 'myconfig.yaml'),
@@ -66,6 +90,12 @@ def test_custom_config_file(param):
 
 
 if __name__ == '__main__':
+    test_show_usage()
+    test_no_such_option()
+    test_no_such_command()
+    test_non_dict_yaml_as_config_file('')
+    test_non_dict_yaml_as_config_file('<html/>')
+    test_non_dict_yaml_as_config_file('print "hello world"')
     test_custom_config_file(('--Config', 'myconfig.yaml'))
     test_custom_config_file(('-C', 'myconfig.yaml'))
     test_custom_config_file(('-c', 'mygenesis.json'))

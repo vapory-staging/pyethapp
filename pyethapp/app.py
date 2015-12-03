@@ -57,10 +57,11 @@ class EthApp(BaseApp):
 @click.group(help='Welcome to {}  version: {}'.format(EthApp.client_name, EthApp.client_version))
 @click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
               help="Configuration profile.", show_default=True)
-@click.option('alt_config', '--Config', '-C', type=str, help='Alternative config file')
+@click.option('alt_config', '--Config', '-C', type=str, help='Alternative config file',
+              callback=konfig.validate_alt_config_file)
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
-@click.option('-d', '--data-dir', multiple=False, type=str,
+@click.option('alt_data_dir', '-d', '--data-dir', multiple=False, type=str,
               help='data directory')
 @click.option('-l', '--log_config', multiple=False, type=str, default=":info",
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
@@ -76,13 +77,13 @@ class EthApp(BaseApp):
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
-def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap_node, log_json,
+def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
         mining_pct, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
     # data dir default or from cli option
-    data_dir = data_dir or konfig.default_data_dir
+    data_dir = alt_data_dir or konfig.default_data_dir
     konfig.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
     log.info('using data in', path=data_dir)
 
@@ -91,7 +92,7 @@ def app(ctx, profile, alt_config, config_values, data_dir, log_config, bootstrap
     if alt_config:  # specified config file
         config = konfig.load_config(alt_config)
         if not config:
-            log.warning('invalid or empty config given')
+            log.warning('empty config given')
     else:  # load config from default or set data_dir
         config = konfig.load_config(data_dir)
 

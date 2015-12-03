@@ -68,6 +68,18 @@ def check_config(config, required_config=required_config):
     return True
 
 
+def validate_alt_config_file(ctx, param, value):
+    if value:
+        try:
+            yaml_ = load_config(value, fix_accounts=False)
+        except IOError, e:
+            raise click.BadParameter(str(e))
+        else:
+            if not isinstance(yaml_, dict):
+                raise click.BadParameter('content of config should be an yaml dictionary')
+    return value
+
+
 def setup_required_config(data_dir=default_data_dir):
     "writes minimal necessary config to data_dir"
     log.info('setup default config', path=data_dir)
@@ -103,13 +115,14 @@ def _fix_accounts(path):
         write_config(config)
 
 
-def load_config(path=default_config_path):
+def load_config(path=default_config_path, fix_accounts=True):
     """Load config from string or file like object `path`."""
     log.info('loading config', path=path)
     if os.path.exists(path):
         if os.path.isdir(path):
             path = get_config_path(path)
-        _fix_accounts(path)  # FIXME
+        if fix_accounts:
+            _fix_accounts(path)  # FIXME
         return yaml.load(open(path))
     return dict()
 
