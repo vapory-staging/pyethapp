@@ -2,7 +2,7 @@ import pytest
 from pyethapp import app
 from click.testing import CliRunner
 
-genesis_dict = {
+genesis_json = {
     "nonce": "0x00000000000000ff",
     "difficulty": "0xff0000000",
     "mixhash": "0xff00000000000000000000000000000000000000000000000000000000000000",
@@ -17,11 +17,10 @@ genesis_dict = {
     }
 }
 
-
 genesis_yaml = """
 eth:
   genesis: {}
-""".format(genesis_dict)
+""".format(genesis_json)
 
 
 def test_show_usage():
@@ -30,33 +29,44 @@ def test_show_usage():
     assert "Usage: app " in result.output
 
 
-@pytest.mark.parametrize('option', ['-C', '--Config', '-c'])
-def test_custom_config_file(option):
+@pytest.mark.parametrize('param', [('--Config', 'myconfig.yaml'),
+                                   ('-C', 'myconfig.yaml'),
+                                   ('-c', 'mygenesis.json'),
+                                   ('-c', 'dict')])
+def test_custom_config_file(param):
     runner = CliRunner()
     with runner.isolated_filesystem():
+        opt, arg = param
 
-        arg = {
-            '-C': 'myconfig.yaml',
-            '--Config': 'myconfig.yaml',
-            '-c': "eth.genesis={}".format(genesis_dict).replace('\n', '').replace(' ', '')
-        }
-
-        if arg[option].endswith('.yaml'):
-            with open(arg[option], 'w') as text_file:
+        if arg.endswith('.yaml'):
+            with open(arg, 'w') as text_file:
                 text_file.write(genesis_yaml)
+        elif arg.endswith('.json'):
+            with open(arg, 'w') as text_file:
+                text_file.write(str(genesis_json))
+        else:
+            arg = str(genesis_json).replace('\n', '').replace(' ', '')
 
-        result = runner.invoke(app.app, [option, arg[option], 'config'])
+        if opt == '-c':
+            arg = 'eth.genesis={}'.format(arg)
 
-        for k, v in genesis_dict.items():
-            if k != 'alloc':
-                assert "{}: '{}'".format(k, v) in result.output, k
+        result = runner.invoke(app.app, [opt, arg, 'config'])
 
-        for k, v in genesis_dict['alloc'].items():
+        if arg.endswith('.json'):
+            patterns = ['genesis: {}'.format(param[1])]
+        else:
+            patterns = ["{}: '{}'".format(k, v) for k, v in genesis_json.items() if k != 'alloc']
+
+        for pat in patterns:
+            assert pat in result.output, '`{}` not found'.format(pat)
+
+        for k, v in genesis_json['alloc'].items():
             assert k in result.output
             assert v['balance'] in result.output
 
 
 if __name__ == '__main__':
-    test_custom_config_file('-C')
-    test_custom_config_file('--Config')
-    test_custom_config_file('-c')
+    test_custom_config_file(('--Config', 'myconfig.yaml'))
+    test_custom_config_file(('-C', 'myconfig.yaml'))
+    test_custom_config_file(('-c', 'mygenesis.json'))
+    test_custom_config_file(('-c', 'dict'))
