@@ -57,12 +57,12 @@ class EthApp(BaseApp):
 @click.group(help='Welcome to {}  version: {}'.format(EthApp.client_name, EthApp.client_version))
 @click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
               help="Configuration profile.", show_default=True)
-@click.option('alt_config', '--Config', '-C', type=str, help='Alternative config file',
-              callback=konfig.validate_alt_config_file)
+@click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
+              default=konfig.default_config_path, show_default=True, help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('alt_data_dir', '-d', '--data-dir', multiple=False, type=str,
-              help='data directory')
+              help='data directory', default=konfig.default_data_dir, show_default=True)
 @click.option('-l', '--log_config', multiple=False, type=str, default=":info",
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
@@ -92,7 +92,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     if alt_config:  # specified config file
         config = konfig.load_config(alt_config)
         if not config:
-            log.warning('empty config given')
+            log.warning('empty config given. default config values will be used')
     else:  # load config from default or set data_dir
         config = konfig.load_config(data_dir)
 
@@ -110,7 +110,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     merge_dict(config, PROFILES[profile])
 
     if genesis_custom:
-        # Part of the default config was overridden
+        # Fixed genesis_hash taked from profile must be deleted as custom genesis loaded
         del config['eth']['genesis_hash']
         config['eth']['genesis'] = genesis_custom
 
@@ -144,7 +144,8 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
 
 
 @app.command()
-@click.option('--dev/--nodev', default=False, help='Drop into interactive debugger on unhandled exceptions.')
+@click.option('--dev/--nodev', default=False,
+              help='Drop into interactive debugger on unhandled exceptions.')
 @click.option('--nodial/--dial',  default=False, help='Do not dial nodes.')
 @click.option('--fake/--nofake',  default=False, help='Fake genesis difficulty.')
 @click.option('--console',  is_flag=True, help='Immediately drop into interactive console.')
