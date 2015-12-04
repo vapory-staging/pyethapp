@@ -68,6 +68,22 @@ def check_config(config, required_config=required_config):
     return True
 
 
+def validate_alt_config_file(ctx, param, value):
+    """Used as a click.callback
+    Check if config file @value can be used as a pyethapp config"
+    """
+    if value:
+        try:
+            yaml_ = load_config(value)
+        except IOError, e:
+            raise click.BadParameter(str(e))
+        else:
+            if not isinstance(yaml_, dict):
+                raise click.BadParameter('content of config should be an yaml dictionary')
+            assert not yaml_.get('eth', {}).get('privkey_hex'), 'eth.privkey_hex found'
+    return value
+
+
 def setup_required_config(data_dir=default_data_dir):
     "writes minimal necessary config to data_dir"
     log.info('setup default config', path=data_dir)
@@ -90,26 +106,12 @@ def get_default_config(services):
     return config
 
 
-def _fix_accounts(path):
-    config = yaml.load(open(path))
-    eth_key = config.get('eth', {}).get('privkey_hex')
-    if eth_key:
-        print 'fixing config', path
-        del config['eth']['privkey_hex']
-        if not config['eth']:
-            del config['eth']
-        assert 'accounts' not in config
-        config['accounts'] = dict(privkeys_hex=[eth_key])
-        write_config(config)
-
-
 def load_config(path=default_config_path):
     """Load config from string or file like object `path`."""
     log.info('loading config', path=path)
     if os.path.exists(path):
         if os.path.isdir(path):
             path = get_config_path(path)
-        _fix_accounts(path)  # FIXME
         return yaml.load(open(path))
     return dict()
 
