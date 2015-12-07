@@ -87,11 +87,9 @@ class JSONRPCClient(object):
         i = 0
         while True:
             block = self.call('eth_getBlockByNumber', quantity_encoder(i), True)
-            if condition(block):
+            if condition(block) or not block:
                 return block
             i += 1
-
-            return None
 
     def new_filter(self, fromBlock="", toBlock="", address=None, topics=[]):
         encoders = dict(fromBlock=block_tag_encoder, toBlock=block_tag_encoder,
