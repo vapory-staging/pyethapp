@@ -1,6 +1,7 @@
 """Provides a simple way of testing JSON RPC commands."""
 import json
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.transports.http import HttpPostClientTransport
 from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
 from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
@@ -48,6 +49,10 @@ def topic_decoder(t):
     return big_endian_to_int(data_decoder(t))
 
 
+class JSONRPCClientReplyError(Exception):
+    pass
+
+
 class JSONRPCClient(object):
     protocol = JSONRPCProtocol()
 
@@ -76,7 +81,14 @@ class JSONRPCClient(object):
         if self.print_communication:
             print json.dumps(json.loads(request.serialize()), indent=2)
             print reply
-        return self.protocol.parse_reply(reply).result
+
+        jsonrpc_reply = self.protocol.parse_reply(reply)
+        if isinstance(jsonrpc_reply, JSONRPCSuccessResponse):
+            return jsonrpc_reply.result
+        elif isinstance(jsonrpc_reply, JSONRPCErrorResponse):
+            raise JSONRPCClientReplyError(jsonrpc_reply.error)
+        else:
+            raise JSONRPCClientReplyError('Unknown type of JSONRPC reply')
 
     __call__ = call
 
@@ -119,7 +131,7 @@ class JSONRPCClient(object):
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
-        to = normalize_address(to)
+        to = normalize_address(to, allow_blank=True)
         encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
                         value=quantity_encoder, gasPrice=quantity_encoder,
                         gas=quantity_encoder, data=data_encoder,
