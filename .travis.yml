@@ -19,3 +19,14 @@ script:
 
 after_success:
   - coveralls
+
+deploy:
+  provider: pypi
+  user: ethereum_pypi_automated
+  password:
+    secure: "NxQNT56QVXkgmDvnPFdtnVr0N0VRpkSTd5DBh1iiasf4pVessln0Uu8QxeQipeUpCKpB7+mCb4Bu2VFNQ7fN60M/wWENSQdl2gBz+GfOjt6TBPffUy1m6pNhtC3WCkqwOkLRe3KE0Dyy0wKqK3/QvyLwNZCoIUMk2CijvhS1UA0="
+  on:
+    tags: true
+    repo: ethereum/pyethapp
+    branch: develop
+  distributions: "sdist bdist_wheel"
