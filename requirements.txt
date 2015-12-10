@@ -10,9 +10,9 @@ werkzeug
 ipython
 statistics
 requests
-https://github.com/ethereum/pyrlp/tarball/develop#egg=rlp
-https://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p
-https://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum
+rlp==0.4.4
+devp2p==0.6.1
+ethereum==1.0.8
 pbkdf2
 scrypt
 pexpect
