@@ -168,6 +168,7 @@ class Console(BaseService):
             pass
 
     def start(self):
+        #start console service
         super(Console, self).start()
 
         class Eth(object):
@@ -175,17 +176,26 @@ class Console(BaseService):
             """
             convenience object to interact with the live chain
             """
-            app = self.app
-            services = self.app.services
-            stop = self._stop_app
-            chainservice = self.app.services.chain
-            chain = chainservice.chain
-            latest = head = property(lambda s: s.chain.head)
-            pending = head_candidate = property(lambda s: s.chain.head_candidate)
-            coinbase = self.app.services.accounts.coinbase
 
             def __init__(this, app):
                 this.app = app
+                this.services = app.services
+                this.stop = app.stop
+                this.chainservice = app.services.chain
+                this.chain = this.chainservice.chain
+                this.coinbase = app.services.accounts.coinbase
+
+
+            @property
+            def pending(this):
+                return this.chain.head_candidate
+
+            head_candidate = pending
+
+            @property
+            def latest(this):
+                return this.chain.head
+
 
             def transact(this, to, value=0, data='', sender=None,
                          startgas=25000, gasprice=60 * denoms.shannon):
@@ -255,8 +265,9 @@ class Console(BaseService):
             serpent = None
             pass
 
-        self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
-                                   denoms=denoms, true=True, false=False)
+        self.console_locals = dict(eth=Eth(self.app),solidity=solc_wrapper, serpent=serpent,
+                                    denoms=denoms, true=True, false=False, Eth=Eth)
+
         for k, v in self.app.script_globals.items():
             self.console_locals[k] = v
 
@@ -271,6 +282,28 @@ class Console(BaseService):
         print("\tuse `{}help(eth){}` for help on accessing the live chain.".format(
             bc.HEADER, bc.OKBLUE))
         print("\n" + bc.ENDC)
+
+        # runmultiple hack in place?
+        if hasattr(self.console_locals['eth'].app, 'apps'):
+            #print additional hint for 'runmultiple'
+            print('\n' * 2 + bc.OKGREEN)
+            print("Hint:"+ bc.OKBLUE)
+            print('\tOther nodes are accessible from {}`eth.app.apps`{}').format(
+                bc.HEADER, bc.OKBLUE)
+            print('\tThey where automatically assigned to:')
+            print("\t`{}eth1{}`".format(
+                bc.HEADER, bc.OKBLUE))
+            if len(self.console_locals['eth'].app.apps) < 3:
+                print("\t {}...{}".format(
+                    bc.HEADER, bc.OKBLUE))
+            print("\t`{}eth{}{}`".format(
+                bc.HEADER, len(self.console_locals['eth'].app.apps) - 1, bc.OKBLUE))
+            print("\n" + bc.ENDC)
+
+            # automatically assign different nodes to 'eth1.', 'eth2.'' , ....
+            Eth = self.console_locals['Eth']
+            for x in range(1, len(self.console_locals['eth'].app.apps)):
+                self.console_locals['eth' + str(x)] = Eth(self.console_locals['eth'].app.apps[x])
 
         # Remove handlers that log to stderr
         root = getLogger()
