@@ -529,7 +529,7 @@ class Web3(Subdispatcher):
 
     @public
     def clientVersion(self):
-        return self.app.client_version
+        return "{s.app.client_name}/{s.app.client_version}".format(s=self)
 
 
 class Net(Subdispatcher):
