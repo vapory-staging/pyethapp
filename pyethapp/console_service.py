@@ -293,7 +293,7 @@ class Console(BaseService):
             print('\tThey where automatically assigned to:')
             print("\t`{}eth1{}`".format(
                 bc.HEADER, bc.OKBLUE))
-            if len(self.console_locals['eth'].app.apps) < 3:
+            if len(self.console_locals['eth'].app.apps) > 3:
                 print("\t {}...{}".format(
                     bc.HEADER, bc.OKBLUE))
             print("\t`{}eth{}{}`".format(
