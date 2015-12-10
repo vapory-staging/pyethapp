@@ -87,11 +87,9 @@ class JSONRPCClient(object):
         i = 0
         while True:
             block = self.call('eth_getBlockByNumber', quantity_encoder(i), True)
-            if condition(block):
+            if condition(block) or not block:
                 return block
             i += 1
-
-            return None
 
     def new_filter(self, fromBlock="", toBlock="", address=None, topics=[]):
         encoders = dict(fromBlock=block_tag_encoder, toBlock=block_tag_encoder,
@@ -121,7 +119,7 @@ class JSONRPCClient(object):
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
-        to = normalize_address(to)
+        to = normalize_address(to, allow_blank=True)
         encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
                         value=quantity_encoder, gasPrice=quantity_encoder,
                         gas=quantity_encoder, data=data_encoder,
