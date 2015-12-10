@@ -54,7 +54,7 @@ class EthApp(BaseApp):
 
 
 # Separators should be underscore!
-@click.group(help='Welcome to {}  version: {}'.format(EthApp.client_name, EthApp.client_version))
+@click.group(help='Welcome to {} {}'.format(EthApp.client_name, EthApp.client_version))
 @click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
               help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
