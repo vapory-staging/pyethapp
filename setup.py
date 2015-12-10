@@ -36,7 +36,7 @@ test_requirements = ['ethereum-serpent>=1.8.1']
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '1.0.11'
+version = '1.0.12'
 
 setup(
     name='pyethapp',
