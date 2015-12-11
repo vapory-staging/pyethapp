@@ -494,10 +494,11 @@ class ChainService(WiredService):
         found = []
         count = min(count, self.wire_protocol.max_getblockhashes_count)
         for i in range(number, number + count):
-            h = self.chain.index.get_block_by_number(i)
-            if not h:
-                break
-            found.append(h)
+            try:
+                h = self.chain.index.get_block_by_number(i)
+                found.append(h)
+            except KeyError:
+                log.debug("unknown block requested", number=number)
         log.debug("sending: found block_hashes", count=len(found))
         proto.send_blockhashes(*found)
         return
