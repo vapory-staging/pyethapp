@@ -1,6 +1,7 @@
 import os
 import pytest
 from pyethapp import app
+from pyethapp import config
 from click.testing import CliRunner
 
 genesis_json = {
@@ -87,6 +88,21 @@ def test_custom_config_file(param):
         for k, v in genesis_json['alloc'].items():
             assert k in result.output
             assert v['balance'] in result.output
+
+
+def test_config_from_datadir(tmpdir):
+    """Test, that when given a `--data-dir`, the app
+    reads the config from the '`--data-dir`/config.yaml'.
+    """
+    DIR = "datadir"
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        os.mkdir(DIR)
+        runner.invoke(app.app, ["--data-dir", DIR, "config"])
+        with open(os.path.join(DIR, config.CONFIG_FILE_NAME), "w") as configfile:
+            configfile.write("p2p:\n  max_peers: 9000")
+        result = runner.invoke(app.app, ["--data-dir", DIR, "config"])
+        assert "max_peers: 9000" in result.output
 
 
 if __name__ == '__main__':

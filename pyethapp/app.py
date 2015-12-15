@@ -55,7 +55,7 @@ class EthApp(BaseApp):
 @click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
               help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
-              default=konfig.default_config_path, show_default=True, help='Alternative config file')
+              help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('alt_data_dir', '-d', '--data-dir', multiple=False, type=str,
