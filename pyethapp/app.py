@@ -1,7 +1,6 @@
 from ethereum import blocks
 from logging import StreamHandler
 from IPython.core import ultratb
-import monkeypatches
 import json
 import os
 import signal
@@ -30,9 +29,7 @@ from accounts import AccountsService, Account
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services
-from pyethapp.jsonrpc import LogFilter
 import utils
-from ethereum.utils import normalize_address
 
 log = slogging.get_logger('app')
 
@@ -188,7 +185,7 @@ def run(ctx, dev, nodial, fake, console):
         AccountsService.register_with_app(app)
         unlock_accounts(ctx.obj['unlock'], app.services.accounts, password=ctx.obj['password'])
         try:
-            coinbase = app.services.accounts.coinbase
+            app.services.accounts.coinbase
         except ValueError as e:
             log.fatal('invalid coinbase', coinbase=config.get('pow', {}).get('coinbase_hex'),
                       error=e.message)
