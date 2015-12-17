@@ -58,6 +58,7 @@ def test_pow_default(app):
     assert not app.config['pow']['activated']
     assert app.config['pow']['cpu_pct'] == 100
     assert not app.config['pow']['coinbase_hex']
+    assert app.config['pow']['mine_empty_blocks']
 
 
 def test_pow_config(app):
@@ -73,3 +74,16 @@ def test_pow_mine_empty_block(app):
     e.wait(timeout=TIMEOUT)
     assert e.is_set(), "Block has not been mined for {} s".format(TIMEOUT)
     assert chain.mined_block
+
+
+def test_pow_dont_mine_empty_block(app):
+    slogging.configure("pow:trace")
+    app.config['pow']['mine_empty_blocks'] = False
+    app.config['pow']['activated'] = True
+    chain = app.services.chain
+    pow = app.services.pow
+    e = chain.block_mined_event
+    e.wait(timeout=2)
+    assert not e.is_set(), "Block has been mined"
+    assert chain.mined_block is None
+    assert pow.hashrate == 0, "Miner is working"

@@ -109,7 +109,12 @@ def powworker_process(cpipe, cpu_pct):
 class PoWService(BaseService):
 
     name = 'pow'
-    default_config = dict(pow=dict(activated=False, cpu_pct=100, coinbase_hex=None))
+    default_config = dict(pow=dict(
+        activated=False,
+        cpu_pct=100,
+        coinbase_hex=None,
+        mine_empty_blocks=True
+    ))
 
     def __init__(self, app):
         super(PoWService, self).__init__(app)
@@ -127,10 +132,18 @@ class PoWService(BaseService):
     def on_new_head_candidate(self, block):
         log.debug('new head candidate', block_number=block.number,
                   mining_hash=block.mining_hash.encode('hex'), activated=self.active)
-        if self.active and not self.app.services.chain.is_syncing:
-            log.debug('mining', difficulty=block.difficulty)
-            self.ppipe.put(('mine', dict(mining_hash=block.mining_hash,
-                                         block_number=block.number, difficulty=block.difficulty)))
+        if not self.active:
+            return
+        if self.app.services.chain.is_syncing:
+            return
+        if (block.transaction_count == 0 and
+                not self.app.config['pow']['mine_empty_blocks']):
+            return
+
+        log.debug('mining', difficulty=block.difficulty)
+        self.ppipe.put(('mine', dict(mining_hash=block.mining_hash,
+                                     block_number=block.number,
+                                     difficulty=block.difficulty)))
 
     def recv_hashrate(self, hashrate):
         log.trace('hashrate updated', hashrate=hashrate)
