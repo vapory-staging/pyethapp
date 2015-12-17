@@ -128,6 +128,7 @@ class PoWService(BaseService):
         log.debug('new head candidate', block_number=block.number,
                   mining_hash=block.mining_hash.encode('hex'), activated=self.active)
         if self.active and not self.app.services.chain.is_syncing:
+            log.debug('mining', difficulty=block.difficulty)
             self.ppipe.put(('mine', dict(mining_hash=block.mining_hash,
                                          block_number=block.number, difficulty=block.difficulty)))
 
