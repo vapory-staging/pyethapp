@@ -10,9 +10,9 @@ werkzeug
 ipython
 statistics
 requests
-rlp==0.4.4
-devp2p==0.6.1
-ethereum==1.0.8
+rlp>=0.4.4
+devp2p>=0.6.2
+ethereum>=1.0.8
 pbkdf2
 scrypt
 pexpect
