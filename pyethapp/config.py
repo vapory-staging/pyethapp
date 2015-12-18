@@ -55,7 +55,7 @@ def setup_data_dir(data_dir=None):
         setup_required_config(data_dir)
 
 
-required_config = dict(node=dict(privkey_hex=''), accounts=dict(privkeys_hex=[]))
+required_config = dict(node=dict(privkey_hex=''))
 
 
 def check_config(config, required_config=required_config):
@@ -92,8 +92,7 @@ def setup_required_config(data_dir=default_data_dir):
     assert not os.path.exists(config_path)
     if not os.path.exists(data_dir):
         setup_data_dir(data_dir)
-    config = dict(node=dict(privkey_hex=mk_random_privkey().encode('hex')),
-                  accounts=dict(privkeys_hex=[mk_random_privkey().encode('hex')]))
+    config = dict(node=dict(privkey_hex=mk_random_privkey().encode('hex')))
     write_config(config, config_path)
 
 
