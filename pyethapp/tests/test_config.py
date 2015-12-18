@@ -79,3 +79,18 @@ def test_setup_data_dir_existing_config(tmpdir):
     config.setup_data_dir(str(data_dir))
 
     assert data_dir.join(config.CONFIG_FILE_NAME).exists()
+
+
+def test_dump_config_does_not_leak_privkey(capsys):
+    conf = config.get_default_config([BaseApp] + base_services)
+    SECRET = "thisshouldnotbedumpedincleartext"
+    conf['accounts'] = {}
+    conf['accounts']['privkeys_hex'] = [SECRET]
+    conf['node'] = {}
+    conf['node']['privkey_hex'] = SECRET
+
+    config.dump_config(conf)
+
+    output = capsys.readouterr()[0]
+    assert 'node' in output  # sanity check
+    assert SECRET not in output
