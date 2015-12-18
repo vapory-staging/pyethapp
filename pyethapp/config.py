@@ -17,6 +17,7 @@ todo:
 
 """
 import os
+import copy
 import click
 from devp2p.utils import update_config_with_defaults
 import errno
@@ -156,7 +157,15 @@ def set_config_param(config, s, strict=True):
 
 
 def dump_config(config):
-    print yaml.dump(config)
+    """mask privkey_hex entries in config and print as yaml
+    """
+    konfig = copy.deepcopy(config)
+    mask = lambda key: "{}{}{}".format(key[:2], "*" * (len(key) - 4), key[-2:])
+    if len(konfig.get('accounts', {}).get('privkeys_hex', [])):
+        konfig['accounts']['privkeys_hex'] = [mask(key) for key in konfig['accounts']['privkeys_hex']]
+    if len(konfig.get('node', {}).get('privkey_hex')):
+        konfig['node']['privkey_hex'] = mask(konfig['node']['privkey_hex'])
+    print yaml.dump(konfig)
 
 
 def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
