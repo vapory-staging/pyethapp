@@ -19,7 +19,7 @@ todo:
 import os
 import copy
 import click
-from devp2p.utils import update_config_with_defaults
+from devp2p.utils import update_config_with_defaults # updates only missing entries
 import errno
 import yaml
 import ethereum.slogging as slogging

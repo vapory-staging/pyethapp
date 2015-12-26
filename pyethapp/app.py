@@ -96,7 +96,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     config['data_dir'] = data_dir
 
     # Store custom genesis to restore if overridden by profile value
-    genesis_custom = config.get('eth', {}).get('genesis')
+    genesis_from_config_file = config.get('eth', {}).get('genesis')
 
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
@@ -106,11 +106,12 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
 
-    if genesis_custom:
+    if genesis_from_config_file:
         # Fixed genesis_hash taked from profile must be deleted as custom genesis loaded
         del config['eth']['genesis_hash']
-        config['eth']['genesis'] = genesis_custom
+        config['eth']['genesis'] = genesis_from_config_file
 
+    pre_cmd_line_config_genesis = config.get('eth', {}).get('genesis')
     # override values with values from cmd line
     for config_value in config_values:
         try:
@@ -120,10 +121,14 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
                                'specifies the parameter to set and d is a valid yaml value '
                                '(example: "-c jsonrpc.port=5000")')
 
+    if pre_cmd_line_config_genesis != config.get('eth', {}).get('genesis'):
+        # Fixed genesis_hash taked from profile must be deleted as custom genesis loaded
+        if 'genesis_hash' in config['eth']:
+            del config['eth']['genesis_hash']
+
     # Load genesis config
     konfig.update_config_from_genesis_json(config,
                                            genesis_json_filename_or_dict=config['eth']['genesis'])
-
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
     if mining_pct > 0:
