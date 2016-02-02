@@ -1,3 +1,4 @@
+# -*- coding: utf8 -*-
 from ethereum import blocks
 from logging import StreamHandler
 from IPython.core import ultratb
@@ -80,6 +81,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
     # data dir default or from cli option
+    alt_data_dir = os.path.expanduser(alt_data_dir)
     data_dir = alt_data_dir or konfig.default_data_dir
     konfig.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
     log.info('using data in', path=data_dir)

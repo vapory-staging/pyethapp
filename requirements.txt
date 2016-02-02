@@ -2,6 +2,7 @@ gevent==1.1b3
 gipc==0.4.0
 CodernityDB
 leveldb
+lmdb
 click
 decorator
 wheel
