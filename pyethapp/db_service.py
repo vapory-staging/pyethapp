@@ -1,12 +1,16 @@
+# -*- coding: utf8 -*-
+import sys
+
 from devp2p.service import BaseService
 from ethereum.db import BaseDB
 from ethereum.slogging import get_logger
+from ephemdb_service import EphemDB
+
 log = get_logger('db')
-import sys
 
-
-# load available databases
 dbs = {}
+dbs['EphemDB'] = EphemDB
+
 try:
     from leveldb_service import LevelDBService
 except ImportError:
@@ -21,9 +25,12 @@ except ImportError:
 else:
     dbs['CodernityDB'] = CodernityDB
 
-
-from ephemdb_service import EphemDB
-dbs['EphemDB'] = EphemDB
+try:
+    from lmdb_service import LmDBService
+except ImportError:
+    pass
+else:
+    dbs['LmDB'] = LmDBService
 
 
 class DBService(BaseDB, BaseService):
