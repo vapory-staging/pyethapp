@@ -1,6 +1,7 @@
 from itertools import count
 import json
 import pytest
+import serpent
 from devp2p.peermanager import PeerManager
 import ethereum
 from ethereum import tester
@@ -51,7 +52,7 @@ def test_compileSolidity():
     from pyethapp.jsonrpc import Compilers, data_encoder
     import ethereum._solidity
     s = ethereum._solidity.get_solidity()
-    if s == None:
+    if s is None:
         pytest.xfail("solidity not installed, not tested")
     else:
         c = Compilers()
@@ -79,7 +80,8 @@ def test_compileSolidity():
             assert Av == Bt['info'][k]
 
 
-@pytest.mark.skipif('solidity' not in Compilers().compilers, reason="solidity compiler not available")
+@pytest.mark.skipif('solidity' not in Compilers().compilers,
+                    reason="solidity compiler not available")
 def test_compileSolidity_2():
     result = Compilers().compileSolidity(solidity_code)
     assert set(result.keys()) == {'test'}
@@ -208,6 +210,37 @@ def test_send_transaction(test_app):
     assert chain.head_candidate.get_transactions() == []
 
 
+def test_send_transaction_with_contract(test_app):
+    serpent_code = '''
+def main(a,b):
+    return(a ^ b)
+'''
+    tx_to = b'';
+    evm_code = serpent.compile(serpent_code)
+    chain = test_app.services.chain.chain
+    assert chain.head_candidate.get_balance(tx_to) == 0
+    sender = test_app.services.accounts.unlocked_accounts[0].address
+    assert chain.head_candidate.get_balance(sender) > 0
+    tx = {
+        'from': address_encoder(sender),
+        'to': address_encoder(tx_to),
+        'data': evm_code.encode('hex')
+    }
+    data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    creates = chain.head_candidate.get_transaction(0).creates
+
+    code = chain.head_candidate.account_to_dict(creates)['code']
+    assert len(code) > 2
+    assert code != '0x'
+
+    test_app.mine_next_block()
+
+    creates = chain.head.get_transaction(0).creates
+    code = chain.head.account_to_dict(creates)['code']
+    assert len(code) > 2
+    assert code != '0x'
+
+
 def test_pending_transaction_filter(test_app):
     filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
     assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
@@ -277,11 +310,11 @@ def test_get_logs(test_app):
     })
     assert len(logs1) == 1
     assert logs1[0]['type'] == 'pending'
-    assert logs1[0]['logIndex'] == None
-    assert logs1[0]['transactionIndex'] == None
-    assert logs1[0]['transactionHash'] == None
-    assert logs1[0]['blockHash'] == None
-    assert logs1[0]['blockNumber'] == None
+    assert logs1[0]['logIndex'] is None
+    assert logs1[0]['transactionIndex'] is None
+    assert logs1[0]['transactionHash'] is None
+    assert logs1[0]['blockHash'] is None
+    assert logs1[0]['blockNumber'] is None
     assert logs1[0]['address'] == contract_address
 
     logs2 = test_app.rpc_request('eth_getLogs', {
@@ -377,11 +410,11 @@ def test_get_filter_changes(test_app):
     logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
     assert len(logs[-1]) == 1
     assert logs[-1][0]['type'] == 'pending'
-    assert logs[-1][0]['logIndex'] == None
-    assert logs[-1][0]['transactionIndex'] == None
-    assert logs[-1][0]['transactionHash'] == None
-    assert logs[-1][0]['blockHash'] == None
-    assert logs[-1][0]['blockNumber'] == None
+    assert logs[-1][0]['logIndex'] is None
+    assert logs[-1][0]['transactionIndex'] is None
+    assert logs[-1][0]['transactionHash'] is None
+    assert logs[-1][0]['blockHash'] is None
+    assert logs[-1][0]['blockNumber'] is None
     assert logs[-1][0]['address'] == contract_address
     pending_log = logs[-1][0]
 
