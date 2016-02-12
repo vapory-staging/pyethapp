@@ -934,7 +934,8 @@ class Chain(Subdispatcher):
             assert nonce is not None, 'signed but no nonce provided'
             assert v and r and s
         else:
-            nonce = nonce or self.app.services.chain.chain.head_candidate.get_nonce(sender)
+            if nonce is None or nonce == 0:
+                nonce = self.app.services.chain.chain.head_candidate.get_nonce(sender)
 
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
         tx._sender = None
@@ -1165,7 +1166,8 @@ class LogFilter(object):
         for i, block in enumerate(blocks_to_check):
             if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
                 _bloom = self.chain.get_bloom(block)
-                # Check that the bloom for this block contains at least one of the desired addresses
+                # Check that the bloom for this block contains at least one of the desired
+                # addresses
                 if self.addresses:
                     pass_address_check = False
                     for address in self.addresses:

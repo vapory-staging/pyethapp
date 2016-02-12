@@ -188,9 +188,13 @@ class JSONRPCClient(object):
             _sender = sender
             sender = privtoaddr(self.privkey)
             assert sender == _sender
+            # fetch nonce
+            nonce = nonce if nonce is not None else self.nonce(sender)
+        if nonce is None:
+            nonce = 0
+
+
         assert sender
-        # fetch nonce
-        nonce = nonce if nonce is not None else self.nonce(sender)
         if not startgas:
             startgas = quantity_decoder(self.call('eth_gasLimit')) - 1
 
