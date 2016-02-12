@@ -40,6 +40,8 @@ class SyncTask(object):
         self.blockhash = blockhash
         self.chain_difficulty = chain_difficulty
         self.requests = dict()  # proto: Event
+        self.start_block_number = self.chain.head.number
+        self.end_block_number = self.start_block_number + 1  # minimum synctask
         gevent.spawn(self.run)
 
     def run(self):
@@ -128,8 +130,12 @@ class SyncTask(object):
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
             log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes, ending with %s' % utils.encode_hex(blockhashes_chain[-1]))
+            self.end_block_number = self.chain.head.number + len(blockhashes_chain)
             max_blockhashes_per_request = self.max_blockhashes_per_request
 
+        self.start_block_number = self.chain.get(blockhash).number
+        self.end_block_number = self.chain.get(blockhash).number + len(blockhashes_chain)
+        log_st.debug('computed missing numbers', start_number=self.start_block_number, end_number=self.end_block_number)
         self.fetch_blocks(blockhashes_chain)
 
     def fetch_blocks(self, blockhashes_chain):

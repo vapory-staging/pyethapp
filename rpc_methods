@@ -21,7 +21,7 @@ Checklist for implemented JSON RPC methods
 [x] eth_getUncleCountByBlockNumber
 [x] eth_getCode
 [ ] eth_sign
-[ ] eth_syncing
+[x] eth_syncing
 [x] eth_sendTransaction
 [x] eth_call
 [ ] eth_estimateGas
