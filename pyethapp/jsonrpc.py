@@ -3,6 +3,7 @@ PROPAGATE_ERRORS = False
 
 ###############################
 
+import os
 from copy import deepcopy
 from decorator import decorator
 from collections import Iterable
@@ -30,6 +31,7 @@ from eth_protocol import ETHProtocol
 from ethereum.trie import Trie
 from ethereum.utils import denoms
 import ethereum.bloom as bloom
+from accounts import Account
 from ipc_rpc import bind_unix_listener, serve
 
 from ethereum.utils import int32
@@ -157,7 +159,7 @@ class RPCServer(BaseService):
 
     @classmethod
     def subdispatcher_classes(cls):
-        return (Web3, Net, Compilers, DB, Chain, Miner, FilterManager)
+        return (Web3, Personal, Net, Compilers, DB, Chain, Miner, FilterManager)
 
     def get_block(self, block_id=None):
         """Return the block identified by `block_id`.
@@ -595,6 +597,41 @@ def encode_res(encoder):
         res = f(*args, **kwargs)
         return encoder(res)
     return new_f
+
+
+class Personal(Subdispatcher):
+
+    """Subdispatcher for account-related RPC methods.
+
+    NOTE: this do not seem to be part of the official JSON-RPC specs but instead part of
+    go-ethereum's JavaScript-Console: https://github.com/ethereum/go-ethereum/wiki/JavaScript-Console#personal
+
+    It is needed for MIST-IPC.
+    """
+
+    prefix = 'personal_'
+
+    @public
+    @decode_arg('account_address', address_decoder)
+    def unlockAccount(self, account_address, passwd, duration):
+        if account_address in self.app.services.accounts:
+            account = self.app.services.accounts.get_by_address(account_address)
+            account.unlock(passwd)
+            gevent.spawn_later(duration, lambda: account.lock())
+            return not account.locked
+        else:
+            return False
+
+    @public
+    @encode_res(address_encoder)
+    def newAccount(self, passwd):
+        account = Account.new(passwd)
+        account.path = os.path.join(self.app.services.accounts.keystore_dir, account.address.encode('hex'))
+        self.app.services.accounts.add_account(account)
+        account.lock()
+        assert account.locked
+        assert self.app.services.accounts.find(account.address.encode('hex'))
+        return account.address
 
 
 class Web3(Subdispatcher):
