@@ -3,8 +3,8 @@ PROPAGATE_ERRORS = False
 
 ###############################
 
-import time
-from copy import copy, deepcopy
+import os
+from copy import deepcopy
 from decorator import decorator
 from collections import Iterable
 import inspect
@@ -25,13 +25,16 @@ from tinyrpc.exc import BadRequestError, MethodNotFoundError
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol, JSONRPCInvalidParamsError
 from tinyrpc.server.gevent import RPCServerGreenlets
 from tinyrpc.transports.wsgi import WsgiServerTransport
+from tinyrpc.transports import ServerTransport
 from devp2p.service import BaseService
 from eth_protocol import ETHProtocol
 from ethereum.trie import Trie
 from ethereum.utils import denoms
 import ethereum.bloom as bloom
+from accounts import Account
+from ipc_rpc import bind_unix_listener, serve
 
-from ethereum.utils import DEBUG, int32
+from ethereum.utils import int32
 
 logger = log = slogging.get_logger('jsonrpc')
 
@@ -99,84 +102,64 @@ class LoggingDispatcher(RPCDispatcher):
         self.logger = log.debug
 
     def dispatch(self, request):
-        if isinstance(request, Iterable):
-            request_list = request
-        else:
-            request_list = [request]
-        for req in request_list:
-            self.logger('------------------------------')
-            self.logger('RPC call', method=req.method, args_=req.args, kwargs=req.kwargs,
-                        id=req.unique_id)
-        response = super(LoggingDispatcher, self).dispatch(request)
-        if isinstance(response, Iterable):
-            response_list = response
-        else:
-            response_list = [response]
-        for res in response_list:
-            if hasattr(res, 'result'):
-                self.logger('RPC result', id=res.unique_id, result=res.result)
+        try:
+            if isinstance(request, Iterable):
+                request_list = request
             else:
-                self.logger('RPC error', id=res.unique_id, error=res.error)
-        return response
+                request_list = [request]
+            for req in request_list:
+                self.logger('------------------------------')
+                self.logger('RPC call', method=req.method, args_=req.args, kwargs=req.kwargs,
+                            id=req.unique_id)
+            response = super(LoggingDispatcher, self).dispatch(request)
+            if isinstance(response, Iterable):
+                response_list = response
+            else:
+                response_list = [response]
+            for res in response_list:
+                if hasattr(res, 'result'):
+                    self.logger('RPC result', id=res.unique_id, result=res.result)
+                else:
+                    self.logger('RPC error', id=res.unique_id, error=res.error)
+            return response
+        except KeyError as e:
+            log.error("Unknown/unhandled RPC method!", method=e.args[0])
 
 
-class JSONRPCServer(BaseService):
-
-    """Service providing an HTTP server with JSON RPC interface.
-
-    Other services can extend the JSON RPC interface by creating a
-    :class:`Subdispatcher` and registering it via
-    `Subdispatcher.register(self.app.services.json_rpc_server)`.
-
-    Alternatively :attr:`dispatcher` can be extended directly (see
-    https://tinyrpc.readthedocs.org/en/latest/dispatch.html).
+class IPCDomainSocketTransport(ServerTransport):
+    """tinyrpc ServerTransport implementation for unix domain sockets.
     """
+    def __init__(self, sockpath=None, queue_class=gevent.queue.Queue):
+        self.socket = bind_unix_listener(sockpath)
+        self.messages = queue_class()
+        self.replies = queue_class()
 
-    name = 'jsonrpc'
-    default_config = dict(jsonrpc=dict(
-        listen_port=4000,
-        listen_host='127.0.0.1',
-        corsdomain=''))
+    def handle(self, socket, address):
+        while True:
+            try:
+                msg = socket.recv(4096)
+                if not msg:
+                    break
+                self.messages.put((socket, msg))
+                reply = self.replies.get()
+                socket.sendall(reply)
+            except IOError as e:
+                log.error("IOError on ipc socket", error=e.args)
+
+    def receive_message(self):
+        return self.messages.get()
+
+    def send_reply(self, context, reply):
+        self.replies.put(reply)
+
+
+class RPCServer(BaseService):
+    """Base-class for RPC-servers, can be extended for different transports.
+    """
 
     @classmethod
     def subdispatcher_classes(cls):
-        return (Web3, Net, Compilers, DB, Chain, Miner, FilterManager)
-
-    def __init__(self, app):
-        log.debug('initializing JSONRPCServer')
-        BaseService.__init__(self, app)
-        self.app = app
-
-        self.dispatcher = LoggingDispatcher()
-        # register sub dispatchers
-        for subdispatcher in self.subdispatcher_classes():
-            subdispatcher.register(self)
-
-        transport = WsgiServerTransport(queue_class=gevent.queue.Queue,
-                                        allow_origin=self.config['jsonrpc']['corsdomain'])
-        # start wsgi server as a background-greenlet
-        self.listen_port = self.config['jsonrpc']['listen_port']
-        self.listen_host = self.config['jsonrpc']['listen_host']
-        self.wsgi_server = gevent.wsgi.WSGIServer((self.listen_host, self.listen_port),
-                                                  transport.handle, log=WSGIServerLogger)
-        self.wsgi_thread = None
-        self.rpc_server = RPCServerGreenlets(
-            transport,
-            JSONRPCProtocol(),
-            self.dispatcher
-        )
-        self.default_block = 'latest'
-
-    def _run(self):
-        log.info('starting JSONRPCServer', port=self.listen_port)
-        # in the main greenlet, run our rpc_server
-        self.wsgi_thread = gevent.spawn(self.wsgi_server.serve_forever)
-        self.rpc_server.serve_forever()
-
-    def stop(self):
-        log.info('stopping JSONRPCServer')
-        if self.wsgi_thread is not None:
-            self.wsgi_thread.kill()
+        return (Web3, Personal, Net, Compilers, DB, Chain, Miner, FilterManager)
 
     def get_block(self, block_id=None):
         """Return the block identified by `block_id`.
@@ -193,6 +176,7 @@ class JSONRPCServer(BaseService):
         :returns: the requested block
         :raises: :exc:`KeyError` if the block does not exist
         """
+        log.debug("get_block")
         assert 'chain' in self.app.services
         chain = self.app.services.chain.chain
         if block_id is None:
@@ -215,6 +199,106 @@ class JSONRPCServer(BaseService):
             assert is_string(block_id)
             hash_ = block_id
         return chain.get(hash_)
+
+
+class IPCRPCServer(RPCServer):
+    """Service providing an IPC Service over a named socket.
+    Should respond to requests such as:
+
+        >>> echo '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["latest",false]}' | socat - /tmp/geth.ipc
+    """
+    name = 'ipc'
+    default_config = dict(ipc=dict(
+        ipcpath='/tmp/pyethapp.ipc',
+    ))
+
+    def __init__(self, app):
+        log.debug('initializing IPCRPCServer')
+        BaseService.__init__(self, app)
+        self.app = app
+
+        self.dispatcher = LoggingDispatcher()
+        # register sub dispatchers
+        for subdispatcher in self.subdispatcher_classes():
+            subdispatcher.register(self)
+
+        self.ipcpath = self.config['ipc']['ipcpath']
+        self.transport = IPCDomainSocketTransport(queue_class=gevent.queue.Queue,
+                sockpath=self.ipcpath)
+
+        self.rpc_server = RPCServerGreenlets(
+            self.transport,
+            JSONRPCProtocol(),
+            self.dispatcher
+        )
+        self.default_block = 'latest'
+
+    def _run(self):
+        log.info('starting IPCRPCServer', ipcpath=self.ipcpath)
+        # in the main greenlet, run our rpc_server
+        self.socket_server = gevent.spawn(serve, self.transport.socket, handler=self.transport.handle)
+        self.rpc_server.serve_forever()
+
+    def stop(self):
+        log.info('stopping IPCRPCServer')
+        if self.socket_server is not None:
+            self.socket_server.kill()
+
+
+class JSONRPCServer(RPCServer):
+    """Service providing an HTTP server with JSON RPC interface.
+
+    Other services can extend the JSON RPC interface by creating a
+    :class:`Subdispatcher` and registering it via
+    `Subdispatcher.register(self.app.services.json_rpc_server)`.
+
+    Alternatively :attr:`dispatcher` can be extended directly (see
+    https://tinyrpc.readthedocs.org/en/latest/dispatch.html).
+    """
+
+    name = 'jsonrpc'
+    default_config = dict(jsonrpc=dict(
+        listen_port=4000,
+        listen_host='127.0.0.1',
+        corsdomain='',
+        ))
+
+    def __init__(self, app):
+        log.debug('initializing JSONRPCServer')
+        BaseService.__init__(self, app)
+        self.app = app
+
+        self.dispatcher = LoggingDispatcher()
+        # register sub dispatchers
+        for subdispatcher in self.subdispatcher_classes():
+            subdispatcher.register(self)
+
+        transport = WsgiServerTransport(queue_class=gevent.queue.Queue,
+                                        allow_origin=self.config['jsonrpc']['corsdomain'])
+        # start wsgi server as a background-greenlet
+        self.listen_port = self.config['jsonrpc']['listen_port']
+        self.listen_host = self.config['jsonrpc']['listen_host']
+        listener = (self.listen_host, self.listen_port)
+        self.wsgi_server = gevent.wsgi.WSGIServer(listener,
+                                                  transport.handle, log=WSGIServerLogger)
+        self.wsgi_thread = None
+        self.rpc_server = RPCServerGreenlets(
+            transport,
+            JSONRPCProtocol(),
+            self.dispatcher
+        )
+        self.default_block = 'latest'
+
+    def _run(self):
+        log.info('starting JSONRPCServer', port=self.listen_port)
+        # in the main greenlet, run our rpc_server
+        self.wsgi_thread = gevent.spawn(self.wsgi_server.serve_forever)
+        self.rpc_server.serve_forever()
+
+    def stop(self):
+        log.info('stopping JSONRPCServer')
+        if self.wsgi_thread is not None:
+            self.wsgi_thread.kill()
 
 
 class Subdispatcher(object):
@@ -515,6 +599,41 @@ def encode_res(encoder):
     return new_f
 
 
+class Personal(Subdispatcher):
+
+    """Subdispatcher for account-related RPC methods.
+
+    NOTE: this do not seem to be part of the official JSON-RPC specs but instead part of
+    go-ethereum's JavaScript-Console: https://github.com/ethereum/go-ethereum/wiki/JavaScript-Console#personal
+
+    It is needed for MIST-IPC.
+    """
+
+    prefix = 'personal_'
+
+    @public
+    @decode_arg('account_address', address_decoder)
+    def unlockAccount(self, account_address, passwd, duration):
+        if account_address in self.app.services.accounts:
+            account = self.app.services.accounts.get_by_address(account_address)
+            account.unlock(passwd)
+            gevent.spawn_later(duration, lambda: account.lock())
+            return not account.locked
+        else:
+            return False
+
+    @public
+    @encode_res(address_encoder)
+    def newAccount(self, passwd):
+        account = Account.new(passwd)
+        account.path = os.path.join(self.app.services.accounts.keystore_dir, account.address.encode('hex'))
+        self.app.services.accounts.add_account(account)
+        account.lock()
+        assert account.locked
+        assert self.app.services.accounts.find(account.address.encode('hex'))
+        return account.address
+
+
 class Web3(Subdispatcher):
 
     """Subdispatcher for some generic RPC methods."""
@@ -693,6 +812,19 @@ class Chain(Subdispatcher):
         return str(ETHProtocol.version)
 
     @public
+    def syncing(self):
+        if not self.chain.is_syncing:
+            return False
+        else:
+            synctask = self.chain.synchronizer.synctask
+            result = dict(
+                startingBlock=synctask.start_block_number,
+                currentBlock=self.chain.chain.head.number,
+                highestBlock=synctask.end_block_number,
+            )
+            return {k: quantity_encoder(v) for k, v in result.items()}
+
+    @public
     @encode_res(quantity_encoder)
     def blockNumber(self):
         return self.chain.chain.head.number
@@ -851,7 +983,7 @@ class Chain(Subdispatcher):
         return [
             encode_hex(h.header.mining_hash),
             encode_hex(h.header.seed),
-            encode_hex(zpad(int_to_big_endian(2**256 // h.header.difficulty), 32))
+            encode_hex(zpad(int_to_big_endian(2 ** 256 // h.header.difficulty), 32))
         ]
 
     @public
@@ -1002,7 +1134,7 @@ class Chain(Subdispatcher):
 
         try:
             success, output = processblock.apply_transaction(test_block, tx)
-        except processblock.InvalidTransaction as e:
+        except processblock.InvalidTransaction:
             success = False
         # make sure we didn't change the real state
         snapshot_after = block.snapshot()
@@ -1070,7 +1202,7 @@ class Chain(Subdispatcher):
 
         try:
             success, output = processblock.apply_transaction(test_block, tx)
-        except processblock.InvalidTransaction as e:
+        except processblock.InvalidTransaction:
             success = False
         # make sure we didn't change the real state
         snapshot_after = block.snapshot()
@@ -1339,7 +1471,7 @@ class FilterManager(Subdispatcher):
     @decode_arg('id_', quantity_decoder)
     def uninstallFilter(self, id_):
         try:
-            f = self.filters.pop(id_)
+            self.filters.pop(id_)
             return True
         except KeyError:
             return False
@@ -1469,7 +1601,6 @@ class FilterManager(Subdispatcher):
 
 
 if __name__ == '__main__':
-    import inspect
     from devp2p.app import BaseApp
 
     # deactivate service availability check
