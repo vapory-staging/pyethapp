@@ -16,6 +16,7 @@ NULL = object()
 DELETE = object()
 TB = (2 ** 10) ** 4
 
+
 class LmDBService(BaseDB, BaseService):
     """A service providing an interface to a lmdb."""
 
@@ -119,4 +120,4 @@ class LmDBService(BaseDB, BaseService):
         return isinstance(other, self.__class__) and self.db == other.db
 
     def __repr__(self):
-        return '<DB at %d uncommitted=%d>' % (id(self.db), len(self.uncommitted))
+        return '<DB at %d uncommitted=%d>' % (id(self.env), len(self.uncommitted))
