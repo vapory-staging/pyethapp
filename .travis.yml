@@ -1,35 +1,23 @@
-# Config file for automatic testing at travis-ci.org
-
 language: python
-
 python:
-  #- "3.4"
-  - "2.7"
-  #- "pypy"
-  #- "pypy3"
-
-# command to install dependencies, e.g. pip install -r requirements.txt --use-mirrors
+- '2.7'
 install:
- - pip install -r requirements.txt
- - pip install coveralls
-
-# command to run tests, e.g. python setup.py test
+- pip install -r requirements.txt
+- pip install coveralls
 script:
-  - coverage run --source pyethapp setup.py test
-
+- coverage run --source pyethapp setup.py test
 after_success:
-  - coveralls
-
+- coveralls
 notifications:
-  slack: chainbot:JWZ6ykcmr5JKlDW6Uu6wNOT0
-
+  slack:
+    secure: MLpiCgdrAqs0GCTdf9zC84/ly93xxQSTcmY2guAHCMGp+DjaRk/fWIrBMPJVE/ZI7FYV6BcDX4pv5l2QUrmubdFpygayTz3V+/ELtabtFIO7MR9zExFhLUMaRP5+YDNJZJ9rA4TI8r00o4VQUM+tS12cR1NbzTIXMm2OMLC+2Uw=
 deploy:
   provider: pypi
   user: ethereum_pypi_automated
   password:
-    secure: "NxQNT56QVXkgmDvnPFdtnVr0N0VRpkSTd5DBh1iiasf4pVessln0Uu8QxeQipeUpCKpB7+mCb4Bu2VFNQ7fN60M/wWENSQdl2gBz+GfOjt6TBPffUy1m6pNhtC3WCkqwOkLRe3KE0Dyy0wKqK3/QvyLwNZCoIUMk2CijvhS1UA0="
+    secure: NxQNT56QVXkgmDvnPFdtnVr0N0VRpkSTd5DBh1iiasf4pVessln0Uu8QxeQipeUpCKpB7+mCb4Bu2VFNQ7fN60M/wWENSQdl2gBz+GfOjt6TBPffUy1m6pNhtC3WCkqwOkLRe3KE0Dyy0wKqK3/QvyLwNZCoIUMk2CijvhS1UA0=
   on:
     tags: true
     repo: ethereum/pyethapp
     branch: develop
-  distributions: "sdist bdist_wheel"
+  distributions: sdist bdist_wheel
