@@ -43,7 +43,8 @@ PROFILES = {
             'genesis': path.join(genesisdata_dir, 'genesis_morden.json'),
             'genesis_hash': '0cd786a2425d16f152c658316c423e6ce1181e15c3295826d7c9904cba9ce303',
             'block': {
-                'ACCOUNT_INITIAL_NONCE': 2 ** 20
+                'ACCOUNT_INITIAL_NONCE': 2 ** 20,
+                'HOMESTEAD_FORK_BLKNUM': 494000,
             },
         },
         'discovery': {
