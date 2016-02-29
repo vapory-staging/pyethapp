@@ -8,7 +8,7 @@ decorator
 wheel
 pyyaml
 werkzeug
-ipython==4.0.0
+ipython>=3.0.0,<=4.0.0
 statistics
 requests
 rlp>=0.4.4
