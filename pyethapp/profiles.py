@@ -49,10 +49,10 @@ PROFILES = {
         },
         'discovery': {
             'bootstrap_nodes': [
-                (
-                    'enode://e58d5e26b3b630496ec640f2530f3e7fa8a8c7dfe79d9e9c4aac80e3730132b8'
-                    '69c852d3125204ab35bb1b1951f6f2d40996c1034fd8c5a69b383ee337f02ddc'
-                    '@92.51.165.126:30303'
+                (   # Go
+                    'enode://e4533109cc9bd7604e4ff6c095f7a1d807e15b38e9bfeb05d3b7c423ba86af0'
+                    'a9e89abbf40bd9dde4250fef114cd09270fa4e224cbeef8b7bf05a51e8260d6b8'
+                    '@94.242.229.4:40404'
                 )
             ]
         },
