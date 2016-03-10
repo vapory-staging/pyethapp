@@ -98,7 +98,6 @@ Installation of Pyethapp and it's dependent Python packages via
 .. code:: shell
 
     ($ mkvirtualenv pyethapp)
-
     $ pip install pyethapp
 
 On OS X 10.11 (El Capitan), there were some issues with the
