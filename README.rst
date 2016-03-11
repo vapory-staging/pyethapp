@@ -203,23 +203,24 @@ argument.
 Available Networks
 ------------------
 
-* Frontier
-* Morden
+* Live (*Frontier* / *Homestead*)
+* Test (*Morden*)
 
-Currently there are two official networks available. The "Main Network" is
-called *Frontier* and this is what the client will connect to if you start it
-without any additional options.
+Currently there are two official networks available. The "Live Network" is
+called *Frontier* (soon to be *Homestead*) and this is what the client will
+connect to if you start it without any additional options.
 
-Additionally there is the official test network Morden_ which can be used to
-test new code or otherwise experiment without having to risk real money.
+Additionally there is the official test network called Morden_ which can be
+used to test new code or otherwise experiment without having to risk real
+money.
 Use the `--profile` command line option to select the test network:
 
 .. code:: shell
 
-   $ pyethapp --profile morden run
+   $ pyethapp --profile testnet run
 
 
-.. note:: If you've previously connected to the main network you will also need
+.. note:: If you've previously connected to the live network you will also need
    to specify a new data directory by using the `--data-dir` option.
 
 
