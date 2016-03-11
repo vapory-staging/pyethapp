@@ -1,5 +1,8 @@
+import warnings
 from collections import Mapping
 import os
+
+import click
 import ethereum
 from ethereum.blocks import Block, genesis
 from devp2p.service import BaseService
@@ -128,3 +131,16 @@ def merge_dict(dest, source):
                 else:
                     curr_dest[key] = curr_source[key]
     return dest
+
+
+class FallbackChoice(click.Choice):
+    def __init__(self, choices, fallbacks, fallback_warning):
+        super(FallbackChoice, self).__init__(choices)
+        self.fallbacks = fallbacks
+        self.fallback_warning = fallback_warning
+
+    def convert(self, value, param, ctx):
+        if value in self.fallbacks:
+            warnings.warn(self.fallback_warning)
+            value = self.fallbacks[value]
+        return super(FallbackChoice, self).convert(value, param, ctx)

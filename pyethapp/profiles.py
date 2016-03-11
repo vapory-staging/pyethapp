@@ -1,12 +1,12 @@
 from os import path
 
 
-DEFAULT_PROFILE = 'frontier'
+DEFAULT_PROFILE = 'livenet'
 
 genesisdata_dir = path.abspath(path.join(path.dirname(__file__), 'genesisdata'))
 
 PROFILES = {
-    'frontier': {
+    'livenet': {
         'eth': {
             'network_id': 1,
             'genesis': path.join(genesisdata_dir, 'genesis_frontier.json'),
@@ -37,7 +37,7 @@ PROFILES = {
             ]
         },
     },
-    'morden': {
+    'testnet': {
         'eth': {
             'network_id': 2,
             'genesis': path.join(genesisdata_dir, 'genesis_morden.json'),

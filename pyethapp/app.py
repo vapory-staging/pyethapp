@@ -29,7 +29,7 @@ from pow_service import PoWService
 from accounts import AccountsService, Account
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
-from pyethapp.utils import merge_dict, load_contrib_services
+from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice
 import utils
 
 log = slogging.get_logger('app')
@@ -51,10 +51,16 @@ class EthApp(BaseApp):
     script_globals = {}
 
 
+# TODO: Remove `profile` fallbacks in 1.4 or so
 # Separators should be underscore!
 @click.group(help='Welcome to {} {}'.format(EthApp.client_name, EthApp.client_version))
-@click.option('--profile', type=click.Choice(PROFILES.keys()), default=DEFAULT_PROFILE,
-              help="Configuration profile.", show_default=True)
+@click.option('--profile', type=FallbackChoice(
+                  PROFILES.keys(),
+                  {'frontier': 'livenet', 'morden': 'testnet'},
+                  "PyEthApp's configuration profiles have been renamed to "
+                  "'livenet' and 'testnet'. The previous values 'frontier' and "
+                  "'morden' will be removed in a future update."),
+              default=DEFAULT_PROFILE, help="Configuration profile.", show_default=True)
 @click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
               help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
@@ -109,7 +115,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     merge_dict(config, PROFILES[profile])
 
     if genesis_from_config_file:
-        # Fixed genesis_hash taked from profile must be deleted as custom genesis loaded
+        # Fixed genesis_hash taken from profile must be deleted as custom genesis loaded
         del config['eth']['genesis_hash']
         config['eth']['genesis'] = genesis_from_config_file
 
