@@ -1,4 +1,4 @@
-gevent==1.1rc3
+gevent==1.1.0
 gipc==0.4.0
 CodernityDB
 leveldb
@@ -12,8 +12,8 @@ ipython>=3.0.0
 statistics
 requests
 rlp>=0.4.4
-devp2p>=0.6.2
-ethereum>=1.0.8
+devp2p>=0.7.1
+ethereum>=1.1.0
 pbkdf2
 scrypt
 pexpect
