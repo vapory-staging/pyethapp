@@ -5,7 +5,6 @@ from IPython.core import ultratb
 import json
 import os
 import signal
-import sys
 import copy
 from uuid import uuid4
 import click
@@ -33,7 +32,6 @@ from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice
 import utils
 
 log = slogging.get_logger('app')
-
 
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
             JSONRPCServer, IPCRPCServer, Console]
