@@ -5,6 +5,7 @@ from IPython.core import ultratb
 import json
 import os
 import signal
+import sys
 import copy
 from uuid import uuid4
 import click

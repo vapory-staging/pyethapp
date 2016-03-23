@@ -1095,11 +1095,12 @@ class Chain(Subdispatcher):
                 success, output = processblock.apply_transaction(test_block, tx)
                 assert success
         else:
-            test_block = ethereum.blocks.genesis(block.db)
+            env = ethereum.config.Env(db=block.db)
+            test_block = ethereum.blocks.genesis(env)
             original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
             original = deepcopy(original)
             original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
-            test_block = ethereum.blocks.genesis(block.db)
+            test_block = ethereum.blocks.genesis(env)
             test_block.revert(original)
 
         # validate transaction
