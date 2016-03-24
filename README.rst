@@ -90,7 +90,7 @@ Python packages:
 
 .. code:: shell
 
-    $ brew install automake pkg-config libffi gmp
+    $ brew install automake libtool pkg-config libffi gmp openssl
 
 Installation of Pyethapp and it's dependent Python packages via
 `PyPI <https://pypi.python.org/pypi/pyethapp>`__:
@@ -99,19 +99,6 @@ Installation of Pyethapp and it's dependent Python packages via
 
     ($ mkvirtualenv pyethapp)
     $ pip install pyethapp
-
-On OS X 10.11 (El Capitan), there were some issues with the
-installation of ``scrypt``, which caused to raise a
-``fatal error: 'openssl/aes.h' file not found``
-
-This may be fixed by installing without pip and adding some flags:
-
-.. code:: shell
-
-    ($ workon pyethapp)
-    $ git clone https://github.com/ethereum/pyethapp
-    $ cd pyethapp
-    $ env LDFLAGS="-L$(brew --prefix openssl)/lib" CFLAGS="-I$(brew --prefix openssl)/include" python setup.py install
 
 Development version
 ~~~~~~~~~~~~~~~~~~~
