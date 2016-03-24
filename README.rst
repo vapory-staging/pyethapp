@@ -160,7 +160,7 @@ For additional documentation how to use the client, have a look at the
 `Wiki <https://github.com/ethereum/pyethapp/wiki>`__.
 
 Data directory:
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 When running the client without specifying a data-directory, the
 blockchain-data and the keystore-folder will be saved in a default
