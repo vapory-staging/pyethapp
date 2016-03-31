@@ -56,9 +56,9 @@ class JSONRPCClientReplyError(Exception):
 class JSONRPCClient(object):
     protocol = JSONRPCProtocol()
 
-    def __init__(self, host='http://127.0.0.1', port=4000, print_communication=True, privkey=None, sender=None):
+    def __init__(self, host='127.0.0.1', port=4000, print_communication=True, privkey=None, sender=None):
         "specify privkey for local signing"
-        self.transport = HttpPostClientTransport('{}:{}'.format(host, port))
+        self.transport = HttpPostClientTransport('http://{}:{}'.format(host, port))
         self.print_communication = print_communication
         self.privkey = privkey
         self._sender = sender
