@@ -889,6 +889,8 @@ class Chain(Subdispatcher):
     @decode_arg('block_id', block_id_decoder)
     def getUncleCountByBlockNumber(self, block_id):
         try:
+            if block_id == u'pending':
+                return None
             block = self.json_rpc_server.get_block(block_id)
         except KeyError:
             return None
@@ -928,9 +930,11 @@ class Chain(Subdispatcher):
     def getTransactionByHash(self, tx_hash):
         try:
             tx, block, index = self.chain.chain.index.get_transaction(tx_hash)
+            if self.chain.chain.in_main_branch(block):
+                return tx_encoder(tx, block, index, False)
         except KeyError:
             return None
-        return tx_encoder(tx, block, index, False)
+        return None
 
     @public
     @decode_arg('block_hash', block_hash_decoder)
@@ -970,6 +974,9 @@ class Chain(Subdispatcher):
     @decode_arg('index', quantity_decoder)
     def getUncleByBlockNumberAndIndex(self, block_id, index):
         try:
+            #TODO: think about moving this check into the Block.uncles property
+            if block_id == u'pending':
+                return None
             block = self.json_rpc_server.get_block(block_id)
             uncle = block.uncles[index]
         except (IndexError, KeyError):
@@ -1570,6 +1577,8 @@ class FilterManager(Subdispatcher):
         try:
             tx, block, index = self.chain.chain.index.get_transaction(tx_hash)
         except KeyError:
+            return None
+        if not self.chain.chain.in_main_branch(block):
             return None
         receipt = block.get_receipt(index)
         response = {
