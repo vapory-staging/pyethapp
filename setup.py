@@ -15,14 +15,6 @@ class PyTest(TestCommand):
 
     def run_tests(self):
         # import here, cause outside the eggs aren't loaded
-        import os
-        # The results of the rpc-tests are not evaluated as the Whisper protocol is not implemented and its tests fail
-        os.system('''
-        git clone https://github.com/ethereum/rpc-tests ;
-        cd rpc-tests;
-        git submodule update --init --recursive;
-        rm -rf /tmp/rpctests ; pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
-        ''')
         import pytest
         errno = pytest.main(self.test_args)
         raise SystemExit(errno)
