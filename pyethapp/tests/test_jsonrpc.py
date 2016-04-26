@@ -48,6 +48,21 @@ from pyethapp.jsonrpc import Compilers
 solidity_code = "contract test { function multiply(uint a) returns(uint d) {   return a * 7;   } }"
 
 
+def test_externally():
+    # The results of the external rpc-tests are not evaluated as:
+    #  1) the Whisper protocol is not implemented and its tests fail;
+    #  2) the eth_accounts method should be skipped;
+    #  3) the eth_getFilterLogs fails due to the invalid test data;
+    import os
+    os.system('''
+        git clone https://github.com/ethereum/rpc-tests ;
+        cd rpc-tests;
+        git submodule update --init --recursive;
+        npm install;
+        rm -rf /tmp/rpctests ; pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
+        ''')
+
+
 def test_compileSolidity():
     from pyethapp.jsonrpc import Compilers, data_encoder
     import ethereum._solidity
