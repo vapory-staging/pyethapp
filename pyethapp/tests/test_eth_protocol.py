@@ -4,7 +4,6 @@ from devp2p.protocol import BaseProtocol
 from devp2p.app import BaseApp
 from ethereum import tester
 import rlp
-tester.disable_logging()
 
 
 class PeerMock(object):
