@@ -34,7 +34,6 @@ import utils
 
 log = slogging.get_logger('app')
 
-
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
             JSONRPCServer, IPCRPCServer, Console]
 
