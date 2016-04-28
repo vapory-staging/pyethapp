@@ -175,6 +175,8 @@ def run(ctx, dev, nodial, fake, console):
         blocks.GENESIS_DIFFICULTY = 1024
         blocks.BLOCK_DIFF_FACTOR = 16
         blocks.MIN_GAS_LIMIT = blocks.default_config['GENESIS_GAS_LIMIT'] / 2
+        config['eth']['block']['GENESIS_DIFFICULTY'] = 1024
+        config['eth']['block']['BLOCK_DIFF_FACTOR'] = 16
 
     # create app
     app = EthApp(config)
