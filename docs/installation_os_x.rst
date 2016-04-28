@@ -50,7 +50,7 @@ following command::
 
     $ pyethapp/bin/pyethapp run
 
-To simplify thing you can also symlink pyethapp into a directory on your PATH::
+To simplify things you can also symlink pyethapp into a directory on your PATH::
 
     $ ln -s $(pwd)/pyethapp/bin/pyethapp /usr/local/bin
 
