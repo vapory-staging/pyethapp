@@ -45,7 +45,7 @@ class SyncTask(object):
         gevent.spawn(self.run)
 
     def run(self):
-        log_st.info('spawning new syntask')
+        log_st.info('spawning new synctask')
         try:
             self.fetch_hashchain()
         except Exception:
