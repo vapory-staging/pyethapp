@@ -85,6 +85,8 @@ Installation of Pyethapp and it's dependent Python packages via
 Installation on OS X
 ~~~~~~~~~~~~~~~~~~~~
 
+(More detailed instructions can be found in the `Mac OS X installation instructions`_)
+
 First install the system-dependecies for a successful build of the
 Python packages:
 
@@ -99,6 +101,8 @@ Installation of Pyethapp and it's dependent Python packages via
 
     ($ mkvirtualenv pyethapp)
     $ pip install pyethapp
+
+.. _`Mac OS X installation instructions`: https://github.com/ethereum/pyethapp/blob/develop/docs/installation_os_x.rst
 
 Development version
 ~~~~~~~~~~~~~~~~~~~

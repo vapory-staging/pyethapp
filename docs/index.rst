@@ -13,6 +13,7 @@ Contents:
 
    readme
    installation
+   installation_os_x
    usage
    contributing
    authors

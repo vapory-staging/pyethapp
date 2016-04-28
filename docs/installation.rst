@@ -4,7 +4,7 @@ Installation
 
 At the command line::
 
-    $ easy_install pyethapp
+    $ pip install pyethapp
 
 Or, if you have virtualenvwrapper installed::
 
