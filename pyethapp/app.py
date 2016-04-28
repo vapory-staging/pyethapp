@@ -1,36 +1,38 @@
 # -*- coding: utf8 -*-
-from ethereum import blocks
-from logging import StreamHandler
-from IPython.core import ultratb
+import copy
 import json
 import os
 import signal
 import sys
-import copy
+from logging import StreamHandler
 from uuid import uuid4
+
 import click
-from click import BadParameter
-import gevent
-from gevent.event import Event
-import rlp
-from devp2p.service import BaseService
-from devp2p.peermanager import PeerManager
-from devp2p.discovery import NodeDiscovery
-from devp2p.app import BaseApp
-import eth_protocol
-from eth_service import ChainService
-from console_service import Console
-from ethereum.blocks import Block
 import ethereum.slogging as slogging
+import gevent
+import rlp
+from click import BadParameter
+from devp2p.app import BaseApp
+from devp2p.discovery import NodeDiscovery
+from devp2p.peermanager import PeerManager
+from devp2p.service import BaseService
+from ethereum import blocks
+from ethereum.blocks import Block
+from gevent.event import Event
+
 import config as konfig
+import eth_protocol
+import utils
+from accounts import AccountsService, Account
+from console_service import Console
 from db_service import DBService
+from eth_service import ChainService
 from jsonrpc import JSONRPCServer, IPCRPCServer
 from pow_service import PoWService
-from accounts import AccountsService, Account
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
-from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice
-import utils
+from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
+
 
 log = slogging.get_logger('app')
 
@@ -183,8 +185,7 @@ def run(ctx, dev, nodial, fake, console):
 
     # development mode
     if dev:
-        gevent.get_hub().SYSTEM_ERROR = BaseException
-        sys.excepthook = ultratb.VerboseTB(call_pdb=True, tb_offset=6)
+        enable_greenlet_debugger()
         try:
             config['client_version'] += '/' + os.getlogin()
         except:
