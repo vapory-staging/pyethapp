@@ -94,16 +94,19 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     # prepare configuration
     # config files only contain required config (privkeys) and config different from the default
     if alt_config:  # specified config file
-        config = konfig.load_config(alt_config)
-        if not config:
+        loaded_config = konfig.load_config(alt_config)
+        if not loaded_config:
             log.warning('empty config given. default config values will be used')
     else:  # load config from default or set data_dir
-        config = konfig.load_config(data_dir)
+        loaded_config = konfig.load_config(data_dir)
 
-    config['data_dir'] = data_dir
+    loaded_config['data_dir'] = data_dir
 
     # Store custom genesis to restore if overridden by profile value
-    genesis_from_config_file = config.get('eth', {}).get('genesis')
+    genesis_from_config_file = loaded_config.get('eth', {}).get('genesis')
+
+    # create empty config dict
+    config = dict()
 
     # add default config
     konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
@@ -112,6 +115,9 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
 
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
+
+    # Set config values based on config file, replacing the profile, as they have a higher priority
+    merge_dict(config, loaded_config)
 
     if genesis_from_config_file:
         # Fixed genesis_hash taken from profile must be deleted as custom genesis loaded
