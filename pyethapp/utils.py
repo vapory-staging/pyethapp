@@ -128,8 +128,6 @@ def merge_dict(dest, source):
                             type(curr_source[key]),
                             type(curr_dest[key])
                         ))
-                elif isinstance(curr_source[key], list) and isinstance(curr_dest[key], list):
-                    curr_dest[key].extend(curr_source[key])
                 else:
                     curr_dest[key] = curr_source[key]
     return dest
