@@ -32,7 +32,7 @@ GUI_GEVENT = 'gevent'
 def normalize_address(a, allow_blank=True):
     if not allow_blank and a == '':
         a = '\0' * 20
-    return _normalize_address(a)
+    return _normalize_address(a, allow_blank)
 
 
 def inputhook_gevent():
