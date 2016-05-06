@@ -19,7 +19,7 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms, normalize_address as _normalize_address, bcolors as bc
+from ethereum.utils import denoms, normalize_address, bcolors as bc
 
 from rpc_client import ABIContract
 
@@ -27,12 +27,6 @@ log = getLogger(__name__)
 
 ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
-
-
-def normalize_address(a, allow_blank=True):
-    if not allow_blank and a == '':
-        a = '\0' * 20
-    return _normalize_address(a, allow_blank)
 
 
 def inputhook_gevent():
