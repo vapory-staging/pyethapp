@@ -191,7 +191,6 @@ class Console(BaseService):
             def latest(this):
                 return this.chain.head
 
-
             def transact(this, to, value=0, data='', sender=None,
                          startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
@@ -260,8 +259,8 @@ class Console(BaseService):
             serpent = None
             pass
 
-        self.console_locals = dict(eth=Eth(self.app),solidity=solc_wrapper, serpent=serpent,
-                                    denoms=denoms, true=True, false=False, Eth=Eth)
+        self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
+                                   denoms=denoms, true=True, false=False, Eth=Eth)
 
         for k, v in self.app.script_globals.items():
             self.console_locals[k] = v
