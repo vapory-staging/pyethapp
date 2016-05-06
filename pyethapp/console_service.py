@@ -30,7 +30,8 @@ GUI_GEVENT = 'gevent'
 
 
 def normalize_address(a, allow_blank=True):
-    a = a or '\0' * 20 if allow_blank else a
+    if not allow_blank and a == '':
+        a = '\0' * 20
     return _normalize_address(a)
 
 
