@@ -19,7 +19,7 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms, normalize_address as _normalize_address, bcolors as bc
+from ethereum.utils import denoms, normalize_address, bcolors as bc
 
 from rpc_client import ABIContract
 
@@ -27,11 +27,6 @@ log = getLogger(__name__)
 
 ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
-
-
-def normalize_address(a, allow_blank=True):
-    a = a or '\0' * 20 if allow_blank else a
-    return _normalize_address(a)
 
 
 def inputhook_gevent():
@@ -196,7 +191,6 @@ class Console(BaseService):
             def latest(this):
                 return this.chain.head
 
-
             def transact(this, to, value=0, data='', sender=None,
                          startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
@@ -265,8 +259,8 @@ class Console(BaseService):
             serpent = None
             pass
 
-        self.console_locals = dict(eth=Eth(self.app),solidity=solc_wrapper, serpent=serpent,
-                                    denoms=denoms, true=True, false=False, Eth=Eth)
+        self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
+                                   denoms=denoms, true=True, false=False, Eth=Eth)
 
         for k, v in self.app.script_globals.items():
             self.console_locals[k] = v

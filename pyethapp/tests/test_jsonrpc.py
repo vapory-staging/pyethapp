@@ -230,7 +230,7 @@ def test_send_transaction_with_contract(test_app):
 def main(a,b):
     return(a ^ b)
 '''
-    tx_to = b'';
+    tx_to = b''
     evm_code = serpent.compile(serpent_code)
     chain = test_app.services.chain.chain
     assert chain.head_candidate.get_balance(tx_to) == 0

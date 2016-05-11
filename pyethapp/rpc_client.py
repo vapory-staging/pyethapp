@@ -15,19 +15,8 @@ from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normali
 z_address = '\x00' * 20
 
 
-def address20(address):
-    if address == '':
-        return address
-    if len(address) == '42':
-        address = address[2:]
-    if len(address) == 40:
-        address = address.decode('hex')
-    assert len(address) == 20
-    return address
-
-
 def address_encoder(a):
-    return _address_encoder(normalize_address(a))
+    return _address_encoder(normalize_address(a, allow_blank=True))
 
 
 def block_tag_encoder(val):
