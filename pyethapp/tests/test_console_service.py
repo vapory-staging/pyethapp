@@ -60,20 +60,6 @@ def test_app(request, tmpdir):
             assert self.services.chain.chain.head.difficulty == 1
             return self.services.chain.chain.head
 
-        def rpc_request(self, method, *args):
-            """Simulate an incoming JSON RPC request and return the result.
-
-            Example::
-
-                >>> assert test_app.rpc_request('eth_getBalance', '0x' + 'ff' * 20) == '0x0'
-
-            """
-            log.debug('simulating rpc request', method=method)
-            method = self.services.jsonrpc.dispatcher.get_method(method)
-            res = method(*args)
-            log.debug('got response', response=res)
-            return res
-
     config = {
         'data_dir': str(tmpdir),
         'db': {'implementation': 'EphemDB'},
