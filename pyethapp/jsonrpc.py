@@ -1079,7 +1079,7 @@ class Chain(Subdispatcher):
         tx = Transaction(nonce, gasprice, startgas, to, value, data_, v, r, s)
         tx._sender = None
         if not signed:
-            assert sender in self.app.services.accounts, 'no account for sender'
+            assert sender in self.app.services.accounts, 'can not sign: no account for sender'
             self.app.services.accounts.sign_tx(sender, tx)
         self.app.services.chain.add_transaction(tx, origin=None, force_broadcast=True)
         log.debug('decoded tx', tx=tx.log_dict())
