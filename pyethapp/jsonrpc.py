@@ -1087,6 +1087,16 @@ class Chain(Subdispatcher):
         return data_encoder(tx.hash)
 
     @public
+    @decode_arg('data', data_decoder)
+    def sendRawTransaction(self, data):
+        """
+        decode sendRawTransaction request data and relay along to the sendTransaction method
+        to ensure the same validations and processing rules are applied
+        """
+        tx_data = rlp.codec.decode(data, ethereum.transactions.Transaction)
+        return self.sendTransaction(tx_data.to_dict())
+
+    @public
     @decode_arg('block_id', block_id_decoder)
     @encode_res(data_encoder)
     def call(self, data, block_id='pending'):
