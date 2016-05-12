@@ -205,8 +205,7 @@ class JSONRPCClient(object):
         return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
 
 
-class ABIContract():
-
+class ABIContract(object):
     """
     proxy for a contract
     """
