@@ -1090,11 +1090,30 @@ class Chain(Subdispatcher):
     @decode_arg('data', data_decoder)
     def sendRawTransaction(self, data):
         """
-        decode sendRawTransaction request data and relay along to the sendTransaction method
+        decode sendRawTransaction request data, format it and relay along to the sendTransaction method
         to ensure the same validations and processing rules are applied
         """
         tx_data = rlp.codec.decode(data, ethereum.transactions.Transaction)
-        return self.sendTransaction(tx_data.to_dict())
+
+        tx_dict = tx_data.to_dict()
+        # encode addresses
+        tx_dict['from'] = address_encoder(tx_dict.get('sender', ''))
+        to_value = tx_dict.get('to', '')
+        if to_value:
+            tx_dict['to'] = address_encoder(to_value)
+
+        # encode data
+        tx_dict['data'] = data_encoder(tx_dict.get('data', b''))
+
+        # encode quantities included in the raw transaction data
+        gasprice_key = 'gasPrice' if 'gasPrice' in tx_dict else 'gasprice'
+        gas_key = 'gas' if 'gas' in tx_dict else 'startgas'
+        for key in ('value', 'nonce', gas_key, gasprice_key, 'v', 'r', 's'):
+            if key in tx_dict:
+                tx_dict[key] = quantity_encoder(tx_dict[key])
+
+        # relay the information along to the sendTransaction method for processing
+        return self.sendTransaction(tx_dict)
 
     @public
     @decode_arg('block_id', block_id_decoder)
