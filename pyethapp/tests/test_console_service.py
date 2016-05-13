@@ -13,7 +13,6 @@ from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
-from pyethapp.jsonrpc import JSONRPCServer
 from pyethapp.pow_service import PoWService
 from pyethapp.console_service import Console
 
@@ -88,7 +87,7 @@ def test_app(request, tmpdir):
         },
         'jsonrpc': {'listen_port': 29873}
     }
-    services = [DBService, AccountsService, PeerManager, ChainService, PoWService, JSONRPCServer, Console]
+    services = [DBService, AccountsService, PeerManager, ChainService, PoWService, Console]
     update_config_with_defaults(config, get_default_config([TestApp] + services))
     update_config_with_defaults(config, {'eth': {'block': ethereum.config.default_config}})
     app = TestApp(config)
