@@ -1,16 +1,18 @@
 """Provides a simple way of testing JSON RPC commands."""
+import warnings
+
 import json
-from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
-from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
-from tinyrpc.transports.http import HttpPostClientTransport
-from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
-from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
-from pyethapp.jsonrpc import address_encoder as _address_encoder
-from pyethapp.jsonrpc import default_gasprice, default_startgas
-from ethereum.transactions import Transaction
-from ethereum.keys import privtoaddr
 from ethereum import abi
+from ethereum.keys import privtoaddr
+from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
+from pyethapp.jsonrpc import address_encoder as _address_encoder
+from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
+from pyethapp.jsonrpc import default_gasprice, default_startgas
+from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
+from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+from tinyrpc.transports.http import HttpPostClientTransport
 
 z_address = '\x00' * 20
 
@@ -120,6 +122,14 @@ class JSONRPCClient(object):
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
+
+        if data.isalnum():
+            warnings.warn(
+                'Verify that the data parameter is _not_ hex encoded, if this is the case '
+                'the data will be double encoded and result in unexpected '
+                'behavior.'
+            )
+
         to = normalize_address(to, allow_blank=True)
         encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
                         value=quantity_encoder, gasPrice=quantity_encoder,
