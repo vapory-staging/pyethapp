@@ -32,7 +32,10 @@ install_requires_replacements = {
     'https://github.com/ethereum/ethash/tarball/master#egg=pyethash': 'pyethash'}
 
 install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
-test_requirements = ['ethereum-serpent>=1.8.1', 'pytest']
+test_requirements = [
+    'ethereum-serpent>=1.8.1',
+    'pytest==2.9.1',
+]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
