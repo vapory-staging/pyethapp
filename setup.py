@@ -39,7 +39,7 @@ test_requirements = [
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '1.2.1'
+version = '1.2.2'
 
 setup(
     name='pyethapp',
