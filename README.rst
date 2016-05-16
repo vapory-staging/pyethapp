@@ -61,7 +61,7 @@ with the
 extension.
 
 The
-`Homestead <http://docs.ethereum.org/en/latest/introduction/the-homestead-release.html#milestones-of-the-ethereum-development-roadmap>`__-ready
+`Homestead <https://ethereum-homestead.readthedocs.io/en/latest/introduction/the-homestead-release.html>`__-ready
 version of Pyethapp is ``v1.2.0``.
 
 Installation on Ubuntu/Debian
