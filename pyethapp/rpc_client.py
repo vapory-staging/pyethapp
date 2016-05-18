@@ -1,20 +1,26 @@
 """Provides a simple way of testing JSON RPC commands."""
 import warnings
 
+import logging
 import json
+import time
+
 from ethereum import abi
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
-from pyethapp.jsonrpc import address_encoder as _address_encoder
-from pyethapp.jsonrpc import data_encoder, data_decoder, address_decoder
-from pyethapp.jsonrpc import default_gasprice, default_startgas
-from pyethapp.jsonrpc import quantity_encoder, quantity_decoder
 from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
 
+from pyethapp.jsonrpc import address_encoder as _address_encoder
+from pyethapp.jsonrpc import (
+    data_encoder, data_decoder, address_decoder, default_gasprice,
+    default_startgas, quantity_encoder, quantity_decoder,
+)
+
 z_address = '\x00' * 20
+log = logging.getLogger(__name__)
 
 
 def address_encoder(a):
@@ -62,26 +68,42 @@ class JSONRPCClient(object):
     def sender(self):
         if self.privkey:
             return privtoaddr(self.privkey)
+
         if self._sender is None:
             self._sender = self.coinbase
+
         return self._sender
 
-    def call(self, method, *args):
-        request = self.protocol.create_request(method, args)
-        reply = self.transport.send_message(request.serialize())
-        if self.print_communication:
-            print json.dumps(json.loads(request.serialize()), indent=2)
-            print reply
+    @property
+    def coinbase(self):
+        """ Return the client coinbase address. """
+        return address_decoder(self.call('eth_coinbase'))
 
-        jsonrpc_reply = self.protocol.parse_reply(reply)
-        if isinstance(jsonrpc_reply, JSONRPCSuccessResponse):
-            return jsonrpc_reply.result
-        elif isinstance(jsonrpc_reply, JSONRPCErrorResponse):
-            raise JSONRPCClientReplyError(jsonrpc_reply.error)
-        else:
-            raise JSONRPCClientReplyError('Unknown type of JSONRPC reply')
+    def blocknumber(self):
+        """ Return the most recent block. """
+        return quantity_decoder(self.call('eth_blockNumber'))
 
-    __call__ = call
+    def nonce(self, address):
+        if len(address) == 40:
+            address = address.decode('hex')
+
+        res = self.call('eth_getTransactionCount', address_encoder(address), 'pending')
+        return quantity_decoder(res)
+
+    def balance(self, account):
+        """ Return the balance of the account of given address. """
+        res = self.call('eth_getBalance', address_encoder(account), 'pending')
+        return quantity_decoder(res)
+
+    def gaslimit(self):
+        return quantity_decoder(self.call('eth_gasLimit'))
+
+    def lastgasprice(self):
+        return quantity_decoder(self.call('eth_lastGasPrice'))
+
+    def new_abi_contract(self, _abi, address):
+        sender = self.sender or privtoaddr(self.privkey)
+        return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
 
     def find_block(self, condition):
         """Query all blocks one by one and return the first one for which
@@ -119,106 +141,228 @@ class JSONRPCClient(object):
                             transactionIndex=quantity_decoder)
             return [{k: decoders[k](v) for k, v in c.items() if v is not None} for c in changes]
 
+    def call(self, method, *args):
+        """ Do the request and returns the result.
+
+        Args:
+            method (str): The RPC method.
+            args: The encoded arguments expected by the method.
+                - Object arguments must be supplied as an dictionary.
+                - Quantity arguments must be hex encoded starting with '0x' and
+                without left zeros.
+                - Data arguments must be hex encoded starting with '0x'
+        """
+        request = self.protocol.create_request(method, args)
+        reply = self.transport.send_message(request.serialize())
+        if self.print_communication:
+            print json.dumps(json.loads(request.serialize()), indent=2)
+            print reply
+
+        jsonrpc_reply = self.protocol.parse_reply(reply)
+        if isinstance(jsonrpc_reply, JSONRPCSuccessResponse):
+            return jsonrpc_reply.result
+        elif isinstance(jsonrpc_reply, JSONRPCErrorResponse):
+            raise JSONRPCClientReplyError(jsonrpc_reply.error)
+        else:
+            raise JSONRPCClientReplyError('Unknown type of JSONRPC reply')
+
+    __call__ = call
+
+    def send_transaction(self, sender, to, value=0, data='', startgas=0,
+                         gasprice=10 * denoms.szabo, nonce=None):
+        """ Helper to send signed messages.
+
+        This method will use the `privkey` provided in the constructor to
+        locally sign the transaction. This requires an extended server
+        implementation that accepts the variables v, r, and s.
+        """
+
+        if not self.privkey and not sender:
+            raise ValueError('Either privkey or sender needs to be supplied.')
+
+        if self.privkey and not sender:
+            sender = privtoaddr(self.privkey)
+
+            if nonce is None:
+                nonce = self.nonce(sender)
+        elif self.privkey:
+            if sender != privtoaddr(self.privkey):
+                raise ValueError('sender for a different privkey.')
+
+            if nonce is None:
+                nonce = self.nonce(sender)
+        else:
+            if nonce is None:
+                nonce = 0
+
+        if not startgas:
+            startgas = self.gaslimit() - 1
+
+        tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
+
+        if self.privkey:
+            # add the fields v, r and s
+            tx.sign(self.privkey)
+
+        tx_dict = tx.to_dict()
+
+        # rename the fields to match the eth_sendTransaction signature
+        tx_dict.pop('hash')
+        tx_dict['sender'] = sender
+        tx_dict['gasPrice'] = tx_dict.pop('gasprice')
+        tx_dict['gas'] = tx_dict.pop('startgas')
+
+        res = self.eth_sendTransaction(**tx_dict)
+        assert len(res) in (20, 32)
+        return res.encode('hex')
+
     def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
                             gasPrice=default_gasprice, gas=default_startgas,
                             v=None, r=None, s=None):
+        """ Creates new message call transaction or a contract creation, if the
+        data field contains code.
 
-        if data.isalnum():
+        Args:
+            from (address): The 20 bytes address the transaction is send from.
+            to (address): DATA, 20 Bytes - (optional when creating new
+                contract) The address the transaction is directed to.
+            gas (int): Gas provided for the transaction execution. It will
+                return unused gas.
+            gasPrice (int): gasPrice used for each paid gas.
+            value (int): Value send with this transaction.
+            data (bin): The compiled code of a contract OR the hash of the
+                invoked method signature and encoded parameters.
+            nonce (int): This allows to overwrite your own pending transactions
+                that use the same nonce.
+        """
+
+        if to == '' and data.isalnum():
             warnings.warn(
                 'Verify that the data parameter is _not_ hex encoded, if this is the case '
                 'the data will be double encoded and result in unexpected '
                 'behavior.'
             )
 
-        to = normalize_address(to, allow_blank=True)
-        encoders = dict(nonce=quantity_encoder, sender=address_encoder, to=data_encoder,
-                        value=quantity_encoder, gasPrice=quantity_encoder,
-                        gas=quantity_encoder, data=data_encoder,
-                        v=quantity_encoder, r=quantity_encoder, s=quantity_encoder)
-        data = {k: encoders[k](v) for k, v in locals().items()
-                if k not in ('self', 'encoders') and v is not None}
-        data['from'] = data.pop('sender')
-        assert data.get('from') or (v and r and s)
-        res = self.call('eth_sendTransaction', data)
+        if to == '0' * 40:
+            warnings.warn('For contract creating the empty string must be used.')
+
+        if not sender and not (v and r and s):
+            raise ValueError('Either sender or v, r, s needs to be informed.')
+
+        json_data = {
+            'from': address_encoder(sender),
+            'to': data_encoder(normalize_address(to, allow_blank=True)),
+            'nonce': quantity_encoder(nonce),
+            'value': quantity_encoder(value),
+            'gasPrice': quantity_encoder(gasPrice),
+            'gas': quantity_encoder(gas),
+            'data': data_encoder(data),
+            'v': quantity_encoder(v),
+            'r': quantity_encoder(r),
+            's': quantity_encoder(s),
+        }
+
+        res = self.call('eth_sendTransaction', json_data)
+
         return data_decoder(res)
 
     def eth_call(self, sender='', to='', value=0, data='',
-                 startgas=default_startgas, gasprice=default_gasprice):
-        "call on pending block"
-        encoders = dict(sender=address_encoder, to=data_encoder,
-                        value=quantity_encoder, gasprice=quantity_encoder,
-                        startgas=quantity_encoder, data=data_encoder)
-        data = {k: encoders[k](v) for k, v in locals().items()
-                if k not in ('self', 'encoders') and v is not None}
-        for k, v in dict(gasprice='gasPrice', startgas='gas', sender='from').items():
-            data[v] = data.pop(k)
-        res = self.call('eth_call', data)
+                 startgas=default_startgas, gasprice=default_gasprice,
+                 block_number=None):
+        """ Executes a new message call immediately without creating a
+        transaction on the block chain.
+
+        Args:
+            from: The address the transaction is send from.
+            to: The address the transaction is directed to.
+            gas (int): Gas provided for the transaction execution. eth_call
+                consumes zero gas, but this parameter may be needed by some
+                executions.
+            gasPrice (int): gasPrice used for each paid gas.
+            value (int): Integer of the value send with this transaction.
+            data (bin): Hash of the method signature and encoded parameters.
+                For details see Ethereum Contract ABI.
+            block_number: Determines the state of ethereum used in the
+                call.
+        """
+
+        json_data = dict()
+
+        if sender is not None:
+            json_data['from'] = address_encoder(sender)
+
+        if to is not None:
+            json_data['to'] = data_encoder(to)
+
+        if value is not None:
+            json_data['value'] = quantity_encoder(value)
+
+        if gasprice is not None:
+            json_data['gasPrice'] = quantity_encoder(gasprice)
+
+        if startgas is not None:
+            json_data['gas'] = quantity_encoder(startgas)
+
+        if data is not None:
+            json_data['data'] = data_encoder(data)
+
+        if block_number is not None:
+            res = self.call('eth_call', data, block_number)
+        else:
+            res = self.call('eth_call', data)
+
         return data_decoder(res)
 
-    def blocknumber(self):
-        return quantity_decoder(self.call('eth_blockNumber'))
+    def poll(self, transaction_hash, confirmations=None):
+        """ Wait until the `transaction_hash` is applied or reject.
 
-    def nonce(self, address):
-        if len(address) == 40:
-            address = address.decode('hex')
-        return quantity_decoder(
-            self.call('eth_getTransactionCount', address_encoder(address), 'pending'))
+        Args:
+            transaction_hash (hash): Transaction hash that we are waiting for.
+            confirmations (int): Quantity of block confirmations that we will
+                wait for.
+        """
+        if transaction_hash.startswith('0x'):
+            warnings.warn(
+                'transaction_hash seems to be already encoded, this will result '
+                'in unexpected behavior'
+            )
 
-    @property
-    def coinbase(self):
-        return address_decoder(self.call('eth_coinbase'))
+        if len(transaction_hash) != 32:
+            raise ValueError('transaction_hash length must be 32 (it might be hex encode)')
 
-    def balance(self, account):
-        b = quantity_decoder(
-            self.call('eth_getBalance', address_encoder(account), 'pending'))
-        return b
+        transaction_hash = data_encoder(transaction_hash)
 
-    def gaslimit(self):
-        return quantity_decoder(self.call('eth_gasLimit'))
+        pending_block = self.call('eth_getBlockByNumber', 'pending', True)
+        while any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
+            time.sleep(3)
+            pending_block = self.call('eth_getBlockByNumber', 'pending', True)
 
-    def lastgasprice(self):
-        return quantity_decoder(self.call('eth_lastGasPrice'))
+        transaction = self.call('eth_getTransactionByHash', transaction_hash)
 
-    def send_transaction(self, sender, to, value=0, data='', startgas=0,
-                         gasprice=10 * denoms.szabo, nonce=None):
-        "can send a locally signed transaction if privkey is given"
-        assert self.privkey or sender
-        if self.privkey:
-            _sender = sender
-            sender = privtoaddr(self.privkey)
-            assert sender == _sender
-            # fetch nonce
-            nonce = nonce if nonce is not None else self.nonce(sender)
-        if nonce is None:
-            nonce = 0
+        if transaction is None:
+            # either wrong transaction hash or the transaction was invalid
+            log.error('transaction {} not found.'.format(transaction_hash))
+            return
 
+        if confirmations is None:
+            return
 
-        assert sender
-        if not startgas:
-            startgas = quantity_decoder(self.call('eth_gasLimit')) - 1
+        # this will wait for both APPLIED and REVERTED transactions
+        transaction_block = quantity_decoder(transaction['blockNumber'])
+        confirmation_block = transaction_block + confirmations
 
-        # create transaction
-        tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
-        if self.privkey:
-            tx.sign(self.privkey)
-        tx_dict = tx.to_dict()
-        tx_dict.pop('hash')
-        for k, v in dict(gasprice='gasPrice', startgas='gas').items():
-            tx_dict[v] = tx_dict.pop(k)
-        tx_dict['sender'] = sender
-        res = self.eth_sendTransaction(**tx_dict)
-        assert len(res) in (20, 32)
-        return res.encode('hex')
-
-    def new_abi_contract(self, _abi, address):
-        sender = self.sender or privtoaddr(self.privkey)
-        return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
+        block_number = self.blocknumber()
+        while confirmation_block > block_number:
+            time.sleep(6)
+            block_number = self.blocknumber()
 
 
-class ABIContract():
+class ABIContract(object):
+    """ Exposes the smart contract as a python object.
 
-    """
-    proxy for a contract
+    This wrapper allows contracts calls to be made through a python interface,
+    each function is expose as a method in the python object with the right
+    amount of parameters.
     """
 
     def __init__(self, sender, _abi, address, call_func, transact_func):
@@ -268,7 +412,3 @@ class ABIContract():
             signature = self._translator.function_data[fname]['signature']
             func.__doc__ = '%s(%s)' % (fname, ', '.join(('%s %s' % x) for x in signature))
             setattr(self, fname, func)
-
-
-if __name__ == '__main__':
-    pass
