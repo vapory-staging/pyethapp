@@ -13,7 +13,6 @@ from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
-from pyethapp.jsonrpc import JSONRPCServer
 from pyethapp.pow_service import PoWService
 from pyethapp.console_service import Console
 
@@ -88,7 +87,7 @@ def test_app(request, tmpdir):
         },
         'jsonrpc': {'listen_port': 29873}
     }
-    services = [DBService, AccountsService, PeerManager, ChainService, PoWService, JSONRPCServer, Console]
+    services = [DBService, AccountsService, PeerManager, ChainService, PoWService, Console]
     update_config_with_defaults(config, get_default_config([TestApp] + services))
     update_config_with_defaults(config, {'eth': {'block': ethereum.config.default_config}})
     app = TestApp(config)
@@ -130,3 +129,64 @@ def main(a,b):
     code = chain.head.account_to_dict(creates)['code']
     assert len(code) > 2
     assert code != '0x'
+
+
+def test_console_name_reg_contract(test_app):
+    """
+    exercise the console service with the NameReg contract found in The_Console wiki
+    https://github.com/ethereum/pyethapp/wiki/The_Console#creating-contracts
+    """
+
+    solidity_code = """
+    contract NameReg  {
+       event AddressRegistered(bytes32 indexed name, address indexed account);
+       mapping (address => bytes32) toName;
+
+       function register(bytes32 name) {
+               toName[msg.sender] = name;
+               AddressRegistered(name, msg.sender);
+       }
+
+       function resolve(address addr) constant returns (bytes32 name) {
+               return toName[addr];
+       }
+    }
+    """
+
+    import ethereum._solidity
+    solidity = ethereum._solidity.get_solidity()
+    if solidity is None:
+        pytest.xfail("solidity not installed, not tested")
+    else:
+        # create the NameReg contract
+        tx_to = b''
+        evm_code = solidity.compile(solidity_code)
+        chain = test_app.services.chain.chain
+        assert chain.head_candidate.get_balance(tx_to) == 0
+        sender = test_app.services.accounts.unlocked_accounts[0].address
+        assert chain.head_candidate.get_balance(sender) > 0
+
+        eth = test_app.services.console.console_locals['eth']
+        tx = eth.transact(to='', data=evm_code, startgas=500000, sender=sender)
+
+        code = chain.head_candidate.account_to_dict(tx.creates)['code']
+        assert len(code) > 2
+        assert code != '0x'
+
+        test_app.mine_next_block()
+
+        creates = chain.head.get_transaction(0).creates
+        code = chain.head.account_to_dict(creates)['code']
+        assert len(code) > 2
+        assert code != '0x'
+
+        # interact with the NameReg contract
+        abi = solidity.mk_full_signature(solidity_code)
+        namereg = eth.new_contract(abi, creates, sender=sender)
+
+        register_tx = namereg.register('alice', startgas=90000, gasprice=50 * 10**9)
+
+        test_app.mine_next_block()
+
+        result = namereg.resolve(sender)
+        assert result == 'alice' + ('\x00' * 27)
