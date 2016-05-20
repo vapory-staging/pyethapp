@@ -202,7 +202,8 @@ def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
         'parentHash', 'coinbase', 'nonce',
     ))
 
-    if valid_keys != set(genesis_dict.keys()):
+    unknown_keys = set(genesis_dict.keys()) - valid_keys
+    if unknown_keys:
         raise ValueError('genesis_dict contains invalid keys.')
 
     config.setdefault('eth', {}).setdefault('block', {})
@@ -211,14 +212,31 @@ def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
     def _dec(data):
         return decode_hex(remove_0x_head(data))
 
-    ethblock_config['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
-    ethblock_config['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
-    ethblock_config['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
-    ethblock_config['GENESIS_EXTRA_DATA'] = _dec(genesis_dict['extraData'])
-    ethblock_config['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
-    ethblock_config['GENESIS_MIXHASH'] = _dec(genesis_dict['mixhash'])
-    ethblock_config['GENESIS_PREVHASH'] = _dec(genesis_dict['parentHash'])
-    ethblock_config['GENESIS_COINBASE'] = _dec(genesis_dict['coinbase'])
-    ethblock_config['GENESIS_NONCE'] = _dec(genesis_dict['nonce'])
+    if 'alloc' in genesis_dict:
+        ethblock_config['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
+
+    if 'difficulty' in genesis_dict:
+        ethblock_config['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
+
+    if 'timestamp' in genesis_dict:
+        ethblock_config['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
+
+    if 'extraData' in genesis_dict:
+        ethblock_config['GENESIS_EXTRA_DATA'] = _dec(genesis_dict['extraData'])
+
+    if 'gasLimit' in genesis_dict:
+        ethblock_config['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
+
+    if 'mixhash' in genesis_dict:
+        ethblock_config['GENESIS_MIXHASH'] = _dec(genesis_dict['mixhash'])
+
+    if 'parentHash' in genesis_dict:
+        ethblock_config['GENESIS_PREVHASH'] = _dec(genesis_dict['parentHash'])
+
+    if 'coinbase' in genesis_dict:
+        ethblock_config['GENESIS_COINBASE'] = _dec(genesis_dict['coinbase'])
+
+    if 'nonce' in genesis_dict:
+        ethblock_config['GENESIS_NONCE'] = _dec(genesis_dict['nonce'])
 
     return config
