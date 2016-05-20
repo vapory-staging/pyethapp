@@ -168,35 +168,57 @@ def dump_config(config):
 
 
 def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
+    """ Sets the genesis configuration.
+
+    Note: This function will not copy config, it will be modified in place and
+        then returned.
+
+    Args:
+        config (dict): The app full configuration.
+        genesis_json_filename_or_dict: The path to a yaml file or a dictionary
+        with the genesis configuration, the required keys are:
+
+            - alloc: a mapping from address to balance
+            - difficulty: the difficulty hex encoded
+            - timestamp: the timestamp hex encoded
+            - extraData: extra binary data hex encoded
+            - gasLimit: gas limit hex encoded
+            - mixhash: mixhash hex encoded
+            - parentHash: the parent hash hex encoded
+            - coinbase: coinbase hex encoded
+            - nonce: nonce hex encoded
+
+    Returns:
+        dict: The first function argument.
+    """
     if isinstance(genesis_json_filename_or_dict, dict):
         genesis_dict = genesis_json_filename_or_dict
     else:
-        with open(genesis_json_filename_or_dict, "r") as genesis_json_file:
+        with open(genesis_json_filename_or_dict, 'r') as genesis_json_file:
             genesis_dict = yaml.load(genesis_json_file)
 
+    valid_keys = set((
+        'alloc', 'difficulty', 'timestamp', 'extraData', 'gasLimit', 'mixhash',
+        'parentHash', 'coinbase', 'nonce',
+    ))
+
+    if valid_keys != set(genesis_dict.keys()):
+        raise ValueError('genesis_dict contains invalid keys.')
+
     config.setdefault('eth', {}).setdefault('block', {})
-    cfg = config['eth']['block']
+    ethblock_config = config['eth']['block']
 
-    # map external to internal keys and decoders
-    def _dec(x):
-        return decode_hex(remove_0x_head(x))
+    def _dec(data):
+        return decode_hex(remove_0x_head(data))
 
-    m = [
-        ('GENESIS_INITIAL_ALLOC', 'alloc', lambda x: x),
-        ('GENESIS_DIFFICULTY',  'difficulty', parse_int_or_hex),
-        ('GENESIS_TIMESTAMP',  'timestamp', parse_int_or_hex),
-        ('GENESIS_EXTRA_DATA',  'extraData', _dec),
-        ('GENESIS_GAS_LIMIT',  'gasLimit', parse_int_or_hex),
-        ('GENESIS_MIXHASH', 'mixhash', _dec),
-        ('GENESIS_PREVHASH',  'parentHash', _dec),
-        ('GENESIS_COINBASE',  'coinbase', _dec),
-        ('GENESIS_NONCE',  'nonce', _dec)
-    ]
-
-    m = dict((in_key, (target_key, translator_func)) for target_key, in_key, translator_func in m)
-
-    for k, v in genesis_dict.items():
-        target_key, translator_func = m[k]
-        cfg[target_key] = translator_func(v)
+    ethblock_config['GENESIS_INITIAL_ALLOC'] = genesis_dict['alloc']
+    ethblock_config['GENESIS_DIFFICULTY'] = parse_int_or_hex(genesis_dict['difficulty'])
+    ethblock_config['GENESIS_TIMESTAMP'] = parse_int_or_hex(genesis_dict['timestamp'])
+    ethblock_config['GENESIS_EXTRA_DATA'] = _dec(genesis_dict['extraData'])
+    ethblock_config['GENESIS_GAS_LIMIT'] = parse_int_or_hex(genesis_dict['gasLimit'])
+    ethblock_config['GENESIS_MIXHASH'] = _dec(genesis_dict['mixhash'])
+    ethblock_config['GENESIS_PREVHASH'] = _dec(genesis_dict['parentHash'])
+    ethblock_config['GENESIS_COINBASE'] = _dec(genesis_dict['coinbase'])
+    ethblock_config['GENESIS_NONCE'] = _dec(genesis_dict['nonce'])
 
     return config

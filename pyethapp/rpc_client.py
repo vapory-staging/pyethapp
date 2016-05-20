@@ -3,7 +3,7 @@ import warnings
 
 import logging
 import json
-import time
+import gevent
 
 from ethereum import abi
 from ethereum.keys import privtoaddr
@@ -307,9 +307,9 @@ class JSONRPCClient(object):
             json_data['data'] = data_encoder(data)
 
         if block_number is not None:
-            res = self.call('eth_call', data, block_number)
+            res = self.call('eth_call', json_data, block_number)
         else:
-            res = self.call('eth_call', data)
+            res = self.call('eth_call', json_data)
 
         return data_decoder(res)
 
@@ -334,7 +334,7 @@ class JSONRPCClient(object):
 
         pending_block = self.call('eth_getBlockByNumber', 'pending', True)
         while any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
-            time.sleep(3)
+            gevent.sleep(3)
             pending_block = self.call('eth_getBlockByNumber', 'pending', True)
 
         transaction = self.call('eth_getTransactionByHash', transaction_hash)
@@ -353,7 +353,7 @@ class JSONRPCClient(object):
 
         block_number = self.blocknumber()
         while confirmation_block > block_number:
-            time.sleep(6)
+            gevent.sleep(6)
             block_number = self.blocknumber()
 
 
