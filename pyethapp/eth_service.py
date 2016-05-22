@@ -23,7 +23,6 @@ import statistics
 from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
-from pyethapp.canary import canary_addresses
 
 
 log = get_logger('eth.chainservice')
@@ -290,14 +289,7 @@ class ChainService(WiredService):
                     sentry.warn_invalid(t_block, 'other_block_error')
                     self.block_queue.get()
                     continue
-                # Check canary
-                score = 0
-                for address in canary_addresses:
-                    if block.get_storage_data(address, 1) > 0:
-                        score += 1
-                if score >= 2:
-                    log.warn('canary triggered')
-                    continue
+
                 # All checks passed
                 log.debug('adding', block=block, ts=time.time())
                 if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
