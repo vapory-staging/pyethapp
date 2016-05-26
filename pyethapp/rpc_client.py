@@ -1,14 +1,15 @@
-"""Provides a simple way of testing JSON RPC commands."""
+""" A simple way of interacting to a ethereum node through JSON RPC commands. """
 import warnings
 
 import logging
 import json
 import gevent
 
-from ethereum import abi
+from ethereum.abi import ContractTranslator
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
+from ethereum._solidity import compile_file, solidity_unresolved_symbols, solidity_library_symbol
 from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
@@ -19,12 +20,19 @@ from pyethapp.jsonrpc import (
     default_startgas, quantity_encoder, quantity_decoder,
 )
 
+# pylint: disable=invalid-name,too-many-arguments,too-few-public-methods
+# The number of arguments an it's names are determined by the JSON-RPC spec
+
 z_address = '\x00' * 20
 log = logging.getLogger(__name__)
 
 
-def address_encoder(a):
-    return _address_encoder(normalize_address(a, allow_blank=True))
+def address_encoder(address):
+    """ Normalize address and hex encode it with the additional of the '0x'
+    prefix.
+    """
+    normalized_address = normalize_address(address, allow_blank=True)
+    return _address_encoder(normalized_address)
 
 
 def block_tag_encoder(val):
@@ -37,13 +45,13 @@ def block_tag_encoder(val):
         assert not val
 
 
-def topic_encoder(t):
-    assert isinstance(t, (int, long))
-    return data_encoder(int_to_big_endian(t))
+def topic_encoder(topic):
+    assert isinstance(topic, (int, long))
+    return data_encoder(int_to_big_endian(topic))
 
 
-def topic_decoder(t):
-    return big_endian_to_int(data_decoder(t))
+def topic_decoder(topic):
+    return big_endian_to_int(data_decoder(topic))
 
 
 class JSONRPCClientReplyError(Exception):
@@ -101,9 +109,71 @@ class JSONRPCClient(object):
     def lastgasprice(self):
         return quantity_decoder(self.call('eth_lastGasPrice'))
 
-    def new_abi_contract(self, _abi, address):
+    def new_abi_contract(self, contract_interface, address):
+        warnings.warn('deprecated, use new_contract_proxy', DeprecationWarning)
+        return self.new_contract_proxy(contract_interface, address)
+
+    def new_contract_proxy(self, contract_interface, address):
+        """ Return a proxy for interacting with a smart contract.
+
+        Args:
+            contract_interface: The contract interface as defined by the json.
+            address: The contract's address.
+        """
         sender = self.sender or privtoaddr(self.privkey)
-        return ABIContract(sender, _abi, address, self.eth_call, self.send_transaction)
+
+        return ContractProxy(
+            sender,
+            contract_interface,
+            address,
+            self.eth_call,
+            self.send_transaction,
+        )
+
+    def deploy_solidity_contract(self, sender, contract_name, contract_path, libraries, contructor_paramenters):
+        all_contracts = compile_file(contract_path, libraries=libraries)
+
+        if contract_name not in all_contracts:
+            raise ValueError('Unkonwn contract {}'.format(contract_name))
+
+        contract = all_contracts[contract_name]
+        contract_interface = contract['abi']
+        symbols = solidity_unresolved_symbols(contract['bin'])
+        if symbols:
+            available_symbols = map(solidity_library_symbol, all_contracts.keys())  # pylint: disable=bad-builtin
+
+            if not set(symbols).issubset(available_symbols):
+                raise Exception('Cannot deploy contract, unresolved symbols.')
+
+            # TODO: make a dependency graph between the contracts and deploy
+            # them in the correct order
+            raise Exception('Cannot deploy contract, unresolved symbols.')
+
+        if contructor_paramenters:
+            translator = ContractTranslator(contract_interface)
+            parameters = translator.encode_constructor_arguments(contructor_paramenters)
+            bytecode = contract['bin'] + parameters
+        else:
+            bytecode = contract['bin']
+
+        transaction_hash = self.send_transaction(
+            sender,
+            to='',
+            data=bytecode,
+            gasprice=denoms.wei,
+        )
+
+        self.poll(transaction_hash.decode('hex'))
+        receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
+        contract_address = receipt['contractAddress']
+
+        return ContractProxy(
+            sender,
+            contract_interface,
+            contract_address,
+            self.eth_call,
+            self.send_transaction,
+        )
 
     def find_block(self, condition):
         """Query all blocks one by one and return the first one for which
@@ -116,13 +186,28 @@ class JSONRPCClient(object):
                 return block
             i += 1
 
-    def new_filter(self, fromBlock="", toBlock="", address=None, topics=[]):
-        encoders = dict(fromBlock=block_tag_encoder, toBlock=block_tag_encoder,
-                        address=address_encoder, topics=lambda x: [topic_encoder(t) for t in x])
-        data = {k: encoders[k](v) for k, v in locals().items()
-                if k not in ('self', 'encoders') and v is not None}
-        fid = self.call('eth_newFilter', data)
-        return quantity_decoder(fid)
+    def new_filter(self, fromBlock=None, toBlock=None, address=None, topics=None):
+        """ Creates a filter object, based on filter options, to notify when
+        the state changes (logs). To check if the state has changed, call
+        eth_getFilterChanges.
+        """
+
+        json_data = {
+            'fromBlock': block_tag_encoder(fromBlock or ''),
+            'toBlock': block_tag_encoder(toBlock or ''),
+        }
+
+        if address is not None:
+            json_data['address'] = address_encoder(address)
+
+        if topics is not None:
+            if not isinstance(topics, list):
+                raise ValueError('topics must be a list')
+
+            json_data['topics'] = [topic_encoder(topic) for topic in topics]
+
+        filter_id = self.call('eth_newFilter', json_data)
+        return quantity_decoder(filter_id)
 
     def filter_changes(self, fid):
         changes = self.call('eth_getFilterChanges', quantity_encoder(fid))
@@ -222,6 +307,10 @@ class JSONRPCClient(object):
         """ Creates new message call transaction or a contract creation, if the
         data field contains code.
 
+        Note:
+            The support for local signing through the variables v,r,s is not
+            part of the standard spec, a extended server is required.
+
         Args:
             from (address): The 20 bytes address the transaction is send from.
             to (address): DATA, 20 Bytes - (optional when creating new
@@ -257,10 +346,12 @@ class JSONRPCClient(object):
             'gasPrice': quantity_encoder(gasPrice),
             'gas': quantity_encoder(gas),
             'data': data_encoder(data),
-            'v': quantity_encoder(v),
-            'r': quantity_encoder(r),
-            's': quantity_encoder(s),
         }
+
+        if v and r and s:
+            json_data['v'] = quantity_encoder(v)
+            json_data['r'] = quantity_encoder(r)
+            json_data['s'] = quantity_encoder(s)
 
         res = self.call('eth_sendTransaction', json_data)
 
@@ -314,11 +405,11 @@ class JSONRPCClient(object):
         return data_decoder(res)
 
     def poll(self, transaction_hash, confirmations=None):
-        """ Wait until the `transaction_hash` is applied or reject.
+        """ Wait until the `transaction_hash` is applied or rejected.
 
         Args:
             transaction_hash (hash): Transaction hash that we are waiting for.
-            confirmations (int): Quantity of block confirmations that we will
+            confirmations (int): Number of block confirmations that we will
                 wait for.
         """
         if transaction_hash.startswith('0x'):
@@ -334,7 +425,7 @@ class JSONRPCClient(object):
 
         pending_block = self.call('eth_getBlockByNumber', 'pending', True)
         while any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
-            gevent.sleep(3)
+            gevent.sleep(.5)
             pending_block = self.call('eth_getBlockByNumber', 'pending', True)
 
         transaction = self.call('eth_getTransactionByHash', transaction_hash)
@@ -353,62 +444,100 @@ class JSONRPCClient(object):
 
         block_number = self.blocknumber()
         while confirmation_block > block_number:
-            gevent.sleep(6)
+            gevent.sleep(.5)
             block_number = self.blocknumber()
 
 
-class ABIContract(object):
-    """ Exposes the smart contract as a python object.
+class MethodProxy(object):
+    """ A callable interface that exposes a contract function. """
+    valid_kargs = set(('gasprice', 'startgas', 'value'))
 
-    This wrapper allows contracts calls to be made through a python interface,
-    each function is expose as a method in the python object with the right
-    amount of parameters.
+    def __init__(self, sender, contract_address, function_name, translator,
+                 call_function, transaction_function):
+        self.sender = sender
+        self.contract_address = contract_address
+        self.function_name = function_name
+        self.translator = translator
+        self.call_function = call_function
+        self.transaction_function = transaction_function
+
+    def transact(self, *args, **kargs):
+        assert set(kargs.keys()).issubset(self.valid_kargs)
+        data = self.translator.encode(self.function_name, args)
+
+        txhash = self.transaction_function(
+            sender=self.sender,
+            to=self.contract_address,
+            value=kargs.pop('value', 0),
+            data=data,
+            **kargs
+        )
+
+        return txhash
+
+    def call(self, *args, **kargs):
+        assert set(kargs.keys()).issubset(self.valid_kargs)
+        data = self.translator.encode(self.function_name, args)
+
+        res = self.call_function(
+            sender=self.sender,
+            to=self.contract_address,
+            value=kargs.pop('value', 0),
+            data=data,
+            **kargs
+        )
+
+        if res:
+            res = self.translator.decode(self.function_name, res)
+            res = res[0] if len(res) == 1 else res
+        return res
+
+    def __call__(self, *args, **kargs):
+        if self.translator.function_data[self.function_name]['is_constant']:
+            return self.call(*args, **kargs)
+        else:
+            return self.transact(*args, **kargs)
+
+
+class ContractProxy(object):
+    """ Exposes a smart contract as a python object.
+
+    Contract calls can be made directly in this object, all the functions will
+    be exposed with the equivalent api and will perform the argument
+    translation.
     """
 
-    def __init__(self, sender, _abi, address, call_func, transact_func):
-        self._translator = abi.ContractTranslator(_abi)
-        self.abi = _abi
-        self.address = address = normalize_address(address)
+    def __init__(self, sender, abi, address, call_func, transact_func):
         sender = normalize_address(sender)
-        valid_kargs = set(('gasprice', 'startgas', 'value'))
 
-        class abi_method(object):
+        self.abi = abi
+        self.address = address = normalize_address(address)
+        self.translator = ContractTranslator(abi)
 
-            def __init__(this, f):
-                this.f = f
+        for function_name in self.translator.function_data:
+            function_proxy = MethodProxy(
+                sender,
+                address,
+                function_name,
+                self.translator,
+                call_func,
+                transact_func,
+            )
 
-            def transact(this, *args, **kargs):
-                assert set(kargs.keys()).issubset(valid_kargs)
-                data = self._translator.encode(this.f, args)
-                txhash = transact_func(sender=sender,
-                                       to=address,
-                                       value=kargs.pop('value', 0),
-                                       data=data,
-                                       **kargs)
-                return txhash
+            type_argument = self.translator.function_data[function_name]['signature']
 
-            def call(this, *args, **kargs):
-                assert set(kargs.keys()).issubset(valid_kargs)
-                data = self._translator.encode(this.f, args)
-                res = call_func(sender=sender,
-                                to=address,
-                                value=kargs.pop('value', 0),
-                                data=data,
-                                **kargs)
-                if res:
-                    res = self._translator.decode(this.f, res)
-                    res = res[0] if len(res) == 1 else res
-                return res
+            arguments = [
+                '{type} {argument}'.format(type=type_, argument=argument)
+                for type_, argument in type_argument
+            ]
+            function_signature = ', '.join(arguments)
 
-            def __call__(this, *args, **kargs):
-                if self._translator.function_data[this.f]['is_constant']:
-                    return this.call(*args, **kargs)
-                else:
-                    return this.transact(*args, **kargs)
+            function_proxy.__doc__ = '{function_name}({function_signature})'.format(
+                function_name=function_name,
+                function_signature=function_signature,
+            )
 
-        for fname in self._translator.function_data:
-            func = abi_method(fname)
-            # create wrapper with signature
-            signature = self._translator.function_data[fname]['signature']
-            func.__doc__ = '%s(%s)' % (fname, ', '.join(('%s %s' % x) for x in signature))
-            setattr(self, fname, func)
+            setattr(self, function_name, function_proxy)
+
+# backwards compatibility
+ABIContract = ContractProxy
