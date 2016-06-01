@@ -854,7 +854,7 @@ class Chain(Subdispatcher):
     def getTransactionCount(self, address, block_id='pending'):
         block = self.json_rpc_server.get_block(block_id)
         return block.get_nonce(address) - \
-            self.json_rpc_server.config['eth']['ACCOUNT_INITIAL_NONCE']
+            self.json_rpc_server.config['eth']['block']['ACCOUNT_INITIAL_NONCE']
 
     @public
     @decode_arg('block_hash', block_hash_decoder)
