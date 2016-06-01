@@ -9,7 +9,7 @@ from ethereum.abi import ContractTranslator
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
-from ethereum._solidity import compile_file, solidity_unresolved_symbols, solidity_library_symbol
+from ethereum._solidity import compile_file, solidity_unresolved_symbols, solidity_library_symbol, solidity_resolve_symbols
 from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
@@ -52,6 +52,61 @@ def topic_encoder(topic):
 
 def topic_decoder(topic):
     return big_endian_to_int(data_decoder(topic))
+
+
+def deploy_dependencies_symbols(all_contract):
+    dependencies = {}
+
+    symbols_to_contract = dict()
+    for contract_name in all_contract:
+        symbol = solidity_library_symbol(contract_name)
+
+        if symbol in symbols_to_contract:
+            raise ValueError('Conflicting library names.')
+
+        symbols_to_contract[symbol] = contract_name
+
+    for contract_name, contract in all_contract.items():
+        unresolved_symbols = solidity_unresolved_symbols(contract['bin_hex'])
+        dependencies[contract_name] = [
+            symbols_to_contract[unresolved]
+            for unresolved in unresolved_symbols
+        ]
+
+    return dependencies
+
+
+def dependencies_order_of_build(target_contract, dependencies_map):
+    """ Return an ordered list of contracts that is sufficient to sucessfully
+    deploys the target contract.
+
+    Note:
+        This function assumes that the `dependencies_map` is an acyclic graph.
+    """
+    if len(dependencies_map) == 0:
+        return [target_contract]
+
+    if target_contract not in dependencies_map:
+        raise ValueError('no dependencies defined for {}'.format(target_contract))
+
+    order = [target_contract]
+    todo = list(dependencies_map[target_contract])
+
+    while len(todo):
+        target_contract = todo.pop(0)
+        target_pos = len(order)
+
+        for dependency in dependencies_map[target_contract]:
+            # we need to add the current contract before all it's depedencies
+            if dependency in order:
+                target_pos = order.index(dependency)
+            else:
+                todo.append(dependency)
+
+        order.insert(target_pos, target_contract)
+
+    order.reverse()
+    return order
 
 
 class JSONRPCClientReplyError(Exception):
@@ -130,24 +185,62 @@ class JSONRPCClient(object):
             self.send_transaction,
         )
 
-    def deploy_solidity_contract(self, sender, contract_name, contract_path, libraries, contructor_paramenters):
+    def deploy_solidity_contract(self, sender, contract_name, contract_path,  # pylint: disable=too-many-locals
+                                 libraries, contructor_paramenters):
         all_contracts = compile_file(contract_path, libraries=libraries)
 
         if contract_name not in all_contracts:
             raise ValueError('Unkonwn contract {}'.format(contract_name))
 
+        libraries = dict(libraries)
         contract = all_contracts[contract_name]
         contract_interface = contract['abi']
-        symbols = solidity_unresolved_symbols(contract['bin'])
+        symbols = solidity_unresolved_symbols(contract['bin_hex'])
+
         if symbols:
             available_symbols = map(solidity_library_symbol, all_contracts.keys())  # pylint: disable=bad-builtin
 
-            if not set(symbols).issubset(available_symbols):
-                raise Exception('Cannot deploy contract, unresolved symbols.')
+            unknown_symbols = set(symbols) - set(available_symbols)
+            if unknown_symbols:
+                msg = 'Cannot deploy contract, known symbols {}, unresolved symbols {}.'.format(
+                    available_symbols,
+                    unknown_symbols,
+                )
+                raise Exception(msg)
 
-            # TODO: make a dependency graph between the contracts and deploy
-            # them in the correct order
-            raise Exception('Cannot deploy contract, unresolved symbols.')
+            dependencies = deploy_dependencies_symbols(all_contracts)
+            deployment_order = dependencies_order_of_build(contract_name, dependencies)
+
+            deployment_order.pop()  # remove `contract_name` from the list
+
+            log.debug('Deploing dependencies: {}'.format(str(deployment_order)))
+
+            for deploy_contract in deployment_order:
+                dependency_contract = all_contracts[deploy_contract]
+
+                hex_bytecode = solidity_resolve_symbols(dependency_contract['bin_hex'], libraries)
+                bytecode = hex_bytecode.decode('hex')
+
+                dependency_contract['bin_hex'] = hex_bytecode
+                dependency_contract['bin'] = bytecode
+
+                transaction_hash = self.send_transaction(
+                    sender,
+                    to='',
+                    data=bytecode,
+                    gasprice=denoms.wei,
+                )
+
+                self.poll(transaction_hash.decode('hex'))
+                receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
+                libraries[deploy_contract] = receipt['contractAddress']
+
+            # 'x' characters
+            hex_bytecode = solidity_resolve_symbols(contract['bin_hex'], libraries)
+            bytecode = hex_bytecode.decode('hex')
+
+            contract['bin_hex'] = hex_bytecode
+            contract['bin'] = bytecode
 
         if contructor_paramenters:
             translator = ContractTranslator(contract_interface)
