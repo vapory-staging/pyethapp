@@ -1,10 +1,10 @@
 """ A simple way of interacting to a ethereum node through JSON RPC commands. """
-import warnings
-
 import logging
+import time
+import warnings
 import json
-import gevent
 
+import gevent
 from ethereum.abi import ContractTranslator
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
@@ -185,9 +185,8 @@ class JSONRPCClient(object):
             self.send_transaction,
         )
 
-    def deploy_solidity_contract(self, sender, contract_name, contract_path,  # pylint: disable=too-many-locals
-                                 libraries, contructor_paramenters):
-        all_contracts = compile_file(contract_path, libraries=libraries)
+    def deploy_solidity_contract(self, sender, contract_name, all_contracts,  # pylint: disable=too-many-locals
+                                 libraries, contructor_paramenters, timeout=None):
 
         if contract_name not in all_contracts:
             raise ValueError('Unkonwn contract {}'.format(contract_name))
@@ -231,11 +230,12 @@ class JSONRPCClient(object):
                     gasprice=denoms.wei,
                 )
 
-                self.poll(transaction_hash.decode('hex'))
+                self.poll(transaction_hash.decode('hex'), timeout=timeout)
                 receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
-                libraries[deploy_contract] = receipt['contractAddress']
 
-            # 'x' characters
+                contract_address = receipt['contractAddress']
+                libraries[deploy_contract] = contract_address[2:]  # remove the hexadecimal prefix 0x from the address
+
             hex_bytecode = solidity_resolve_symbols(contract['bin_hex'], libraries)
             bytecode = hex_bytecode.decode('hex')
 
@@ -256,7 +256,7 @@ class JSONRPCClient(object):
             gasprice=denoms.wei,
         )
 
-        self.poll(transaction_hash.decode('hex'))
+        self.poll(transaction_hash.decode('hex'), timeout=timeout)
         receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
         contract_address = receipt['contractAddress']
 
@@ -497,13 +497,15 @@ class JSONRPCClient(object):
 
         return data_decoder(res)
 
-    def poll(self, transaction_hash, confirmations=None):
+    def poll(self, transaction_hash, confirmations=None, timeout=None):
         """ Wait until the `transaction_hash` is applied or rejected.
 
         Args:
             transaction_hash (hash): Transaction hash that we are waiting for.
             confirmations (int): Number of block confirmations that we will
                 wait for.
+            timeout (float): Timeout in seconds, raise an Excpetion on
+                timeout.
         """
         if transaction_hash.startswith('0x'):
             warnings.warn(
@@ -514,10 +516,17 @@ class JSONRPCClient(object):
         if len(transaction_hash) != 32:
             raise ValueError('transaction_hash length must be 32 (it might be hex encode)')
 
+        deadline = None
+        if timeout:
+            deadline = time.time() + timeout
+
         transaction_hash = data_encoder(transaction_hash)
 
         pending_block = self.call('eth_getBlockByNumber', 'pending', True)
         while any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
+            if deadline and time.time() > deadline:
+                raise Exception('timeout')
+
             gevent.sleep(.5)
             pending_block = self.call('eth_getBlockByNumber', 'pending', True)
 
@@ -537,6 +546,9 @@ class JSONRPCClient(object):
 
         block_number = self.blocknumber()
         while confirmation_block > block_number:
+            if deadline and time.time() > deadline:
+                raise Exception('timeout')
+
             gevent.sleep(.5)
             block_number = self.blocknumber()
 
