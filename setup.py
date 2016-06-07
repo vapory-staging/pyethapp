@@ -7,7 +7,7 @@ from setuptools.command.test import test as TestCommand
 
 class PyTest(TestCommand):
     def __init__(self, *args, **kwargs):
-        super(PyTest, self).__init__(*args, **kwargs)
+        TestCommand.__init__(self, *args, **kwargs)
         self.test_suite = True
 
     def finalize_options(self):
