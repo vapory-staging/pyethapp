@@ -1,28 +1,34 @@
+# -*- coding: utf8 -*-
+import os
+from os import path
 from itertools import count
-import json
+
 import pytest
 import serpent
-from devp2p.peermanager import PeerManager
 import ethereum
-from ethereum import tester
-from ethereum.ethpow import mine
-import ethereum.keys
 import ethereum.config
+import ethereum.keys
+from ethereum.ethpow import mine
+from ethereum import tester
 from ethereum.slogging import get_logger
+from devp2p.peermanager import PeerManager
+import ethereum._solidity
+
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
 from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
-from pyethapp.jsonrpc import JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
-    data_encoder
+from pyethapp.jsonrpc import (
+    Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,
+    data_encoder,
+)
 from pyethapp.pow_service import PoWService
+from pyethapp.jsonrpc import Compilers
 
-# reduce key derivation iterations
-ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
-
-
-log = get_logger('test.jsonrpc')
+ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
+log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
+SOLIDITY_AVAILABLE = 'solidity' in Compilers().compilers
 
 
 # EVM code corresponding to the following solidity code:
@@ -37,15 +43,11 @@ log = get_logger('test.jsonrpc')
 #
 # (compiled with online Solidity compiler at https://chriseth.github.io/browser-solidity/ version
 # 0.1.1-34172c3b/RelWithDebInfo-Emscripten/clang/int)
-LOG_EVM = ('606060405260448060116000396000f30060606040523615600d57600d565b60425b7f5e7df75d54'
-           'e493185612379c616118a4c9ac802de621b010c96f74d22df4b30a60405180905060405180910390'
-           'a15b565b00').decode('hex')
-
-
-from pyethapp.jsonrpc import Compilers
-
-
-solidity_code = "contract test { function multiply(uint a) returns(uint d) {   return a * 7;   } }"
+LOG_EVM = (
+    '606060405260448060116000396000f30060606040523615600d57600d565b60425b7f5e7df75d54'
+    'e493185612379c616118a4c9ac802de621b010c96f74d22df4b30a60405180905060405180910390'
+    'a15b565b00'
+).decode('hex')
 
 
 def test_externally():
@@ -53,58 +55,67 @@ def test_externally():
     #  1) the Whisper protocol is not implemented and its tests fail;
     #  2) the eth_accounts method should be skipped;
     #  3) the eth_getFilterLogs fails due to the invalid test data;
-    import os
     os.system('''
-        git clone https://github.com/ethereum/rpc-tests ;
+        git clone https://github.com/ethereum/rpc-tests;
         cd rpc-tests;
         git submodule update --init --recursive;
         npm install;
-        rm -rf /tmp/rpctests ; pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
-        ''')
+        rm -rf /tmp/rpctests;
+        pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
+    ''')
 
 
-def test_compileSolidity():
-    from pyethapp.jsonrpc import Compilers, data_encoder
-    import ethereum._solidity
-    s = ethereum._solidity.get_solidity()
-    if s is None:
-        pytest.xfail("solidity not installed, not tested")
-    else:
-        c = Compilers()
-        bc = s.compile(solidity_code)
-        abi = s.mk_full_signature(solidity_code)
-        A = dict(test=dict(code=data_encoder(bc),
-                           info=dict(source=solidity_code,
-                                     language='Solidity',
-                                     languageVersion='0',
-                                     compilerVersion='0',
-                                     abiDefinition=abi,
-                                     userDoc=dict(methods=dict()),
-                                     developerDoc=dict(methods=dict()),
-                                     )
-                           )
-                 )
-        B = c.compileSolidity(solidity_code)
-        assert A.keys() == B.keys()
-        At = A['test']
-        Bt = B['test']
-        assert At['code'] == Bt['code']
-        for k, Av in At['info'].items():
-            if k == 'compilerVersion':
-                continue
-            assert Av == Bt['info'][k]
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
+def test_compile_solidity():
+    with open(path.join(path.dirname(__file__), 'contracts', 'multiply.sol')) as handler:
+        solidity_code = handler.read()
 
+    solidity = ethereum._solidity.get_solidity()  # pylint: disable=protected-access
 
-@pytest.mark.skipif('solidity' not in Compilers().compilers,
-                    reason="solidity compiler not available")
-def test_compileSolidity_2():
-    result = Compilers().compileSolidity(solidity_code)
-    assert set(result.keys()) == {'test'}
-    assert set(result['test'].keys()) == {'info', 'code'}
-    assert set(result['test']['info']) == {
-        'language', 'languageVersion', 'abiDefinition', 'source',
-        'compilerVersion', 'developerDoc', 'userDoc'
+    abi = solidity.mk_full_signature(solidity_code)
+    code = data_encoder(solidity.compile(solidity_code))
+
+    info = {
+        'abiDefinition': abi,
+        'compilerVersion': '0',
+        'developerDoc': {
+            'methods': None,
+        },
+        'language': 'Solidity',
+        'languageVersion': '0',
+        'source': solidity_code,
+        'userDoc': {
+            'methods': None,
+        },
     }
+    test_result = {
+        'test': {
+            'code': code,
+            'info': info,
+        }
+    }
+    compiler_result = Compilers().compileSolidity(solidity_code)
+
+    assert set(compiler_result.keys()) == {'test',}
+    assert set(compiler_result['test'].keys()) == {'info', 'code',}
+    assert set(compiler_result['test']['info']) == {
+        'abiDefinition',
+        'compilerVersion',
+        'developerDoc',
+        'language',
+        'languageVersion',
+        'source',
+        'userDoc',
+    }
+
+    assert test_result['test']['code'] == compiler_result['test']['code']
+
+    compiler_info = dict(compiler_result['test']['info'])
+
+    compiler_info.pop('compilerVersion')
+    info.pop('compilerVersion')
+
+    assert compiler_info['abiDefinition'] == info['abiDefinition']
 
 
 @pytest.fixture
