@@ -4,9 +4,9 @@ dist: trusty
 python:
 - '2.7'
 before_install:
-    - sudo add-apt-repository -y ppa:ethereum/ethereum
-    - sudo apt-get update
-    - sudo apt-get install -y solc
+- sudo add-apt-repository -y ppa:ethereum/ethereum
+- sudo apt-get update
+- sudo apt-get install -y solc
 install:
 - pip install -r requirements.txt
 - pip install coveralls readme_renderer
@@ -15,6 +15,9 @@ script:
 - python setup.py check --restructuredtext --strict
 after_success:
 - coveralls
+env:
+  global:
+    secure: Flr9EhWiDRQnMDSswKZRDRqMtHtIt/TKSKQWieaJo7J9MIbUrFFthhKVcuZVUmff3N2UeNTfWmPWq8UbbWi5x0u4MkezBGwQVqjUTd0xE+ZjeqeQuD8TQD1nmzFkUKJ7hoItoceZNEk2Ajb7NTrt5ZNYXp0sjlYFn0iPlnFNZYM=
 notifications:
   slack:
     secure: MLpiCgdrAqs0GCTdf9zC84/ly93xxQSTcmY2guAHCMGp+DjaRk/fWIrBMPJVE/ZI7FYV6BcDX4pv5l2QUrmubdFpygayTz3V+/ELtabtFIO7MR9zExFhLUMaRP5+YDNJZJ9rA4TI8r00o4VQUM+tS12cR1NbzTIXMm2OMLC+2Uw=
@@ -28,3 +31,5 @@ deploy:
     repo: ethereum/pyethapp
     branch: develop
   distributions: sdist bdist_wheel
+after_deploy:
+- ./.release_notify.sh
