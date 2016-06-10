@@ -150,7 +150,7 @@ class JSONRPCClient(object):
         if len(address) == 40:
             address = address.decode('hex')
 
-        res = self.call('eth_getTransactionCount', address_encoder(address), 'pending')
+        res = self.call('eth_nonce', address_encoder(address), 'pending')
         return quantity_decoder(res)
 
     def balance(self, account):

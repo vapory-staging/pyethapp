@@ -1043,6 +1043,23 @@ class Chain(Subdispatcher):
         return self.app.services.accounts.coinbase
 
     @public
+    @decode_arg('address', address_decoder)
+    @encode_res(quantity_encoder)
+    def nonce(self, address, block_id='pending'):
+        """
+        Return the `nonce` for `address` at the current `block_id
+        :param address:
+        :param block_id:
+        :return: the newest nonce for the address/account
+        """
+        assert address is not None
+        block = self.json_rpc_server.get_block(block_id)
+        assert block is not None
+        nonce = block.get_nonce(address)
+        assert nonce is not None and isinstance(nonce, int)
+        return nonce
+
+    @public
     def sendTransaction(self, data):
         """
         extend spec to support v,r,s signed transactions
