@@ -49,21 +49,6 @@ LOG_EVM = (
 ).decode('hex')
 
 
-def test_externally():
-    # The results of the external rpc-tests are not evaluated as:
-    #  1) the Whisper protocol is not implemented and its tests fail;
-    #  2) the eth_accounts method should be skipped;
-    #  3) the eth_getFilterLogs fails due to the invalid test data;
-    os.system('''
-        git clone https://github.com/ethereum/rpc-tests;
-        cd rpc-tests;
-        git submodule update --init --recursive;
-        npm install;
-        rm -rf /tmp/rpctests;
-        pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
-    ''')
-
-
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
 def test_compile_solidity():
     with open(path.join(path.dirname(__file__), 'contracts', 'multiply.sol')) as handler:
