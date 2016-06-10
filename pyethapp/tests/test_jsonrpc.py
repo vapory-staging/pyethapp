@@ -4,6 +4,7 @@ from os import path
 from itertools import count
 
 import pytest
+import rlp
 import serpent
 import ethereum
 import ethereum.config
@@ -19,10 +20,8 @@ from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
-from pyethapp.jsonrpc import (
-    Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,
-    data_encoder,
-)
+from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
+    data_encoder, default_gasprice, default_startgas
 from pyethapp.pow_service import PoWService
 from pyethapp.jsonrpc import Compilers
 
@@ -253,6 +252,36 @@ def main(a,b):
         'data': evm_code.encode('hex')
     }
     data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    creates = chain.head_candidate.get_transaction(0).creates
+
+    code = chain.head_candidate.account_to_dict(creates)['code']
+    assert len(code) > 2
+    assert code != '0x'
+
+    test_app.mine_next_block()
+
+    creates = chain.head.get_transaction(0).creates
+    code = chain.head.account_to_dict(creates)['code']
+    assert len(code) > 2
+    assert code != '0x'
+
+
+def test_send_raw_transaction_with_contract(test_app):
+    serpent_code = '''
+def main(a,b):
+    return(a ^ b)
+'''
+    tx_to = b''
+    evm_code = serpent.compile(serpent_code)
+    chain = test_app.services.chain.chain
+    assert chain.head_candidate.get_balance(tx_to) == 0
+    sender = test_app.services.accounts.unlocked_accounts[0].address
+    assert chain.head_candidate.get_balance(sender) > 0
+    nonce = chain.head_candidate.get_nonce(sender)
+    tx = ethereum.transactions.Transaction(nonce, default_gasprice, default_startgas, tx_to, 0, evm_code, 0, 0, 0)
+    test_app.services.accounts.sign_tx(sender, tx)
+    raw_transaction = data_encoder(rlp.codec.encode(tx, ethereum.transactions.Transaction))
+    data_decoder(test_app.rpc_request('eth_sendRawTransaction', raw_transaction))
     creates = chain.head_candidate.get_transaction(0).creates
 
     code = chain.head_candidate.account_to_dict(creates)['code']
