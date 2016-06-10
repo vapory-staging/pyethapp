@@ -533,3 +533,29 @@ def test_get_filter_changes(test_app):
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', range_filter_id))
     assert sorted(logs[-1]) == sorted(logs_in_range + [pending_log])
+
+
+def test_eth_nonce(test_app):
+    """
+    Test for the spec extension `eth_nonce`, which is used by
+    the spec extended `eth_sendTransaction` with local signing.
+    :param test_app:
+    :return:
+    """
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'])
+
+    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 1)
+    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
+    test_app.mine_next_block()
+    assert test_app.services.chain.chain.head.number == 1
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 2)
