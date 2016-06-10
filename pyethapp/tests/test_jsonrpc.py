@@ -204,6 +204,8 @@ def test_app(request, tmpdir):
 
     def fin():
         log.debug('stopping test app')
+        for service in app.services:
+            app.services[service].stop()
         app.stop()
     request.addfinalizer(fin)
 
