@@ -22,6 +22,7 @@ from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
     data_encoder, default_gasprice, default_startgas
+from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
 from pyethapp.jsonrpc import Compilers
 
@@ -117,7 +118,8 @@ def test_compile_solidity():
     assert compiler_info['abiDefinition'] == info['abiDefinition']
 
 
-@pytest.fixture
+@pytest.fixture(params=[0,
+    PROFILES['testnet']['eth']['block']['ACCOUNT_INITIAL_NONCE']])
 def test_app(request, tmpdir):
 
     class TestApp(EthApp):
@@ -183,6 +185,7 @@ def test_app(request, tmpdir):
         },
         'eth': {
             'block': {  # reduced difficulty, increased gas limit, allocations to test accounts
+                'ACCOUNT_INITIAL_NONCE': request.param,
                 'GENESIS_DIFFICULTY': 1,
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
                 'GENESIS_GAS_LIMIT': 3141592,
@@ -193,7 +196,7 @@ def test_app(request, tmpdir):
                 }
             }
         },
-        'jsonrpc': {'listen_port': 29873}
+        'jsonrpc': {'listen_port': 4488, 'listen_host': '127.0.0.1'}
     }
     services = [DBService, AccountsService, PeerManager, ChainService, PoWService, JSONRPCServer]
     update_config_with_defaults(config, get_default_config([TestApp] + services))
