@@ -2,6 +2,7 @@
 import os
 from os import path
 from itertools import count
+import gevent
 
 import pytest
 import rlp
@@ -208,7 +209,12 @@ def test_app(request, tmpdir):
     def fin():
         log.debug('stopping test app')
         for service in app.services:
-            app.services[service].stop()
+            gevent.sleep(.1)
+            try:
+                app.services[service].stop()
+            except Exception as e:
+                log.DEV(str(e), exc_info=e)
+                pass
         app.stop()
     request.addfinalizer(fin)
 
