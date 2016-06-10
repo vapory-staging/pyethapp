@@ -428,23 +428,27 @@ class JSONRPCClient(object):
         if to == '0' * 40:
             warnings.warn('For contract creating the empty string must be used.')
 
-        if not sender and not (v and r and s):
-            raise ValueError('Either sender or v, r, s needs to be informed.')
-
         json_data = {
-            'from': address_encoder(sender),
             'to': data_encoder(normalize_address(to, allow_blank=True)),
-            'nonce': quantity_encoder(nonce),
             'value': quantity_encoder(value),
             'gasPrice': quantity_encoder(gasPrice),
             'gas': quantity_encoder(gas),
             'data': data_encoder(data),
         }
 
+        if not sender and not (v and r and s):
+            raise ValueError('Either sender or v, r, s needs to be informed.')
+
+        if sender is not None:
+            json_data['from'] = address_encoder(sender)
+
         if v and r and s:
             json_data['v'] = quantity_encoder(v)
             json_data['r'] = quantity_encoder(r)
             json_data['s'] = quantity_encoder(s)
+
+        if nonce is not None:
+            json_data['nonce'] = quantity_encoder(nonce)
 
         res = self.call('eth_sendTransaction', json_data)
 
