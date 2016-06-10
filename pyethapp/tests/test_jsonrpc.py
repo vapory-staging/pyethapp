@@ -278,8 +278,7 @@ def main(a,b):
     sender = test_app.services.accounts.unlocked_accounts[0].address
     assert chain.head_candidate.get_balance(sender) > 0
     nonce = chain.head_candidate.get_nonce(sender)
-    tx = ethereum.transactions.Transaction(nonce, default_gasprice, default_startgas, tx_to, 0,
-                                           evm_code.encode('hex'), 0, 0, 0)
+    tx = ethereum.transactions.Transaction(nonce, default_gasprice, default_startgas, tx_to, 0, evm_code, 0, 0, 0)
     test_app.services.accounts.sign_tx(sender, tx)
     raw_transaction = data_encoder(rlp.codec.encode(tx, ethereum.transactions.Transaction))
     data_decoder(test_app.rpc_request('eth_sendRawTransaction', raw_transaction))
