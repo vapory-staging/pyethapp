@@ -1,5 +1,4 @@
 # -*- coding: utf8 -*-
-import os
 from os import path
 from itertools import count
 import gevent
@@ -25,7 +24,6 @@ from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address
     data_encoder, default_gasprice, default_startgas
 from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
-from pyethapp.jsonrpc import Compilers
 
 ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
@@ -97,8 +95,8 @@ def test_compile_solidity():
     }
     compiler_result = Compilers().compileSolidity(solidity_code)
 
-    assert set(compiler_result.keys()) == {'test',}
-    assert set(compiler_result['test'].keys()) == {'info', 'code',}
+    assert set(compiler_result.keys()) == {'test', }
+    assert set(compiler_result['test'].keys()) == {'info', 'code', }
     assert set(compiler_result['test']['info']) == {
         'abiDefinition',
         'compilerVersion',
@@ -145,7 +143,7 @@ def test_app(request, tmpdir):
             """
             log.debug('mining next block')
             block = self.services.chain.chain.head_candidate
-            delta_nonce = 10**6
+            delta_nonce = 10 ** 6
             for start_nonce in count(0, delta_nonce):
                 bin_nonce, mixhash = mine(block.number, block.difficulty, block.mining_hash,
                                           start_nonce=start_nonce, rounds=delta_nonce)
@@ -191,9 +189,9 @@ def test_app(request, tmpdir):
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
                 'GENESIS_GAS_LIMIT': 3141592,
                 'GENESIS_INITIAL_ALLOC': {
-                    tester.accounts[0].encode('hex'): {'balance': 10**24},
+                    tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
                     tester.accounts[1].encode('hex'): {'balance': 1},
-                    tester.accounts[2].encode('hex'): {'balance': 10**24},
+                    tester.accounts[2].encode('hex'): {'balance': 10 ** 24},
                 }
             }
         },
@@ -446,6 +444,7 @@ def test_get_logs(test_app):
 def test_get_filter_changes(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
+    assert n0 == 1
     sender = address_encoder(test_app.services.accounts.unlocked_accounts[0].address)
     contract_creation = {
         'from': sender,
