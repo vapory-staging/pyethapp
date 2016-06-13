@@ -1,4 +1,5 @@
 # -*- coding: utf8 -*-
+import os
 from os import path
 from itertools import count
 import gevent
