@@ -150,8 +150,16 @@ class JSONRPCClient(object):
         if len(address) == 40:
             address = address.decode('hex')
 
-        res = self.call('eth_nonce', address_encoder(address), 'pending')
-        return quantity_decoder(res)
+        try:
+            res = self.call('eth_nonce', address_encoder(address), 'pending')
+            return quantity_decoder(res)
+        except JSONRPCClientReplyError as e:
+            if e.message == 'Method not found':
+                raise JSONRPCClientReplyError(
+                    "'eth_nonce' is not supported by your endpoint (pyethapp only). "
+                    "For transactions use server-side nonces: "
+                    "('eth_sendTransaction' with 'nonce=None')")
+            raise e
 
     def balance(self, account):
         """ Return the balance of the account of given address. """
