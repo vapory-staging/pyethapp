@@ -2,6 +2,7 @@
 from os import path
 from itertools import count
 import gevent
+import gc
 
 import pytest
 import rlp
@@ -214,6 +215,8 @@ def test_app(request, tmpdir):
                 log.DEV(str(e), exc_info=e)
                 pass
         app.stop()
+        gevent.killall(task for task in gc.get_objects() if isinstance(task, gevent.Greenlet))
+
     request.addfinalizer(fin)
 
     log.debug('starting test app')
