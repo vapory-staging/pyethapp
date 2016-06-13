@@ -603,7 +603,7 @@ class Personal(Subdispatcher):
 
     """Subdispatcher for account-related RPC methods.
 
-    NOTE: this do not seem to be part of the official JSON-RPC specs but instead part of
+    NOTE: this does not seem to be part of the official JSON-RPC specs but instead part of
     go-ethereum's JavaScript-Console: https://github.com/ethereum/go-ethereum/wiki/JavaScript-Console#personal
 
     It is needed for MIST-IPC.
@@ -1044,13 +1044,14 @@ class Chain(Subdispatcher):
 
     @public
     @decode_arg('address', address_decoder)
+    @decode_arg('block_id', block_id_decoder)
     @encode_res(quantity_encoder)
     def nonce(self, address, block_id='pending'):
         """
         Return the `nonce` for `address` at the current `block_id
         :param address:
         :param block_id:
-        :return: the newest nonce for the address/account
+        :return: the next nonce for the address/account
         """
         assert address is not None
         block = self.json_rpc_server.get_block(block_id)
