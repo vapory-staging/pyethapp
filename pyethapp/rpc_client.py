@@ -9,7 +9,7 @@ from ethereum.abi import ContractTranslator
 from ethereum.keys import privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
-from ethereum._solidity import compile_file, solidity_unresolved_symbols, solidity_library_symbol, solidity_resolve_symbols
+from ethereum._solidity import solidity_unresolved_symbols, solidity_library_symbol, solidity_resolve_symbols
 from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport
@@ -150,8 +150,16 @@ class JSONRPCClient(object):
         if len(address) == 40:
             address = address.decode('hex')
 
-        res = self.call('eth_getTransactionCount', address_encoder(address), 'pending')
-        return quantity_decoder(res)
+        try:
+            res = self.call('eth_nonce', address_encoder(address), 'pending')
+            return quantity_decoder(res)
+        except JSONRPCClientReplyError as e:
+            if e.message == 'Method not found':
+                raise JSONRPCClientReplyError(
+                    "'eth_nonce' is not supported by your endpoint (pyethapp only). "
+                    "For transactions use server-side nonces: "
+                    "('eth_sendTransaction' with 'nonce=None')")
+            raise e
 
     def balance(self, account):
         """ Return the balance of the account of given address. """
@@ -428,23 +436,27 @@ class JSONRPCClient(object):
         if to == '0' * 40:
             warnings.warn('For contract creating the empty string must be used.')
 
-        if not sender and not (v and r and s):
-            raise ValueError('Either sender or v, r, s needs to be informed.')
-
         json_data = {
-            'from': address_encoder(sender),
             'to': data_encoder(normalize_address(to, allow_blank=True)),
-            'nonce': quantity_encoder(nonce),
             'value': quantity_encoder(value),
             'gasPrice': quantity_encoder(gasPrice),
             'gas': quantity_encoder(gas),
             'data': data_encoder(data),
         }
 
+        if not sender and not (v and r and s):
+            raise ValueError('Either sender or v, r, s needs to be informed.')
+
+        if sender is not None:
+            json_data['from'] = address_encoder(sender)
+
         if v and r and s:
             json_data['v'] = quantity_encoder(v)
             json_data['r'] = quantity_encoder(r)
             json_data['s'] = quantity_encoder(s)
+
+        if nonce is not None:
+            json_data['nonce'] = quantity_encoder(nonce)
 
         res = self.call('eth_sendTransaction', json_data)
 

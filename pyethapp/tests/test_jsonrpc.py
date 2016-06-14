@@ -2,6 +2,8 @@
 import os
 from os import path
 from itertools import count
+import gevent
+import gc
 
 import pytest
 import rlp
@@ -22,8 +24,8 @@ from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
     data_encoder, default_gasprice, default_startgas
+from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
-from pyethapp.jsonrpc import Compilers
 
 ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
@@ -95,8 +97,8 @@ def test_compile_solidity():
     }
     compiler_result = Compilers().compileSolidity(solidity_code)
 
-    assert set(compiler_result.keys()) == {'test',}
-    assert set(compiler_result['test'].keys()) == {'info', 'code',}
+    assert set(compiler_result.keys()) == {'test', }
+    assert set(compiler_result['test'].keys()) == {'info', 'code', }
     assert set(compiler_result['test']['info']) == {
         'abiDefinition',
         'compilerVersion',
@@ -117,7 +119,8 @@ def test_compile_solidity():
     assert compiler_info['abiDefinition'] == info['abiDefinition']
 
 
-@pytest.fixture
+@pytest.fixture(params=[0,
+    PROFILES['testnet']['eth']['block']['ACCOUNT_INITIAL_NONCE']])
 def test_app(request, tmpdir):
 
     class TestApp(EthApp):
@@ -142,7 +145,7 @@ def test_app(request, tmpdir):
             """
             log.debug('mining next block')
             block = self.services.chain.chain.head_candidate
-            delta_nonce = 10**6
+            delta_nonce = 10 ** 6
             for start_nonce in count(0, delta_nonce):
                 bin_nonce, mixhash = mine(block.number, block.difficulty, block.mining_hash,
                                           start_nonce=start_nonce, rounds=delta_nonce)
@@ -183,17 +186,18 @@ def test_app(request, tmpdir):
         },
         'eth': {
             'block': {  # reduced difficulty, increased gas limit, allocations to test accounts
+                'ACCOUNT_INITIAL_NONCE': request.param,
                 'GENESIS_DIFFICULTY': 1,
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
                 'GENESIS_GAS_LIMIT': 3141592,
                 'GENESIS_INITIAL_ALLOC': {
-                    tester.accounts[0].encode('hex'): {'balance': 10**24},
+                    tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
                     tester.accounts[1].encode('hex'): {'balance': 1},
-                    tester.accounts[2].encode('hex'): {'balance': 10**24},
+                    tester.accounts[2].encode('hex'): {'balance': 10 ** 24},
                 }
             }
         },
-        'jsonrpc': {'listen_port': 29873}
+        'jsonrpc': {'listen_port': 4488, 'listen_host': '127.0.0.1'}
     }
     services = [DBService, AccountsService, PeerManager, ChainService, PoWService, JSONRPCServer]
     update_config_with_defaults(config, get_default_config([TestApp] + services))
@@ -205,8 +209,15 @@ def test_app(request, tmpdir):
     def fin():
         log.debug('stopping test app')
         for service in app.services:
-            app.services[service].stop()
+            gevent.sleep(.1)
+            try:
+                app.services[service].stop()
+            except Exception as e:
+                log.DEV(str(e), exc_info=e)
+                pass
         app.stop()
+        gevent.killall(task for task in gc.get_objects() if isinstance(task, gevent.Greenlet))
+
     request.addfinalizer(fin)
 
     log.debug('starting test app')
@@ -437,6 +448,7 @@ def test_get_logs(test_app):
 def test_get_filter_changes(test_app):
     test_app.mine_next_block()  # start with a fresh block
     n0 = test_app.services.chain.chain.head.number
+    assert n0 == 1
     sender = address_encoder(test_app.services.accounts.unlocked_accounts[0].address)
     contract_creation = {
         'from': sender,
@@ -524,3 +536,29 @@ def test_get_filter_changes(test_app):
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', range_filter_id))
     assert sorted(logs[-1]) == sorted(logs_in_range + [pending_log])
+
+
+def test_eth_nonce(test_app):
+    """
+    Test for the spec extension `eth_nonce`, which is used by
+    the spec extended `eth_sendTransaction` with local signing.
+    :param test_app:
+    :return:
+    """
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'])
+
+    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 1)
+    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
+    test_app.mine_next_block()
+    assert test_app.services.chain.chain.head.number == 1
+    assert (
+        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 2)
