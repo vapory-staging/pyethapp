@@ -12,7 +12,7 @@ ipython>=3.0.0
 statistics
 requests
 rlp>=0.4.4
-devp2p>=0.7.2
+devp2p>=0.8.0
 ethereum>=1.3.5
 pbkdf2
 scrypt
