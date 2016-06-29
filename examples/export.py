@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from pyethapp.leveldb_service import LevelDB
 from pyethapp.config import default_data_dir
 from ethereum.chain import Chain
@@ -26,12 +27,12 @@ def _progress(i):
     sys.stderr.flush()
 
 
-def export_blocks(chain):
+def export_blocks(chain, head_number=None):
     """
     Export blocks
     rlp and hex encoded, separated by newline
     """
-    head_number = chain.head.header.number
+    head_number = head_number or chain.head.header.number
     block_number = 0
     while block_number < head_number:
         h = chain.index.get_block_by_number(block_number)
@@ -41,12 +42,12 @@ def export_blocks(chain):
         block_number += 1
 
 
-def export_transactions(chain):
+def export_transactions(chain, head_number=None):
     """
     Export transactions
     rlp and hex encoded, separated by newline
     """
-    head_number = chain.head.header.number
+    head_number = head_number or chain.head.header.number
     block_number = 0
     seen = 0
     while block_number < head_number:
@@ -70,7 +71,25 @@ def export_transactions(chain):
             _progress(seen)
         block_number += 1
 
+
 if __name__ == '__main__':
+    def usage():
+        print("Usage:\n\t{} (blocks|transactions) [head_number]".format(sys.argv[0]))
+        sys.exit(0)
+
+    if len(sys.argv) == 1 or "-h" in sys.argv:
+        usage()
+
+    head_number = None
+    cmd = sys.argv[1]
+
+    if len(sys.argv) > 2:
+        head_number = int(sys.argv[2])
+
     chain = get_chain()
-    # export_blocks(chain)
-    export_transactions(chain)
+    if cmd == "blocks":
+        export_blocks(chain, head_number=head_number)
+    elif cmd == "transactions":
+        export_transactions(chain, head_number=head_number)
+    else:
+        usage()
