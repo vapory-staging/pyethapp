@@ -12,9 +12,8 @@ from devp2p.service import BaseService
 import rlp
 import sys
 from ethereum import slogging
+from ethereum.slogging import bcolors
 import types
-
-from ethereum.utils import bcolors
 
 
 slogging.set_level('db', 'debug')

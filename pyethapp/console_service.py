@@ -1,29 +1,30 @@
 """
 Essential parts borrowed from https://github.com/ipython/ipython/pull/1654
 """
-from logging import StreamHandler, Formatter
-import os
-import signal
-import errno
-from ethereum import processblock
-import select
-import time
-import sys
 import cStringIO
+import errno
+import os
+import select
+import signal
+import sys
+import time
+from logging import StreamHandler, Formatter
 
-from devp2p.service import BaseService
 import gevent
 from gevent.event import Event
 import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
+from devp2p.service import BaseService
+from ethereum import processblock
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
-from ethereum.utils import denoms, normalize_address, bcolors as bc
+from ethereum.utils import denoms, normalize_address
 
-from rpc_client import ABIContract
+from pyethapp.utils import bcolors as bc
+from pyethapp.rpc_client import ABIContract
 
-log = getLogger(__name__)
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
