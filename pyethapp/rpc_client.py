@@ -242,7 +242,14 @@ class JSONRPCClient(object):
                 receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
 
                 contract_address = receipt['contractAddress']
-                libraries[deploy_contract] = contract_address[2:]  # remove the hexadecimal prefix 0x from the address
+                contract_address = contract_address[2:]  # remove the hexadecimal prefix 0x from the address
+
+                libraries[deploy_contract] = contract_address
+
+                deployed_code = self.call('eth_getCode', contract_address, 'latest')
+
+                if deployed_code == '0x':
+                    raise RuntimeError("Contract address has no code, check gas usage.")
 
             hex_bytecode = solidity_resolve_symbols(contract['bin_hex'], libraries)
             bytecode = hex_bytecode.decode('hex')
@@ -267,6 +274,13 @@ class JSONRPCClient(object):
         self.poll(transaction_hash.decode('hex'), timeout=timeout)
         receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
         contract_address = receipt['contractAddress']
+
+        deployed_code = self.call('eth_getCode', contract_address, 'latest')
+
+        if deployed_code == '0x':
+            raise RuntimeError("Deployment of {} failed. Contract address has no code, check gas usage.".format(
+                contract_name
+            ))
 
         return ContractProxy(
             sender,
