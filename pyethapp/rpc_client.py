@@ -464,7 +464,7 @@ class JSONRPCClient(object):
 
     def eth_call(self, sender='', to='', value=0, data='',
                  startgas=default_startgas, gasprice=default_gasprice,
-                 block_number=None):
+                 block_number='latest'):
         """ Executes a new message call immediately without creating a
         transaction on the block chain.
 
@@ -502,10 +502,7 @@ class JSONRPCClient(object):
         if data is not None:
             json_data['data'] = data_encoder(data)
 
-        if block_number is not None:
-            res = self.call('eth_call', json_data, block_number)
-        else:
-            res = self.call('eth_call', json_data)
+        res = self.call('eth_call', json_data, block_number)
 
         return data_decoder(res)
 
