@@ -194,7 +194,7 @@ class JSONRPCClient(object):
         )
 
     def deploy_solidity_contract(self, sender, contract_name, all_contracts,  # pylint: disable=too-many-locals
-                                 libraries, contructor_paramenters, timeout=None):
+                                 libraries, constructor_parameters, timeout=None, gasprice=denoms.wei):
 
         if contract_name not in all_contracts:
             raise ValueError('Unkonwn contract {}'.format(contract_name))
@@ -235,7 +235,7 @@ class JSONRPCClient(object):
                     sender,
                     to='',
                     data=bytecode,
-                    gasprice=denoms.wei,
+                    gasprice=gasprice,
                 )
 
                 self.poll(transaction_hash.decode('hex'), timeout=timeout)
@@ -250,9 +250,9 @@ class JSONRPCClient(object):
             contract['bin_hex'] = hex_bytecode
             contract['bin'] = bytecode
 
-        if contructor_paramenters:
+        if constructor_parameters:
             translator = ContractTranslator(contract_interface)
-            parameters = translator.encode_constructor_arguments(contructor_paramenters)
+            parameters = translator.encode_constructor_arguments(constructor_parameters)
             bytecode = contract['bin'] + parameters
         else:
             bytecode = contract['bin']
@@ -261,7 +261,7 @@ class JSONRPCClient(object):
             sender,
             to='',
             data=bytecode,
-            gasprice=denoms.wei,
+            gasprice=gasprice,
         )
 
         self.poll(transaction_hash.decode('hex'), timeout=timeout)
