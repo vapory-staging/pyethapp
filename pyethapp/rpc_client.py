@@ -532,6 +532,12 @@ class JSONRPCClient(object):
         transaction_hash = data_encoder(transaction_hash)
 
         pending_block = self.call('eth_getBlockByNumber', 'pending', True)
+
+        # give the server some time to add the tx to pending
+        if not any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
+            if timeout:
+                gevent.sleep(timeout / 2000.)
+
         while any(tx['hash'] == transaction_hash for tx in pending_block['transactions']):
             if deadline and time.time() > deadline:
                 raise Exception('timeout')
