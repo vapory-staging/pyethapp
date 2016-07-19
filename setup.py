@@ -47,7 +47,7 @@ INSTALL_REQUIRES = list(set(INSTALL_REQUIRES))
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
-version = '1.3.2'
+version = '1.3.3'
 
 setup(
     name='pyethapp',
