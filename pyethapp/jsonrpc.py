@@ -1294,7 +1294,11 @@ class LogFilter(object):
         self.topics = topics
         if self.topics:
             for topic in self.topics:
-                assert topic is None or is_numeric(topic)
+                assert topic is None or is_numeric(topic) \
+                    or type(topic) == list
+                if type(topic) == list:
+                    for or_topic in topic:
+                        assert or_topic is None or is_numeric(or_topic)
 
         self.last_head = self.chain.head
         self.last_block_checked = None
@@ -1364,9 +1368,22 @@ class LogFilter(object):
                     if not pass_address_check:
                         continue
                 # Check that the bloom for this block contains all of the desired topics
-                _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics or []))
-                if bloom.bloom_combine(_bloom, _topic_bloom) != _bloom:
-                    continue
+                or_topics = list()
+                and_topics = list()
+                for topic in self.topics:
+                    if type(topic) == list:
+                        or_topics += topic
+                    else:
+                        and_topics += topic
+                if or_topics:
+                    _topic_and_bloom = bloom.bloom_from_list(map(int32.serialize, and_topics or []))
+                    _topic_or_bloom = bloom.bloom_from_list(map(int32.serialize, or_topics or []))
+                    if _bloom & _topic_or_bloom | _topic_and_bloom != _bloom:
+                        continue
+                else:
+                    _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics or []))
+                    if bloom.bloom_combine(_bloom, _topic_bloom) != _bloom:
+                        continue
                 block = self.chain.get(block)
                 print 'bloom filter passed'
             logger.debug('-')
@@ -1382,7 +1399,8 @@ class LogFilter(object):
                         if len(log.topics) < len(self.topics):
                             topic_match = False
                         for filter_topic, log_topic in zip(self.topics, log.topics):
-                            if filter_topic is not None and filter_topic != log_topic:
+                            if filter_topic is not None and filter_topic != log_topic \
+                                    and type(filter_topic) == list and log_topic not in filter_topic:
                                 logger.debug('topic mismatch', want=filter_topic, have=log_topic)
                                 topic_match = False
                         if not topic_match:
