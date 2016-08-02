@@ -539,7 +539,12 @@ def filter_decoder(filter_dict, chain):
     if 'topics' in filter_dict:
         topics = []
         for topic in filter_dict['topics']:
-            if topic is not None:
+            if type(topic) == list:
+                or_topics = []
+                for or_topic in topic:
+                    or_topics.append(big_endian_to_int(data_decoder(or_topic)))
+                topics.append(or_topics)
+            elif topic is not None:
                 log.debug('with topic', topic=topic)
                 log.debug('decoded', topic=data_decoder(topic))
                 log.debug('int', topic=big_endian_to_int(data_decoder(topic)))
@@ -1356,6 +1361,7 @@ class LogFilter(object):
         # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
         for i, block in enumerate(blocks_to_check):
+            import pdb; pdb.set_trace()
             if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
                 _bloom = self.chain.get_bloom(block)
                 # Check that the bloom for this block contains at least one of the desired
@@ -1370,11 +1376,11 @@ class LogFilter(object):
                 # Check that the bloom for this block contains all of the desired topics
                 or_topics = list()
                 and_topics = list()
-                for topic in self.topics:
+                for topic in self.topics or []:
                     if type(topic) == list:
                         or_topics += topic
                     else:
-                        and_topics += topic
+                        and_topics.append(topic)
                 if or_topics:
                     _topic_and_bloom = bloom.bloom_from_list(map(int32.serialize, and_topics or []))
                     _topic_or_bloom = bloom.bloom_from_list(map(int32.serialize, or_topics or []))

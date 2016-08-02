@@ -26,10 +26,12 @@ from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address
     data_encoder, default_gasprice, default_startgas
 from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
+from ethereum import _solidity
+from ethereum.abi import event_id, method_id, ContractTranslator, normalize_name
 
 ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
-SOLIDITY_AVAILABLE = 'solidity' in Compilers().compilers
+SOLIDITY_AVAILABLE = False # 'solidity' in Compilers().compilers
 
 
 # EVM code corresponding to the following solidity code:
@@ -56,7 +58,7 @@ def test_externally():
     #  1) the Whisper protocol is not implemented and its tests fail;
     #  2) the eth_accounts method should be skipped;
     #  3) the eth_getFilterLogs fails due to the invalid test data;
-    os.system('''
+    """    os.system('''
         git clone https://github.com/ethereum/rpc-tests;
         cd rpc-tests;
         git submodule update --init --recursive;
@@ -64,7 +66,7 @@ def test_externally():
         rm -rf /tmp/rpctests;
         pyethapp -d /tmp/rpctests -l :info,eth.chainservice:debug,jsonrpc:debug -c jsonrpc.listen_port=8081 -c p2p.max_peers=0 -c p2p.min_peers=0 blocktest lib/tests/BlockchainTests/bcRPC_API_Test.json RPC_API_Test & sleep 60 && make test;
     ''')
-
+    """
 
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
 def test_compile_solidity():
@@ -223,6 +225,203 @@ def test_app(request, tmpdir):
     log.debug('starting test app')
     app.start()
     return app
+
+
+def get_event(full_abi, event_name):
+    for description in full_abi:
+        name = description.get('name')
+
+        # skip constructors
+        if name is None:
+            continue
+
+        normalized_name = normalize_name(name)
+
+        if normalized_name == event_name:
+            return description
+
+
+def get_eventname_types(event_description):
+    if 'name' not in event_description:
+        raise ValueError('Not an event description, missing the name.')
+
+    name = normalize_name(event_description['name'])
+    encode_types = [
+        element['type']
+        for element in event_description['inputs']
+    ]
+    return name, encode_types
+
+
+sample_sol_code = """
+
+contract SampleContract {
+    uint balance = 0;
+    event Event1(address bidder, uint amount);
+    event Event2(address bidder, uint amount);
+    event Event3(address bidder, uint amount);
+
+    function trigger1(uint amount)
+     returns (uint)
+     {
+        balance += amount;
+        Event1(msg.sender, msg.value);
+        return balance;
+    }
+    function trigger2() {
+        Event2(msg.sender, msg.value);
+    }
+    function trigger3() {
+        Event3(msg.sender, msg.value);
+    }
+}
+
+"""
+
+
+def test_logfilters_topics(test_app):
+
+    import pdb; pdb.set_trace()
+    sample_compiled = _solidity.compile_code(
+    sample_sol_code,
+    combined='bin,abi',
+    )
+    # pylint: enable=invalid-name
+
+    theabi = sample_compiled['SampleContract']['abi']
+    theevm = sample_compiled['SampleContract']['bin_hex']
+
+    sender_address = test_app.services.accounts.unlocked_accounts[0].address
+    sender = address_encoder(sender_address)
+    translator = ContractTranslator(theabi)
+    thecontract = tester.ABIContract(tester.state(), translator, sender_address)
+
+    event1 = get_event(theabi, 'Event1')
+    event2 = get_event(theabi, 'Event2')
+    event3 = get_event(theabi, 'Event3')
+    event1_id = event_id(*get_eventname_types(event1))
+    event2_id = event_id(*get_eventname_types(event2))
+    event3_id = event_id(*get_eventname_types(event3))
+
+    # method1 = get_event(theabi, 'trigger1')
+    # method1_id = method_id(*get_eventname_types(method1))
+
+    test_app.mine_next_block()  # start with a fresh block
+    n0 = test_app.services.chain.chain.head.number
+    assert n0 == 1
+
+    contract_creation = {
+        'from': sender,
+        'data': data_encoder(theevm)
+    }
+    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    test_app.mine_next_block()
+    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    contract_address = receipt['contractAddress']
+    tx = {
+        'from': sender,
+        'to': contract_address
+    }
+
+    pending_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 'pending',
+        'toBlock': 'pending'
+    })
+    latest_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 'latest',
+        'toBlock': 'latest'
+    })
+
+    import pdb; pdb.set_trace()
+    topic1 = hex(event1_id).rstrip("L")
+    topic_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'latest',
+        'topics': [topic1]
+    })
+
+    balance = thecontract.trigger1(1)
+    balance = thecontract.trigger1(1)
+    thecontract.trigger2()
+    balance = thecontract.trigger1(1)
+    thecontract.trigger3()
+    balance = thecontract.trigger1(1)
+
+    test_app.mine_next_block()
+
+    balance = thecontract.trigger1(1)
+    balance = thecontract.trigger1(1)
+    thecontract.trigger2()
+    balance = thecontract.trigger1(1)
+    thecontract.trigger3()
+    balance = thecontract.trigger1(1)
+
+    test_app.mine_next_block()
+
+    balance = thecontract.trigger1(1)
+    balance = thecontract.trigger1(1)
+    thecontract.trigger2()
+    balance = thecontract.trigger1(1)
+    thecontract.trigger3()
+    balance = thecontract.trigger1(1)
+    test_app.mine_next_block()
+
+    balance = thecontract.trigger1(1)
+    balance = thecontract.trigger1(1)
+    thecontract.trigger2()
+    balance = thecontract.trigger1(1)
+    thecontract.trigger3()
+    balance = thecontract.trigger1(1)
+    test_app.mine_next_block()
+
+    balance = thecontract.trigger1(1)
+    balance = thecontract.trigger1(1)
+    thecontract.trigger2()
+    balance = thecontract.trigger1(1)
+    thecontract.trigger3()
+    balance = thecontract.trigger1(1)
+
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter_id)
+    import pdb; pdb.set_trace()
+    assert tl[-1] == []
+
+    tx_hashes = []
+    logs = []
+
+    # tx in pending block
+    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    import pdb; pdb.set_trace()
+    assert len(logs[-1]) == 1
+    assert logs[-1][0]['type'] == 'pending'
+    assert logs[-1][0]['logIndex'] is None
+    assert logs[-1][0]['transactionIndex'] is None
+    assert logs[-1][0]['transactionHash'] is None
+    assert logs[-1][0]['blockHash'] is None
+    assert logs[-1][0]['blockNumber'] is None
+    assert logs[-1][0]['address'] == contract_address
+    pending_log = logs[-1][0]
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    assert logs[-1] == []
+
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert logs[-1] == []
+
+    test_app.mine_next_block()
+    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    assert len(logs[-1]) == 1  # log from before, but now mined
+    assert logs[-1][0]['type'] == 'mined'
+    assert logs[-1][0]['logIndex'] == '0x0'
+    assert logs[-1][0]['transactionIndex'] == '0x0'
+    assert logs[-1][0]['transactionHash'] == tx_hashes[-1]
+    assert logs[-1][0]['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
+    assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
+    assert logs[-1][0]['address'] == contract_address
+    logs_in_range = [logs[-1][0]]
+
+
+
 
 
 def test_send_transaction(test_app):
@@ -471,12 +670,21 @@ def test_get_filter_changes(test_app):
         'fromBlock': 'latest',
         'toBlock': 'latest'
     })
+
+    topic_filter_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        # 'topics': ['0x5e7df75d54e493185612379c616118a4c9ac802de621b010c96f74d22df4b30a']
+    })
+
+
     tx_hashes = []
     logs = []
 
     # tx in pending block
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    import pdb; pdb.set_trace()
     assert len(logs[-1]) == 1
     assert logs[-1][0]['type'] == 'pending'
     assert logs[-1][0]['logIndex'] is None
@@ -504,6 +712,11 @@ def test_get_filter_changes(test_app):
     assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
     assert logs[-1][0]['address'] == contract_address
     logs_in_range = [logs[-1][0]]
+
+
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter_id)
+    import pdb; pdb.set_trace()
+    assert tl[-1] == []
 
     # send tx and mine block
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
@@ -536,6 +749,8 @@ def test_get_filter_changes(test_app):
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', range_filter_id))
     assert sorted(logs[-1]) == sorted(logs_in_range + [pending_log])
+
+
 
 
 def test_eth_nonce(test_app):
