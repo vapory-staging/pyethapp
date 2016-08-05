@@ -17,6 +17,7 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from devp2p.service import BaseService
 from ethereum import processblock
+from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, normalize_address
@@ -164,7 +165,6 @@ class Console(BaseService):
             pass
 
     def start(self):
-        #start console service
         super(Console, self).start()
 
         class Eth(object):
@@ -180,7 +180,6 @@ class Console(BaseService):
                 this.chainservice = app.services.chain
                 this.chain = this.chainservice.chain
                 this.coinbase = app.services.accounts.coinbase
-
 
             @property
             def pending(this):
@@ -203,7 +202,7 @@ class Console(BaseService):
                 this.chainservice.add_transaction(tx)
                 return tx
 
-            def call(this, to, value=0, data='',  sender=None,
+            def call(this, to, value=0, data='', sender=None,
                      startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
                 to = normalize_address(to, allow_blank=True)
@@ -222,11 +221,14 @@ class Console(BaseService):
                 nonce = test_block.get_nonce(sender)
                 tx = Transaction(nonce, gasprice, startgas, to, value, data)
                 tx.sender = sender
+
                 try:
                     success, output = processblock.apply_transaction(test_block, tx)
-                except processblock.InvalidTransaction:
+                except InvalidTransaction:
                     success = False
+
                 assert block.state_root == state_root_before
+
                 if success:
                     return output
                 else:
@@ -280,9 +282,8 @@ class Console(BaseService):
 
         # runmultiple hack in place?
         if hasattr(self.console_locals['eth'].app, 'apps'):
-            #print additional hint for 'runmultiple'
             print('\n' * 2 + bc.OKGREEN)
-            print("Hint:"+ bc.OKBLUE)
+            print("Hint:" + bc.OKBLUE)
             print('\tOther nodes are accessible from {}`eth.app.apps`{}').format(
                 bc.HEADER, bc.OKBLUE)
             print('\tThey where automatically assigned to:')

@@ -1,40 +1,36 @@
-###############################
-PROPAGATE_ERRORS = False
-
-###############################
-
 import os
-from copy import deepcopy
-from decorator import decorator
-from collections import Iterable
 import inspect
+from copy import deepcopy
+from collections import Iterable
+
 import ethereum.blocks
-from ethereum.utils import (is_numeric, is_string, int_to_big_endian, big_endian_to_int,
-                            encode_hex, decode_hex, sha3, zpad)
+import ethereum.bloom as bloom
 import ethereum.slogging as slogging
+import gevent
+import gevent.queue
+import gevent.wsgi
+import rlp
+from decorator import decorator
+from accounts import Account
+from devp2p.service import BaseService
+from ethereum import processblock
+from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import LogRecorder
 from ethereum.transactions import Transaction
-from ethereum import processblock
-import gevent
-import gevent.wsgi
-import gevent.queue
-import rlp
-from tinyrpc.dispatch import RPCDispatcher
+from ethereum.trie import Trie
+from ethereum.utils import (
+    big_endian_to_int, decode_hex, denoms, encode_hex, int_to_big_endian, is_numeric,
+    is_string, int32, sha3, zpad,
+)
+from eth_protocol import ETHProtocol
+from ipc_rpc import bind_unix_listener, serve
 from tinyrpc.dispatch import public as public_
+from tinyrpc.dispatch import RPCDispatcher
 from tinyrpc.exc import BadRequestError, MethodNotFoundError
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol, JSONRPCInvalidParamsError
 from tinyrpc.server.gevent import RPCServerGreenlets
-from tinyrpc.transports.wsgi import WsgiServerTransport
 from tinyrpc.transports import ServerTransport
-from devp2p.service import BaseService
-from eth_protocol import ETHProtocol
-from ethereum.trie import Trie
-from ethereum.utils import denoms
-import ethereum.bloom as bloom
-from accounts import Account
-from ipc_rpc import bind_unix_listener, serve
-
-from ethereum.utils import int32
+from tinyrpc.transports.wsgi import WsgiServerTransport
 
 logger = log = slogging.get_logger('jsonrpc')
 
@@ -49,6 +45,8 @@ def _fail_on_error_dispatch(self, request):
     result = method(*request.args, **request.kwargs)
     return request.respond(result)
 
+
+PROPAGATE_ERRORS = False
 if PROPAGATE_ERRORS:
     RPCDispatcher._dispatch = _fail_on_error_dispatch
 
@@ -223,8 +221,10 @@ class IPCRPCServer(RPCServer):
             subdispatcher.register(self)
 
         self.ipcpath = self.config['ipc']['ipcpath']
-        self.transport = IPCDomainSocketTransport(queue_class=gevent.queue.Queue,
-                sockpath=self.ipcpath)
+        self.transport = IPCDomainSocketTransport(
+            queue_class=gevent.queue.Queue,
+            sockpath=self.ipcpath,
+        )
 
         self.rpc_server = RPCServerGreenlets(
             self.transport,
@@ -261,7 +261,7 @@ class JSONRPCServer(RPCServer):
         listen_port=4000,
         listen_host='127.0.0.1',
         corsdomain='',
-        ))
+    ))
 
     def __init__(self, app):
         log.debug('initializing JSONRPCServer')
@@ -371,11 +371,12 @@ def data_decoder(data):
     """Decode `data` representing unformatted data."""
     if not data.startswith('0x'):
         data = '0x' + data
+
     if len(data) % 2 != 0:
         # workaround for missing leading zeros from netstats
         assert len(data) < 64 + 2
         data = '0x' + '0' * (64 - (len(data) - 2)) + data[2:]
-        #raise BadRequestError('Invalid data encoding, must be even length')
+
     try:
         return decode_hex(data[2:])
     except TypeError:
@@ -975,7 +976,7 @@ class Chain(Subdispatcher):
     @decode_arg('index', quantity_decoder)
     def getUncleByBlockNumberAndIndex(self, block_id, index):
         try:
-            #TODO: think about moving this check into the Block.uncles property
+            # TODO: think about moving this check into the Block.uncles property
             if block_id == u'pending':
                 return None
             block = self.json_rpc_server.get_block(block_id)
@@ -1190,7 +1191,7 @@ class Chain(Subdispatcher):
 
         try:
             success, output = processblock.apply_transaction(test_block, tx)
-        except processblock.InvalidTransaction:
+        except InvalidTransaction:
             success = False
         # make sure we didn't change the real state
         snapshot_after = block.snapshot()
@@ -1258,7 +1259,7 @@ class Chain(Subdispatcher):
 
         try:
             success, output = processblock.apply_transaction(test_block, tx)
-        except processblock.InvalidTransaction:
+        except InvalidTransaction:
             success = False
         # make sure we didn't change the real state
         snapshot_after = block.snapshot()
