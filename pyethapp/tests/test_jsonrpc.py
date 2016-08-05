@@ -415,16 +415,19 @@ contract SampleContract {
         balance += amount;
         Event1(msg.sender, balance);
     }
-    function getbalance(uint256 amount)
+    function trigger2(uint256 amount) {
+        balance += amount;
+        Event2(msg.sender, balance);
+    }
+    function trigger3(uint256 amount) {
+        balance += amount;
+        Event3(msg.sender, balance);
+    }
+    function getbalance()
+     constant
      returns (uint256)
     {
         return balance;
-    }
-    function trigger2() {
-        Event2(msg.sender, balance);
-    }
-    function trigger3() {
-        Event3(msg.sender, balance);
     }
 }
 
@@ -435,21 +438,16 @@ def test_logfilters_topics(test_app):
 
 
     # slogging.configure(':trace')
-    # state = tester.state()
-
     sample_compiled = _solidity.compile_code(
     sample_sol_code,
     combined='bin,abi',
     )
-    # pylint: enable=invalid-name
 
-    import pdb; pdb.set_trace()
     theabi = sample_compiled['SampleContract']['abi']
     theevm = sample_compiled['SampleContract']['bin_hex']
 
     sender_address = test_app.services.accounts.unlocked_accounts[0].address
     sender = address_encoder(sender_address)
-    translator = ContractTranslator(theabi)
 
     event1 = get_event(theabi, 'Event1')
     event2 = get_event(theabi, 'Event2')
@@ -467,9 +465,8 @@ def test_logfilters_topics(test_app):
 
     contract_creation = {
         'from': sender,
-        # 'data': data_encoder(theevm),
         'data': '0x'+theevm,
-        'gas': quantity_encoder(1000000) # 3141592)
+        'gas': quantity_encoder(1000000)
     }
 
 
@@ -478,73 +475,73 @@ def test_logfilters_topics(test_app):
     receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
     contract_address = receipt['contractAddress']
 
-    test_app.mine_next_block()
-
     sample_contract = ContractProxy(sender_address, theabi, contract_address,
                                     test_app.eth_call, test_app.eth_transact)
 
     topic1 = hex(event1_id).rstrip("L")
-    topic_filter_id = test_app.rpc_request('eth_newFilter', {
+    topic2 = hex(event2_id).rstrip("L")
+    topic3 = hex(event3_id).rstrip("L")
+    topic_filter1_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
-        'toBlock': 'latest',
+        'toBlock': 'pending',
         'topics': [topic1]
+    })
+
+    topic_filter2_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic1, topic2, topic3]
+    })
+
+    topic_filter3_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic1, [topic2, topic3]]
+    })
+    topic_filter4_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [[topic1, topic2], topic3]
+    })
+
+    topic_filter5_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [[topic1, topic2, topic3]]
     })
 
     thecode = test_app.rpc_request('eth_getCode', address_encoder(sample_contract.address))
 
-    import pdb; pdb.set_trace()
+    assert len(thecode) > 2
     tx_hash = sample_contract.trigger1(1)
     balance = sample_contract.getbalance()
     blnum1 = test_app.mine_next_block()
-    balance = sample_contract.trigger1(5)
-    balance = sample_contract.trigger1(5)
+    tx_hash = sample_contract.trigger1(5)
+    tx_hash = sample_contract.trigger1(5)
+    tx_hash = sample_contract.trigger2(1)
+    tx_hash = sample_contract.trigger2(1)
+    balance = sample_contract.getbalance()
     blnum2 = test_app.mine_next_block()
-    balance = sample_contract.trigger1(90)
-    balance = sample_contract.trigger1(90)
+    tx_hash = sample_contract.trigger1(90)
+    tx_hash = sample_contract.trigger1(90)
+    tx_hash = sample_contract.trigger2(1)
+    tx_hash = sample_contract.trigger3(1)
+    balance = sample_contract.getbalance()
 
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter1_id)
+    assert len(tl) == 3
 
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter2_id)
+    assert len(tl) == 1
 
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter_id)
-    import pdb; pdb.set_trace()
-    assert tl[-1] == []
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter3_id)
+    assert len(tl) == 2
 
-    tx_hashes = []
-    logs = []
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter4_id)
+    assert len(tl) == 1
 
-    # tx in pending block
-    # tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
-    import pdb; pdb.set_trace()
-    assert len(logs[-1]) == 1
-    assert logs[-1][0]['type'] == 'pending'
-    assert logs[-1][0]['logIndex'] is None
-    assert logs[-1][0]['transactionIndex'] is None
-    assert logs[-1][0]['transactionHash'] is None
-    assert logs[-1][0]['blockHash'] is None
-    assert logs[-1][0]['blockNumber'] is None
-    assert logs[-1][0]['address'] == contract_address
-    pending_log = logs[-1][0]
-
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
-    assert logs[-1] == []
-
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
-    assert logs[-1] == []
-
-    test_app.mine_next_block()
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
-    assert len(logs[-1]) == 1  # log from before, but now mined
-    assert logs[-1][0]['type'] == 'mined'
-    assert logs[-1][0]['logIndex'] == '0x0'
-    assert logs[-1][0]['transactionIndex'] == '0x0'
-    assert logs[-1][0]['transactionHash'] == tx_hashes[-1]
-    assert logs[-1][0]['blockHash'] == data_encoder(test_app.services.chain.chain.head.hash)
-    assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
-    assert logs[-1][0]['address'] == contract_address
-    logs_in_range = [logs[-1][0]]
-
-
-
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter5_id)
+    assert len(tl) == 3
 
 
 def test_send_transaction(test_app):

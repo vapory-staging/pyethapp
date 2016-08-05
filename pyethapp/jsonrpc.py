@@ -1361,7 +1361,6 @@ class LogFilter(object):
         # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
         for i, block in enumerate(blocks_to_check):
-            import pdb; pdb.set_trace()
             if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
                 _bloom = self.chain.get_bloom(block)
                 # Check that the bloom for this block contains at least one of the desired
