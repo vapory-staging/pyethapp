@@ -4,6 +4,7 @@ from os import path
 from itertools import count
 import gevent
 import gc
+from ethereum import slogging
 
 import pytest
 import rlp
@@ -23,11 +24,16 @@ from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
-    data_encoder, default_gasprice, default_startgas
+    data_encoder, default_gasprice, default_startgas, quantity_decoder
 from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
 from ethereum import _solidity
 from ethereum.abi import event_id, method_id, ContractTranslator, normalize_name
+from pyethapp.rpc_client import ContractProxy
+from ethereum.utils import denoms, normalize_address
+from ethereum.keys import privtoaddr
+import warnings
+from ethereum.transactions import Transaction
 
 ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
@@ -138,6 +144,7 @@ def test_app(request, tmpdir):
             locked_account = Account.new('', tester.keys[2])
             locked_account.lock()
             self.services.accounts.add_account(locked_account, store=False)
+            self.privkey = None
             assert set(acct.address for acct in self.services.accounts) == set(tester.accounts[:3])
 
         def mine_next_block(self):
@@ -172,6 +179,148 @@ def test_app(request, tmpdir):
             log.debug('got response', response=res)
             return res
 
+        def eth_call(self, sender='', to='', value=0, data='',
+                 startgas=default_startgas, gasprice=default_gasprice,
+                 block_number=None):
+
+            json_data = dict()
+
+            if sender is not None:
+                json_data['from'] = address_encoder(sender)
+
+            if to is not None:
+                json_data['to'] = data_encoder(to)
+
+            if value is not None:
+                json_data['value'] = quantity_encoder(value)
+
+            if gasprice is not None:
+                json_data['gasPrice'] = quantity_encoder(gasprice)
+
+            if startgas is not None:
+                json_data['gas'] = quantity_encoder(startgas)
+
+            if data is not None:
+                json_data['data'] = data_encoder(data)
+
+            if block_number is not None:
+                res = self.rpc_request('eth_call', json_data, block_number)
+            else:
+                res = self.rpc_request('eth_call', json_data)
+
+            return data_decoder(res)
+
+        def eth_transact(self, sender, to, value=0, data='', startgas=0,
+                         gasprice=10 * denoms.szabo, nonce=None):
+            """ Helper to send signed messages.
+
+            This method will use the `privkey` provided in the constructor to
+            locally sign the transaction. This requires an extended server
+            implementation that accepts the variables v, r, and s.
+            """
+
+            if not self.privkey and not sender:
+                raise ValueError('Either privkey or sender needs to be supplied.')
+
+            if self.privkey and not sender:
+                sender = privtoaddr(self.privkey)
+
+                if nonce is None:
+                    nonce = self.nonce(sender)
+            elif self.privkey:
+                if sender != privtoaddr(self.privkey):
+                    raise ValueError('sender for a different privkey.')
+
+                if nonce is None:
+                    nonce = self.nonce(sender)
+            else:
+                if nonce is None:
+                    nonce = 0
+
+            if not startgas:
+                startgas = self.gaslimit() - 1
+
+            tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
+
+            if self.privkey:
+                # add the fields v, r and s
+                tx.sign(self.privkey)
+
+            tx_dict = tx.to_dict()
+
+            # rename the fields to match the eth_sendTransaction signature
+            tx_dict.pop('hash')
+            tx_dict['sender'] = sender
+            tx_dict['gasPrice'] = tx_dict.pop('gasprice')
+            tx_dict['gas'] = tx_dict.pop('startgas')
+
+            res = self.eth_sendTransaction(**tx_dict)
+            assert len(res) in (20, 32)
+            return res.encode('hex')
+
+        def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
+                                gasPrice=default_gasprice, gas=default_startgas,
+                                v=None, r=None, s=None):
+            """ Creates new message call transaction or a contract creation, if the
+            data field contains code.
+
+            Note:
+                The support for local signing through the variables v,r,s is not
+                part of the standard spec, a extended server is required.
+
+            Args:
+                from (address): The 20 bytes address the transaction is send from.
+                to (address): DATA, 20 Bytes - (optional when creating new
+                    contract) The address the transaction is directed to.
+                gas (int): Gas provided for the transaction execution. It will
+                    return unused gas.
+                gasPrice (int): gasPrice used for each paid gas.
+                value (int): Value send with this transaction.
+                data (bin): The compiled code of a contract OR the hash of the
+                    invoked method signature and encoded parameters.
+                nonce (int): This allows to overwrite your own pending transactions
+                    that use the same nonce.
+            """
+
+            if to == '' and data.isalnum():
+                warnings.warn(
+                    'Verify that the data parameter is _not_ hex encoded, if this is the case '
+                    'the data will be double encoded and result in unexpected '
+                    'behavior.'
+                )
+
+            if to == '0' * 40:
+                warnings.warn('For contract creating the empty string must be used.')
+
+            json_data = {
+                'to': data_encoder(normalize_address(to, allow_blank=True)),
+                'value': quantity_encoder(value),
+                'gasPrice': quantity_encoder(gasPrice),
+                'gas': quantity_encoder(gas),
+                'data': data_encoder(data),
+            }
+
+            if not sender and not (v and r and s):
+                raise ValueError('Either sender or v, r, s needs to be informed.')
+
+            if sender is not None:
+                json_data['from'] = address_encoder(sender)
+
+            if v and r and s:
+                json_data['v'] = quantity_encoder(v)
+                json_data['r'] = quantity_encoder(r)
+                json_data['s'] = quantity_encoder(s)
+
+            if nonce is not None:
+                json_data['nonce'] = quantity_encoder(nonce)
+
+            res = self.rpc_request('eth_sendTransaction', json_data)
+
+            return data_decoder(res)
+
+        def gaslimit(self):
+            return quantity_decoder(self.rpc_request('eth_gasLimit'))
+
     config = {
         'data_dir': str(tmpdir),
         'db': {'implementation': 'EphemDB'},
@@ -191,7 +340,7 @@ def test_app(request, tmpdir):
                 'ACCOUNT_INITIAL_NONCE': request.param,
                 'GENESIS_DIFFICULTY': 1,
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
-                'GENESIS_GAS_LIMIT': 3141592,
+                 'GENESIS_GAS_LIMIT': 3141592,
                 'GENESIS_INITIAL_ALLOC': {
                     tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
                     tester.accounts[1].encode('hex'): {'balance': 1},
@@ -256,23 +405,26 @@ def get_eventname_types(event_description):
 sample_sol_code = """
 
 contract SampleContract {
-    uint balance = 0;
-    event Event1(address bidder, uint amount);
-    event Event2(address bidder, uint amount);
-    event Event3(address bidder, uint amount);
+    uint256 balance = 0;
+    event Event1(address bidder, uint256 amount);
+    event Event2(address bidder, uint256 amount);
+    event Event3(address bidder, uint256 amount);
 
-    function trigger1(uint amount)
-     returns (uint)
-     {
+    function trigger1(uint256 amount)
+    {
         balance += amount;
-        Event1(msg.sender, msg.value);
+        Event1(msg.sender, balance);
+    }
+    function getbalance(uint256 amount)
+     returns (uint256)
+    {
         return balance;
     }
     function trigger2() {
-        Event2(msg.sender, msg.value);
+        Event2(msg.sender, balance);
     }
     function trigger3() {
-        Event3(msg.sender, msg.value);
+        Event3(msg.sender, balance);
     }
 }
 
@@ -281,20 +433,23 @@ contract SampleContract {
 
 def test_logfilters_topics(test_app):
 
-    import pdb; pdb.set_trace()
+
+    # slogging.configure(':trace')
+    # state = tester.state()
+
     sample_compiled = _solidity.compile_code(
     sample_sol_code,
     combined='bin,abi',
     )
     # pylint: enable=invalid-name
 
+    import pdb; pdb.set_trace()
     theabi = sample_compiled['SampleContract']['abi']
     theevm = sample_compiled['SampleContract']['bin_hex']
 
     sender_address = test_app.services.accounts.unlocked_accounts[0].address
     sender = address_encoder(sender_address)
     translator = ContractTranslator(theabi)
-    thecontract = tester.ABIContract(tester.state(), translator, sender_address)
 
     event1 = get_event(theabi, 'Event1')
     event2 = get_event(theabi, 'Event2')
@@ -303,36 +458,31 @@ def test_logfilters_topics(test_app):
     event2_id = event_id(*get_eventname_types(event2))
     event3_id = event_id(*get_eventname_types(event3))
 
-    # method1 = get_event(theabi, 'trigger1')
-    # method1_id = method_id(*get_eventname_types(method1))
+
 
     test_app.mine_next_block()  # start with a fresh block
+
     n0 = test_app.services.chain.chain.head.number
     assert n0 == 1
 
     contract_creation = {
         'from': sender,
-        'data': data_encoder(theevm)
+        # 'data': data_encoder(theevm),
+        'data': '0x'+theevm,
+        'gas': quantity_encoder(1000000) # 3141592)
     }
+
+
     tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
     receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
     contract_address = receipt['contractAddress']
-    tx = {
-        'from': sender,
-        'to': contract_address
-    }
 
-    pending_filter_id = test_app.rpc_request('eth_newFilter', {
-        'fromBlock': 'pending',
-        'toBlock': 'pending'
-    })
-    latest_filter_id = test_app.rpc_request('eth_newFilter', {
-        'fromBlock': 'latest',
-        'toBlock': 'latest'
-    })
+    test_app.mine_next_block()
 
-    import pdb; pdb.set_trace()
+    sample_contract = ContractProxy(sender_address, theabi, contract_address,
+                                    test_app.eth_call, test_app.eth_transact)
+
     topic1 = hex(event1_id).rstrip("L")
     topic_filter_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
@@ -340,46 +490,19 @@ def test_logfilters_topics(test_app):
         'topics': [topic1]
     })
 
-    balance = thecontract.trigger1(1)
-    balance = thecontract.trigger1(1)
-    thecontract.trigger2()
-    balance = thecontract.trigger1(1)
-    thecontract.trigger3()
-    balance = thecontract.trigger1(1)
+    thecode = test_app.rpc_request('eth_getCode', address_encoder(sample_contract.address))
 
-    test_app.mine_next_block()
+    import pdb; pdb.set_trace()
+    tx_hash = sample_contract.trigger1(1)
+    balance = sample_contract.getbalance()
+    blnum1 = test_app.mine_next_block()
+    balance = sample_contract.trigger1(5)
+    balance = sample_contract.trigger1(5)
+    blnum2 = test_app.mine_next_block()
+    balance = sample_contract.trigger1(90)
+    balance = sample_contract.trigger1(90)
 
-    balance = thecontract.trigger1(1)
-    balance = thecontract.trigger1(1)
-    thecontract.trigger2()
-    balance = thecontract.trigger1(1)
-    thecontract.trigger3()
-    balance = thecontract.trigger1(1)
 
-    test_app.mine_next_block()
-
-    balance = thecontract.trigger1(1)
-    balance = thecontract.trigger1(1)
-    thecontract.trigger2()
-    balance = thecontract.trigger1(1)
-    thecontract.trigger3()
-    balance = thecontract.trigger1(1)
-    test_app.mine_next_block()
-
-    balance = thecontract.trigger1(1)
-    balance = thecontract.trigger1(1)
-    thecontract.trigger2()
-    balance = thecontract.trigger1(1)
-    thecontract.trigger3()
-    balance = thecontract.trigger1(1)
-    test_app.mine_next_block()
-
-    balance = thecontract.trigger1(1)
-    balance = thecontract.trigger1(1)
-    thecontract.trigger2()
-    balance = thecontract.trigger1(1)
-    thecontract.trigger3()
-    balance = thecontract.trigger1(1)
 
     tl = test_app.rpc_request('eth_getFilterChanges', topic_filter_id)
     import pdb; pdb.set_trace()
@@ -389,7 +512,7 @@ def test_logfilters_topics(test_app):
     logs = []
 
     # tx in pending block
-    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    # tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
     import pdb; pdb.set_trace()
     assert len(logs[-1]) == 1
@@ -560,6 +683,7 @@ def test_get_logs(test_app):
         'from': sender,
         'data': data_encoder(LOG_EVM)
     }
+    import pdb; pdb.set_trace()
     tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
     receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
