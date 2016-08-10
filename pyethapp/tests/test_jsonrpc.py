@@ -405,29 +405,43 @@ def get_eventname_types(event_description):
 sample_sol_code = """
 
 contract SampleContract {
-    uint256 balance = 0;
-    event Event1(address bidder, uint256 amount);
-    event Event2(address bidder, uint256 amount);
-    event Event3(address bidder, uint256 amount);
+    uint256 balance1 = 0;
+    uint256 balance2 = 0;
+    uint256 balance3 = 0;
+    event Event1(address bidder, uint256 indexed amount);
+    event Event2(address bidder, uint256 indexed amount1, uint256 indexed  amount2);
+    event Event3(address bidder, uint256 indexed amount1, uint256 indexed amount2, uint256 indexed amount3);
 
     function trigger1(uint256 amount)
     {
-        balance += amount;
-        Event1(msg.sender, balance);
+        balance1 += amount;
+        Event1(msg.sender, balance1);
     }
     function trigger2(uint256 amount) {
-        balance += amount;
-        Event2(msg.sender, balance);
+        balance2 += amount;
+        Event2(msg.sender, balance1, balance2);
     }
     function trigger3(uint256 amount) {
-        balance += amount;
-        Event3(msg.sender, balance);
+        balance3 += amount;
+        Event3(msg.sender, balance1, balance2, balance3);
     }
-    function getbalance()
+    function getbalance1()
      constant
      returns (uint256)
     {
-        return balance;
+        return balance1;
+    }
+    function getbalance2()
+     constant
+     returns (uint256)
+    {
+        return balance2;
+    }
+    function getbalance3()
+     constant
+     returns (uint256)
+    {
+        return balance3;
     }
 }
 
@@ -435,8 +449,6 @@ contract SampleContract {
 
 
 def test_logfilters_topics(test_app):
-
-
     # slogging.configure(':trace')
     sample_compiled = _solidity.compile_code(
     sample_sol_code,
@@ -481,27 +493,69 @@ def test_logfilters_topics(test_app):
     topic1 = hex(event1_id).rstrip("L")
     topic2 = hex(event2_id).rstrip("L")
     topic3 = hex(event3_id).rstrip("L")
+    topica, topicb, topicc = \
+        '0x0000000000000000000000000000000000000000000000000000000000000001',\
+        '0x0000000000000000000000000000000000000000000000000000000000000064',\
+        '0x00000000000000000000000000000000000000000000000000000000000003e8'
     topic_filter1_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1]
     })
-
+    topic_filter9_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic2]
+    })
+    topic_filter10_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic3]
+    })
     topic_filter2_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topics': [topic1, topic2, topic3]
+        'topics': [topic3, topica, topicb, topicc]
+    })
+
+    topic_filter6_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic1, topica]
+    })
+
+    topic_filter7_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic2, topica, topicb]
+    })
+
+    topic_filter11_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic2, topica]
+    })
+    topic_filter12_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic3, topica]
+    })
+
+    topic_filter13_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topica, topicb]
     })
 
     topic_filter3_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topics': [topic1, [topic2, topic3]]
+        'topics': [topic2, [topica, topicb]]
     })
     topic_filter4_id = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topics': [[topic1, topic2], topic3]
+        'topics': [[topic1, topic2], topica]
     })
 
     topic_filter5_id = test_app.rpc_request('eth_newFilter', {
@@ -510,38 +564,94 @@ def test_logfilters_topics(test_app):
         'topics': [[topic1, topic2, topic3]]
     })
 
+    topic_filter8_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [[topic1, topic2, topic3, topica, topicb, topicc]]
+    })
+
+    topic_filter14_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [topic2, topica, topicb, [topic2, topica, topicb]]
+    })
+
+    topic_filter14_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [topic2, topica, topicb, [topic2, topica, topicb]]
+    })
+    topic_filter15_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [topic1, topica, topicb]
+    })
+    topic_filter16_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [[topic1, topic2], [topica, topicb], [topica, topicb]]
+    })
+    topic_filter17_id = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topincs': [[topic2, topic3], [topica, topicb], [topica, topicb]]
+    })
+
+
     thecode = test_app.rpc_request('eth_getCode', address_encoder(sample_contract.address))
 
     assert len(thecode) > 2
     tx_hash = sample_contract.trigger1(1)
-    balance = sample_contract.getbalance()
+    balance1 = sample_contract.getbalance1()
     blnum1 = test_app.mine_next_block()
-    tx_hash = sample_contract.trigger1(5)
-    tx_hash = sample_contract.trigger1(5)
-    tx_hash = sample_contract.trigger2(1)
-    tx_hash = sample_contract.trigger2(1)
-    balance = sample_contract.getbalance()
+    tx_hash = sample_contract.trigger2(100)
+    balance = sample_contract.getbalance2()
     blnum2 = test_app.mine_next_block()
-    tx_hash = sample_contract.trigger1(90)
-    tx_hash = sample_contract.trigger1(90)
-    tx_hash = sample_contract.trigger2(1)
-    tx_hash = sample_contract.trigger3(1)
-    balance = sample_contract.getbalance()
+    tx_hash = sample_contract.trigger3(1000)
+    blnum3 = test_app.mine_next_block()
+    balance = sample_contract.getbalance3()
+
 
     tl = test_app.rpc_request('eth_getFilterChanges', topic_filter1_id)
-    assert len(tl) == 3
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter9_id)
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter10_id)
+    assert len(tl) == 1
 
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter6_id)
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter7_id)
+    assert len(tl) == 1
     tl = test_app.rpc_request('eth_getFilterChanges', topic_filter2_id)
     assert len(tl) == 1
 
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter3_id)
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter11_id)
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter12_id)
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter13_id)
     assert len(tl) == 2
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter3_id)
+    assert len(tl) == 1
 
     tl = test_app.rpc_request('eth_getFilterChanges', topic_filter4_id)
-    assert len(tl) == 1
+    assert len(tl) == 2
 
     tl = test_app.rpc_request('eth_getFilterChanges', topic_filter5_id)
     assert len(tl) == 3
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter8_id)
+    assert len(tl) == 3
+
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter14_id)
+    assert len(tl) == 0
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter15_id)
+    assert len(tl) == 0
+
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter16_id)
+    assert len(tl) == 1
+    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter17_id)
+    assert len(tl) == 2
 
 
 def test_send_transaction(test_app):
