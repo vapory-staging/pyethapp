@@ -468,8 +468,6 @@ def test_logfilters_topics(test_app):
     event2_id = event_id(*get_eventname_types(event2))
     event3_id = event_id(*get_eventname_types(event3))
 
-
-
     test_app.mine_next_block()  # start with a fresh block
 
     n0 = test_app.services.chain.chain.head.number
@@ -480,7 +478,6 @@ def test_logfilters_topics(test_app):
         'data': '0x'+theevm,
         'gas': quantity_encoder(1000000)
     }
-
 
     tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
@@ -497,161 +494,165 @@ def test_logfilters_topics(test_app):
         '0x0000000000000000000000000000000000000000000000000000000000000001',\
         '0x0000000000000000000000000000000000000000000000000000000000000064',\
         '0x00000000000000000000000000000000000000000000000000000000000003e8'
-    topic_filter1_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_1 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1]
     })
-    topic_filter9_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_2 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2]
     })
-    topic_filter10_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_3 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3]
     })
-    topic_filter2_id = test_app.rpc_request('eth_newFilter', {
-        'fromBlock': 0,
-        'toBlock': 'pending',
-        'topics': [topic3, topica, topicb, topicc]
-    })
-
-    topic_filter6_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_4 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1, topica]
     })
 
-    topic_filter7_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_5 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, topica, topicb]
     })
-
-    topic_filter11_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_6 = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic3, topica, topicb, topicc]
+    })
+    topic_filter_7 = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topica, topicb, topicc]
+    })
+    topic_filter_8 = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topic3, topica, topicb]
+    })
+    topic_filter_9 = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topicc, topicb, topica, topic3]
+    })
+    topic_filter_10 = test_app.rpc_request('eth_newFilter', {
+        'fromBlock': 0,
+        'toBlock': 'pending',
+        'topics': [topicb, topicc, topica, topic3]
+    })
+    topic_filter_11 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, topica]
     })
-    topic_filter12_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_12 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3, topica]
     })
-
-    topic_filter13_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_13 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topica, topicb]
     })
-
-    topic_filter3_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_14 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, [topica, topicb]]
     })
-    topic_filter4_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_15 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2], topica]
     })
-
-    topic_filter5_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_16 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2, topic3]]
     })
-
-    topic_filter8_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_17 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topincs': [[topic1, topic2, topic3, topica, topicb, topicc]]
+        'topics': [[topic1, topic2, topic3, topica, topicb, topicc]]
     })
-
-    topic_filter14_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_18 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topincs': [topic2, topica, topicb, [topic2, topica, topicb]]
+        'topics': [topic2, topica, topicb, [topic2, topica, topicb]]
     })
-
-    topic_filter14_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_19 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topincs': [topic2, topica, topicb, [topic2, topica, topicb]]
+        'topics': [topic1, topica, topicb]
     })
-    topic_filter15_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_20 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topincs': [topic1, topica, topicb]
+        'topics': [[topic1, topic2], [topica, topicb], [topica, topicb]]
     })
-    topic_filter16_id = test_app.rpc_request('eth_newFilter', {
+    topic_filter_21 = test_app.rpc_request('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
-        'topincs': [[topic1, topic2], [topica, topicb], [topica, topicb]]
+        'topics': [[topic2, topic3], [topica, topicb], [topica, topicb]]
     })
-    topic_filter17_id = test_app.rpc_request('eth_newFilter', {
-        'fromBlock': 0,
-        'toBlock': 'pending',
-        'topincs': [[topic2, topic3], [topica, topicb], [topica, topicb]]
-    })
-
 
     thecode = test_app.rpc_request('eth_getCode', address_encoder(sample_contract.address))
-
     assert len(thecode) > 2
-    tx_hash = sample_contract.trigger1(1)
-    balance1 = sample_contract.getbalance1()
-    blnum1 = test_app.mine_next_block()
-    tx_hash = sample_contract.trigger2(100)
-    balance = sample_contract.getbalance2()
-    blnum2 = test_app.mine_next_block()
-    tx_hash = sample_contract.trigger3(1000)
-    blnum3 = test_app.mine_next_block()
-    balance = sample_contract.getbalance3()
 
+    sample_contract.trigger1(1)
+    test_app.mine_next_block()
+    sample_contract.trigger2(100)
+    test_app.mine_next_block()
+    sample_contract.trigger3(1000)
+    test_app.mine_next_block()
 
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter1_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter9_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter10_id)
-    assert len(tl) == 1
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter6_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter7_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter2_id)
-    assert len(tl) == 1
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter11_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter12_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter13_id)
-    assert len(tl) == 2
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter3_id)
-    assert len(tl) == 1
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter4_id)
-    assert len(tl) == 2
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter5_id)
-    assert len(tl) == 3
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter8_id)
-    assert len(tl) == 3
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter14_id)
-    assert len(tl) == 0
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter15_id)
-    assert len(tl) == 0
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter16_id)
-    assert len(tl) == 1
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter17_id)
-    assert len(tl) == 2
+    tl1 = test_app.rpc_request('eth_getFilterChanges', topic_filter_1)
+    assert len(tl1) == 1
+    tl2 = test_app.rpc_request('eth_getFilterChanges', topic_filter_2)
+    assert len(tl2) == 1
+    tl3 = test_app.rpc_request('eth_getFilterChanges', topic_filter_3)
+    assert len(tl3) == 1
+    tl4 = test_app.rpc_request('eth_getFilterChanges', topic_filter_4)
+    assert len(tl4) == 1
+    tl5 = test_app.rpc_request('eth_getFilterChanges', topic_filter_5)
+    assert len(tl5) == 1
+    tl6 = test_app.rpc_request('eth_getFilterChanges', topic_filter_6)
+    assert len(tl6) == 1
+    tl7 = test_app.rpc_request('eth_getFilterChanges', topic_filter_7)
+    assert len(tl7) == 0
+    tl8 = test_app.rpc_request('eth_getFilterChanges', topic_filter_8)
+    assert len(tl8) == 1
+    tl9 = test_app.rpc_request('eth_getFilterChanges', topic_filter_9)
+    assert len(tl9) == 0
+    tl10 = test_app.rpc_request('eth_getFilterChanges', topic_filter_10)
+    assert len(tl10) == 0
+    tl11 = test_app.rpc_request('eth_getFilterChanges', topic_filter_11)
+    assert len(tl11) == 1
+    tl12 = test_app.rpc_request('eth_getFilterChanges', topic_filter_12)
+    assert len(tl12) == 1
+    tl13 = test_app.rpc_request('eth_getFilterChanges', topic_filter_13)
+    assert len(tl13) == 0
+    tl14 = test_app.rpc_request('eth_getFilterChanges', topic_filter_14)
+    assert len(tl14) == 1
+    tl15 = test_app.rpc_request('eth_getFilterChanges', topic_filter_15)
+    assert len(tl15) == 2
+    tl16 = test_app.rpc_request('eth_getFilterChanges', topic_filter_16)
+    assert len(tl16) == 3
+    tl17 = test_app.rpc_request('eth_getFilterChanges', topic_filter_17)
+    assert len(tl17) == 3
+    tl18 = test_app.rpc_request('eth_getFilterChanges', topic_filter_18)
+    assert len(tl18) == 0
+    tl19 = test_app.rpc_request('eth_getFilterChanges', topic_filter_19)
+    assert len(tl19) == 0
+    tl20 = test_app.rpc_request('eth_getFilterChanges', topic_filter_20)
+    assert len(tl20) == 1
+    tl21 = test_app.rpc_request('eth_getFilterChanges', topic_filter_21)
+    assert len(tl21) == 2
 
 
 def test_send_transaction(test_app):
@@ -790,7 +791,6 @@ def test_get_logs(test_app):
         'from': sender,
         'data': data_encoder(LOG_EVM)
     }
-    import pdb; pdb.set_trace()
     tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
     receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
@@ -902,20 +902,12 @@ def test_get_filter_changes(test_app):
         'toBlock': 'latest'
     })
 
-    topic_filter_id = test_app.rpc_request('eth_newFilter', {
-        'fromBlock': 0,
-        'toBlock': 'pending',
-        # 'topics': ['0x5e7df75d54e493185612379c616118a4c9ac802de621b010c96f74d22df4b30a']
-    })
-
-
     tx_hashes = []
     logs = []
 
     # tx in pending block
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
     logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
-    import pdb; pdb.set_trace()
     assert len(logs[-1]) == 1
     assert logs[-1][0]['type'] == 'pending'
     assert logs[-1][0]['logIndex'] is None
@@ -943,11 +935,6 @@ def test_get_filter_changes(test_app):
     assert logs[-1][0]['blockNumber'] == quantity_encoder(test_app.services.chain.chain.head.number)
     assert logs[-1][0]['address'] == contract_address
     logs_in_range = [logs[-1][0]]
-
-
-    tl = test_app.rpc_request('eth_getFilterChanges', topic_filter_id)
-    import pdb; pdb.set_trace()
-    assert tl[-1] == []
 
     # send tx and mine block
     tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))

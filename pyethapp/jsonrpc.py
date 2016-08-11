@@ -1360,6 +1360,7 @@ class LogFilter(object):
         # go through all receipts of all blocks
         # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
+
         for i, block in enumerate(blocks_to_check):
             if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
                 _bloom = self.chain.get_bloom(block)
@@ -1381,9 +1382,17 @@ class LogFilter(object):
                     else:
                         and_topics.append(topic)
                 if or_topics:
+                    # In case of the frequent usage of multiple 'or' statements in the filter
+                    # the following logic should be optimized so that the fewer amount of blocks gets checked.
+                    # It is currently optimal for filters with a single 'or' statement.
                     _topic_and_bloom = bloom.bloom_from_list(map(int32.serialize, and_topics or []))
-                    _topic_or_bloom = bloom.bloom_from_list(map(int32.serialize, or_topics or []))
-                    if _bloom & _topic_or_bloom | _topic_and_bloom != _bloom:
+                    bloom_passed = False
+                    for or_t in or_topics:
+                        or_bl = bloom.bloom_from_list(map(int32.serialize, [or_t]))
+                        if bloom.bloom_combine(_bloom, _topic_and_bloom, or_bl) == _bloom:
+                            bloom_passed = True
+                            break
+                    if not bloom_passed:
                         continue
                 else:
                     _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics or []))
@@ -1404,10 +1413,14 @@ class LogFilter(object):
                         if len(log.topics) < len(self.topics):
                             topic_match = False
                         for filter_topic, log_topic in zip(self.topics, log.topics):
-                            if filter_topic is not None and filter_topic != log_topic \
-                                    and type(filter_topic) == list and log_topic not in filter_topic:
-                                logger.debug('topic mismatch', want=filter_topic, have=log_topic)
-                                topic_match = False
+                            if filter_topic is not None and filter_topic != log_topic:
+                                if type(filter_topic) == list:
+                                    if log_topic not in filter_topic:
+                                        logger.debug('topic mismatch', want=filter_topic, have=log_topic)
+                                        topic_match = False
+                                else:
+                                    logger.debug('topic mismatch', want=filter_topic, have=log_topic)
+                                    topic_match = False
                         if not topic_match:
                             continue
                     # check for address
