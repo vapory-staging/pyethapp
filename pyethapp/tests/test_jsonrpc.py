@@ -340,7 +340,7 @@ def test_app(request, tmpdir):
                 'ACCOUNT_INITIAL_NONCE': request.param,
                 'GENESIS_DIFFICULTY': 1,
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
-                 'GENESIS_GAS_LIMIT': 3141592,
+                'GENESIS_GAS_LIMIT': 3141592,
                 'GENESIS_INITIAL_ALLOC': {
                     tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
                     tester.accounts[1].encode('hex'): {'balance': 1},
