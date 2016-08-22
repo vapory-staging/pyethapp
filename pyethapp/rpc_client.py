@@ -121,7 +121,7 @@ class JSONRPCClient(object):
         "specify privkey for local signing"
         if transport is None:
             self.transport = HttpPostClientTransport('{}://{}:{}'.format(
-                'https' if use_ssl else 'http', host, port))
+                'https' if use_ssl else 'http', host, port), headers={'content-type': 'application/json'})
         else:
             self.transport = transport
         self.print_communication = print_communication
