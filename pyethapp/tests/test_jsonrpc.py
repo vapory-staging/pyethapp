@@ -4,7 +4,7 @@ from os import path
 from itertools import count
 import gevent
 import gc
-from ethereum import slogging
+import json
 
 import pytest
 import rlp
@@ -24,21 +24,18 @@ from pyethapp.config import update_config_with_defaults, get_default_config
 from pyethapp.db_service import DBService
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import Compilers, JSONRPCServer, quantity_encoder, address_encoder, data_decoder,   \
-    data_encoder, default_gasprice, default_startgas, quantity_decoder
+    data_encoder, default_gasprice, default_startgas
+from pyethapp.rpc_client import JSONRPCClient
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
 from ethereum import _solidity
-from ethereum.abi import event_id, method_id, ContractTranslator, normalize_name
+from ethereum.abi import event_id, normalize_name
 from pyethapp.rpc_client import ContractProxy
-from ethereum.utils import denoms, normalize_address
-from ethereum.keys import privtoaddr
-import warnings
-from ethereum.transactions import Transaction
 
 ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
 SOLIDITY_AVAILABLE = 'solidity' in Compilers().compilers
-
 
 # EVM code corresponding to the following solidity code:
 #
@@ -131,6 +128,19 @@ def test_compile_solidity():
     PROFILES['testnet']['eth']['block']['ACCOUNT_INITIAL_NONCE']])
 def test_app(request, tmpdir):
 
+    class TestTransport(object):
+        def __init__(self, call_func):
+            self.call_func = call_func
+
+        def send_message(self, request):
+            request = json.loads(request)
+            method = request.get('method')
+            args = request.get('params')
+            if not args:
+                return self.call_func(method)
+            else:
+                return self.call_func(method, *args)
+
     class TestApp(EthApp):
 
         def start(self):
@@ -146,6 +156,8 @@ def test_app(request, tmpdir):
             self.services.accounts.add_account(locked_account, store=False)
             self.privkey = None
             assert set(acct.address for acct in self.services.accounts) == set(tester.accounts[:3])
+            test_transport = TestTransport(call_func=self.rpc_request)
+            self.client = JSONRPCClient(transport=test_transport)
 
         def mine_next_block(self):
             """Mine until a valid nonce is found.
@@ -165,7 +177,7 @@ def test_app(request, tmpdir):
             assert self.services.chain.chain.head.difficulty == 1
             return self.services.chain.chain.head
 
-        def rpc_request(self, method, *args):
+        def rpc_request(self, method, *args, **kwargs):
             """Simulate an incoming JSON RPC request and return the result.
 
             Example::
@@ -173,153 +185,11 @@ def test_app(request, tmpdir):
                 >>> assert test_app.rpc_request('eth_getBalance', '0x' + 'ff' * 20) == '0x0'
 
             """
-            log.debug('simulating rpc request', method=method)
+            log.debug('simulating rpc request', method=method, call_args=args, call_kwargs=kwargs)
             method = self.services.jsonrpc.dispatcher.get_method(method)
-            res = method(*args)
+            res = method(*args, **kwargs)
             log.debug('got response', response=res)
-            return res
-
-        def eth_call(self, sender='', to='', value=0, data='',
-                 startgas=default_startgas, gasprice=default_gasprice,
-                 block_number=None):
-
-            json_data = dict()
-
-            if sender is not None:
-                json_data['from'] = address_encoder(sender)
-
-            if to is not None:
-                json_data['to'] = data_encoder(to)
-
-            if value is not None:
-                json_data['value'] = quantity_encoder(value)
-
-            if gasprice is not None:
-                json_data['gasPrice'] = quantity_encoder(gasprice)
-
-            if startgas is not None:
-                json_data['gas'] = quantity_encoder(startgas)
-
-            if data is not None:
-                json_data['data'] = data_encoder(data)
-
-            if block_number is not None:
-                res = self.rpc_request('eth_call', json_data, block_number)
-            else:
-                res = self.rpc_request('eth_call', json_data)
-
-            return data_decoder(res)
-
-        def eth_transact(self, sender, to, value=0, data='', startgas=0,
-                         gasprice=10 * denoms.szabo, nonce=None):
-            """ Helper to send signed messages.
-
-            This method will use the `privkey` provided in the constructor to
-            locally sign the transaction. This requires an extended server
-            implementation that accepts the variables v, r, and s.
-            """
-
-            if not self.privkey and not sender:
-                raise ValueError('Either privkey or sender needs to be supplied.')
-
-            if self.privkey and not sender:
-                sender = privtoaddr(self.privkey)
-
-                if nonce is None:
-                    nonce = self.nonce(sender)
-            elif self.privkey:
-                if sender != privtoaddr(self.privkey):
-                    raise ValueError('sender for a different privkey.')
-
-                if nonce is None:
-                    nonce = self.nonce(sender)
-            else:
-                if nonce is None:
-                    nonce = 0
-
-            if not startgas:
-                startgas = self.gaslimit() - 1
-
-            tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
-
-            if self.privkey:
-                # add the fields v, r and s
-                tx.sign(self.privkey)
-
-            tx_dict = tx.to_dict()
-
-            # rename the fields to match the eth_sendTransaction signature
-            tx_dict.pop('hash')
-            tx_dict['sender'] = sender
-            tx_dict['gasPrice'] = tx_dict.pop('gasprice')
-            tx_dict['gas'] = tx_dict.pop('startgas')
-
-            res = self.eth_sendTransaction(**tx_dict)
-            assert len(res) in (20, 32)
-            return res.encode('hex')
-
-        def eth_sendTransaction(self, nonce=None, sender='', to='', value=0, data='',
-                                gasPrice=default_gasprice, gas=default_startgas,
-                                v=None, r=None, s=None):
-            """ Creates new message call transaction or a contract creation, if the
-            data field contains code.
-
-            Note:
-                The support for local signing through the variables v,r,s is not
-                part of the standard spec, a extended server is required.
-
-            Args:
-                from (address): The 20 bytes address the transaction is send from.
-                to (address): DATA, 20 Bytes - (optional when creating new
-                    contract) The address the transaction is directed to.
-                gas (int): Gas provided for the transaction execution. It will
-                    return unused gas.
-                gasPrice (int): gasPrice used for each paid gas.
-                value (int): Value send with this transaction.
-                data (bin): The compiled code of a contract OR the hash of the
-                    invoked method signature and encoded parameters.
-                nonce (int): This allows to overwrite your own pending transactions
-                    that use the same nonce.
-            """
-
-            if to == '' and data.isalnum():
-                warnings.warn(
-                    'Verify that the data parameter is _not_ hex encoded, if this is the case '
-                    'the data will be double encoded and result in unexpected '
-                    'behavior.'
-                )
-
-            if to == '0' * 40:
-                warnings.warn('For contract creating the empty string must be used.')
-
-            json_data = {
-                'to': data_encoder(normalize_address(to, allow_blank=True)),
-                'value': quantity_encoder(value),
-                'gasPrice': quantity_encoder(gasPrice),
-                'gas': quantity_encoder(gas),
-                'data': data_encoder(data),
-            }
-
-            if not sender and not (v and r and s):
-                raise ValueError('Either sender or v, r, s needs to be informed.')
-
-            if sender is not None:
-                json_data['from'] = address_encoder(sender)
-
-            if v and r and s:
-                json_data['v'] = quantity_encoder(v)
-                json_data['r'] = quantity_encoder(r)
-                json_data['s'] = quantity_encoder(s)
-
-            if nonce is not None:
-                json_data['nonce'] = quantity_encoder(nonce)
-
-            res = self.rpc_request('eth_sendTransaction', json_data)
-
-            return data_decoder(res)
-
-        def gaslimit(self):
-            return quantity_decoder(self.rpc_request('eth_gasLimit'))
+            return json.dumps(dict(result=res, jsonrpc=JSONRPCProtocol.JSON_RPC_VERSION, id=42))
 
     config = {
         'data_dir': str(tmpdir),
@@ -475,17 +345,17 @@ def test_logfilters_topics(test_app):
 
     contract_creation = {
         'from': sender,
-        'data': '0x'+theevm,
+        'data': '0x' + theevm,
         'gas': quantity_encoder(1000000)
     }
 
-    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    tx_hash = test_app.client.call('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
-    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    receipt = test_app.client.call('eth_getTransactionReceipt', tx_hash)
     contract_address = receipt['contractAddress']
 
     sample_contract = ContractProxy(sender_address, theabi, contract_address,
-                                    test_app.eth_call, test_app.eth_transact)
+                                    test_app.client.call, test_app.client.send_transaction)
 
     topic1 = hex(event1_id).rstrip("L")
     topic2 = hex(event2_id).rstrip("L")
@@ -494,114 +364,114 @@ def test_logfilters_topics(test_app):
         '0x0000000000000000000000000000000000000000000000000000000000000001',\
         '0x0000000000000000000000000000000000000000000000000000000000000064',\
         '0x00000000000000000000000000000000000000000000000000000000000003e8'
-    topic_filter_1 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_1 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1]
     })
-    topic_filter_2 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_2 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2]
     })
-    topic_filter_3 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_3 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3]
     })
-    topic_filter_4 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_4 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1, topica]
     })
 
-    topic_filter_5 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_5 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, topica, topicb]
     })
-    topic_filter_6 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_6 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3, topica, topicb, topicc]
     })
-    topic_filter_7 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_7 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topica, topicb, topicc]
     })
-    topic_filter_8 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_8 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3, topica, topicb]
     })
-    topic_filter_9 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_9 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topicc, topicb, topica, topic3]
     })
-    topic_filter_10 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_10 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topicb, topicc, topica, topic3]
     })
-    topic_filter_11 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_11 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, topica]
     })
-    topic_filter_12 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_12 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic3, topica]
     })
-    topic_filter_13 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_13 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topica, topicb]
     })
-    topic_filter_14 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_14 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, [topica, topicb]]
     })
-    topic_filter_15 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_15 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2], topica]
     })
-    topic_filter_16 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_16 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2, topic3]]
     })
-    topic_filter_17 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_17 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2, topic3, topica, topicb, topicc]]
     })
-    topic_filter_18 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_18 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic2, topica, topicb, [topic2, topica, topicb]]
     })
-    topic_filter_19 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_19 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [topic1, topica, topicb]
     })
-    topic_filter_20 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_20 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic1, topic2], [topica, topicb], [topica, topicb]]
     })
-    topic_filter_21 = test_app.rpc_request('eth_newFilter', {
+    topic_filter_21 = test_app.client.call('eth_newFilter', {
         'fromBlock': 0,
         'toBlock': 'pending',
         'topics': [[topic2, topic3], [topica, topicb], [topica, topicb]]
     })
 
-    thecode = test_app.rpc_request('eth_getCode', address_encoder(sample_contract.address))
+    thecode = test_app.client.call('eth_getCode', address_encoder(sample_contract.address))
     assert len(thecode) > 2
 
     sample_contract.trigger1(1)
@@ -611,47 +481,47 @@ def test_logfilters_topics(test_app):
     sample_contract.trigger3(1000)
     test_app.mine_next_block()
 
-    tl1 = test_app.rpc_request('eth_getFilterChanges', topic_filter_1)
+    tl1 = test_app.client.call('eth_getFilterChanges', topic_filter_1)
     assert len(tl1) == 1
-    tl2 = test_app.rpc_request('eth_getFilterChanges', topic_filter_2)
+    tl2 = test_app.client.call('eth_getFilterChanges', topic_filter_2)
     assert len(tl2) == 1
-    tl3 = test_app.rpc_request('eth_getFilterChanges', topic_filter_3)
+    tl3 = test_app.client.call('eth_getFilterChanges', topic_filter_3)
     assert len(tl3) == 1
-    tl4 = test_app.rpc_request('eth_getFilterChanges', topic_filter_4)
+    tl4 = test_app.client.call('eth_getFilterChanges', topic_filter_4)
     assert len(tl4) == 1
-    tl5 = test_app.rpc_request('eth_getFilterChanges', topic_filter_5)
+    tl5 = test_app.client.call('eth_getFilterChanges', topic_filter_5)
     assert len(tl5) == 1
-    tl6 = test_app.rpc_request('eth_getFilterChanges', topic_filter_6)
+    tl6 = test_app.client.call('eth_getFilterChanges', topic_filter_6)
     assert len(tl6) == 1
-    tl7 = test_app.rpc_request('eth_getFilterChanges', topic_filter_7)
+    tl7 = test_app.client.call('eth_getFilterChanges', topic_filter_7)
     assert len(tl7) == 0
-    tl8 = test_app.rpc_request('eth_getFilterChanges', topic_filter_8)
+    tl8 = test_app.client.call('eth_getFilterChanges', topic_filter_8)
     assert len(tl8) == 1
-    tl9 = test_app.rpc_request('eth_getFilterChanges', topic_filter_9)
+    tl9 = test_app.client.call('eth_getFilterChanges', topic_filter_9)
     assert len(tl9) == 0
-    tl10 = test_app.rpc_request('eth_getFilterChanges', topic_filter_10)
+    tl10 = test_app.client.call('eth_getFilterChanges', topic_filter_10)
     assert len(tl10) == 0
-    tl11 = test_app.rpc_request('eth_getFilterChanges', topic_filter_11)
+    tl11 = test_app.client.call('eth_getFilterChanges', topic_filter_11)
     assert len(tl11) == 1
-    tl12 = test_app.rpc_request('eth_getFilterChanges', topic_filter_12)
+    tl12 = test_app.client.call('eth_getFilterChanges', topic_filter_12)
     assert len(tl12) == 1
-    tl13 = test_app.rpc_request('eth_getFilterChanges', topic_filter_13)
+    tl13 = test_app.client.call('eth_getFilterChanges', topic_filter_13)
     assert len(tl13) == 0
-    tl14 = test_app.rpc_request('eth_getFilterChanges', topic_filter_14)
+    tl14 = test_app.client.call('eth_getFilterChanges', topic_filter_14)
     assert len(tl14) == 1
-    tl15 = test_app.rpc_request('eth_getFilterChanges', topic_filter_15)
+    tl15 = test_app.client.call('eth_getFilterChanges', topic_filter_15)
     assert len(tl15) == 2
-    tl16 = test_app.rpc_request('eth_getFilterChanges', topic_filter_16)
+    tl16 = test_app.client.call('eth_getFilterChanges', topic_filter_16)
     assert len(tl16) == 3
-    tl17 = test_app.rpc_request('eth_getFilterChanges', topic_filter_17)
+    tl17 = test_app.client.call('eth_getFilterChanges', topic_filter_17)
     assert len(tl17) == 3
-    tl18 = test_app.rpc_request('eth_getFilterChanges', topic_filter_18)
+    tl18 = test_app.client.call('eth_getFilterChanges', topic_filter_18)
     assert len(tl18) == 0
-    tl19 = test_app.rpc_request('eth_getFilterChanges', topic_filter_19)
+    tl19 = test_app.client.call('eth_getFilterChanges', topic_filter_19)
     assert len(tl19) == 0
-    tl20 = test_app.rpc_request('eth_getFilterChanges', topic_filter_20)
+    tl20 = test_app.client.call('eth_getFilterChanges', topic_filter_20)
     assert len(tl20) == 1
-    tl21 = test_app.rpc_request('eth_getFilterChanges', topic_filter_21)
+    tl21 = test_app.client.call('eth_getFilterChanges', topic_filter_21)
     assert len(tl21) == 2
 
 
@@ -665,7 +535,7 @@ def test_send_transaction(test_app):
         'to': address_encoder('\xff' * 20),
         'value': quantity_encoder(1)
     }
-    tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    tx_hash = data_decoder(test_app.client.call('eth_sendTransaction', tx))
     assert tx_hash == chain.head_candidate.get_transaction(0).hash
     assert chain.head_candidate.get_balance('\xff' * 20) == 1
     test_app.mine_next_block()
@@ -674,7 +544,7 @@ def test_send_transaction(test_app):
 
     # send transactions from account which can't pay gas
     tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts[1].address)
-    tx_hash = data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    tx_hash = data_decoder(test_app.client.call('eth_sendTransaction', tx))
     assert chain.head_candidate.get_transactions() == []
 
 
@@ -694,7 +564,7 @@ def main(a,b):
         'to': address_encoder(tx_to),
         'data': evm_code.encode('hex')
     }
-    data_decoder(test_app.rpc_request('eth_sendTransaction', tx))
+    data_decoder(test_app.client.call('eth_sendTransaction', tx))
     creates = chain.head_candidate.get_transaction(0).creates
 
     code = chain.head_candidate.account_to_dict(creates)['code']
@@ -724,7 +594,7 @@ def main(a,b):
     tx = ethereum.transactions.Transaction(nonce, default_gasprice, default_startgas, tx_to, 0, evm_code, 0, 0, 0)
     test_app.services.accounts.sign_tx(sender, tx)
     raw_transaction = data_encoder(rlp.codec.encode(tx, ethereum.transactions.Transaction))
-    data_decoder(test_app.rpc_request('eth_sendRawTransaction', raw_transaction))
+    data_decoder(test_app.client.call('eth_sendRawTransaction', raw_transaction))
     creates = chain.head_candidate.get_transaction(0).creates
 
     code = chain.head_candidate.account_to_dict(creates)['code']
@@ -740,8 +610,8 @@ def main(a,b):
 
 
 def test_pending_transaction_filter(test_app):
-    filter_id = test_app.rpc_request('eth_newPendingTransactionFilter')
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    filter_id = test_app.client.call('eth_newPendingTransactionFilter')
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == []
     tx = {
         'from': address_encoder(test_app.services.accounts.unlocked_accounts[0].address),
         'to': address_encoder('\xff' * 20)
@@ -751,13 +621,13 @@ def test_pending_transaction_filter(test_app):
         tx_hashes = []
         for c in s:
             if c == 't':
-                tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+                tx_hashes.append(test_app.client.call('eth_sendTransaction', tx))
             elif c == 'b':
                 test_app.mine_next_block()
             else:
                 assert False
-        assert test_app.rpc_request('eth_getFilterChanges', filter_id) == tx_hashes
-        assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+        assert test_app.client.call('eth_getFilterChanges', filter_id) == tx_hashes
+        assert test_app.client.call('eth_getFilterChanges', filter_id) == []
 
     sequences = [
         't',
@@ -772,15 +642,15 @@ def test_pending_transaction_filter(test_app):
 
 
 def test_new_block_filter(test_app):
-    filter_id = test_app.rpc_request('eth_newBlockFilter')
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    filter_id = test_app.client.call('eth_newBlockFilter')
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == []
     h = test_app.mine_next_block().hash
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == [data_encoder(h)]
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == [data_encoder(h)]
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == []
     hashes = [data_encoder(test_app.mine_next_block().hash) for i in range(3)]
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == hashes
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
-    assert test_app.rpc_request('eth_getFilterChanges', filter_id) == []
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == hashes
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == []
+    assert test_app.client.call('eth_getFilterChanges', filter_id) == []
 
 
 def test_get_logs(test_app):
@@ -791,9 +661,9 @@ def test_get_logs(test_app):
         'from': sender,
         'data': data_encoder(LOG_EVM)
     }
-    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    tx_hash = test_app.client.call('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
-    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    receipt = test_app.client.call('eth_getTransactionReceipt', tx_hash)
     contract_address = receipt['contractAddress']
     tx = {
         'from': sender,
@@ -801,8 +671,8 @@ def test_get_logs(test_app):
     }
 
     # single log in pending block
-    test_app.rpc_request('eth_sendTransaction', tx)
-    logs1 = test_app.rpc_request('eth_getLogs', {
+    test_app.client.call('eth_sendTransaction', tx)
+    logs1 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'pending',
         'toBlock': 'pending'
     })
@@ -815,7 +685,7 @@ def test_get_logs(test_app):
     assert logs1[0]['blockNumber'] is None
     assert logs1[0]['address'] == contract_address
 
-    logs2 = test_app.rpc_request('eth_getLogs', {
+    logs2 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'pending',
         'toBlock': 'pending'
     })
@@ -823,7 +693,7 @@ def test_get_logs(test_app):
 
     # same log, but now mined in head
     test_app.mine_next_block()
-    logs3 = test_app.rpc_request('eth_getLogs', {
+    logs3 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'latest',
         'toBlock': 'latest'
     })
@@ -836,16 +706,16 @@ def test_get_logs(test_app):
     assert logs3[0]['address'] == contract_address
 
     # another log in pending block
-    test_app.rpc_request('eth_sendTransaction', tx)
-    logs4 = test_app.rpc_request('eth_getLogs', {
+    test_app.client.call('eth_sendTransaction', tx)
+    logs4 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'latest',
         'toBlock': 'pending'
     })
     assert logs4 == [logs1[0], logs3[0]] or logs4 == [logs3[0], logs1[0]]
 
     # two logs in pending block
-    test_app.rpc_request('eth_sendTransaction', tx)
-    logs5 = test_app.rpc_request('eth_getLogs', {
+    test_app.client.call('eth_sendTransaction', tx)
+    logs5 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'pending',
         'toBlock': 'pending'
     })
@@ -854,7 +724,7 @@ def test_get_logs(test_app):
 
     # two logs in head
     test_app.mine_next_block()
-    logs6 = test_app.rpc_request('eth_getLogs', {
+    logs6 = test_app.client.call('eth_getLogs', {
         'fromBlock': 'latest',
         'toBlock': 'pending'
     })
@@ -867,8 +737,8 @@ def test_get_logs(test_app):
     assert sorted([log['transactionIndex'] for log in logs6]) == ['0x0', '0x1']
 
     # everything together with another log in pending block
-    test_app.rpc_request('eth_sendTransaction', tx)
-    logs7 = test_app.rpc_request('eth_getLogs', {
+    test_app.client.call('eth_sendTransaction', tx)
+    logs7 = test_app.client.call('eth_getLogs', {
         'fromBlock': quantity_encoder(n0),
         'toBlock': 'pending'
     })
@@ -884,20 +754,20 @@ def test_get_filter_changes(test_app):
         'from': sender,
         'data': data_encoder(LOG_EVM)
     }
-    tx_hash = test_app.rpc_request('eth_sendTransaction', contract_creation)
+    tx_hash = test_app.client.call('eth_sendTransaction', contract_creation)
     test_app.mine_next_block()
-    receipt = test_app.rpc_request('eth_getTransactionReceipt', tx_hash)
+    receipt = test_app.client.call('eth_getTransactionReceipt', tx_hash)
     contract_address = receipt['contractAddress']
     tx = {
         'from': sender,
         'to': contract_address
     }
 
-    pending_filter_id = test_app.rpc_request('eth_newFilter', {
+    pending_filter_id = test_app.client.call('eth_newFilter', {
         'fromBlock': 'pending',
         'toBlock': 'pending'
     })
-    latest_filter_id = test_app.rpc_request('eth_newFilter', {
+    latest_filter_id = test_app.client.call('eth_newFilter', {
         'fromBlock': 'latest',
         'toBlock': 'latest'
     })
@@ -906,8 +776,8 @@ def test_get_filter_changes(test_app):
     logs = []
 
     # tx in pending block
-    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    tx_hashes.append(test_app.client.call('eth_sendTransaction', tx))
+    logs.append(test_app.client.call('eth_getFilterChanges', pending_filter_id))
     assert len(logs[-1]) == 1
     assert logs[-1][0]['type'] == 'pending'
     assert logs[-1][0]['logIndex'] is None
@@ -918,14 +788,14 @@ def test_get_filter_changes(test_app):
     assert logs[-1][0]['address'] == contract_address
     pending_log = logs[-1][0]
 
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', pending_filter_id))
     assert logs[-1] == []
 
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', latest_filter_id))
     assert logs[-1] == []
 
     test_app.mine_next_block()
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', latest_filter_id))
     assert len(logs[-1]) == 1  # log from before, but now mined
     assert logs[-1][0]['type'] == 'mined'
     assert logs[-1][0]['logIndex'] == '0x0'
@@ -937,9 +807,9 @@ def test_get_filter_changes(test_app):
     logs_in_range = [logs[-1][0]]
 
     # send tx and mine block
-    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
+    tx_hashes.append(test_app.client.call('eth_sendTransaction', tx))
     test_app.mine_next_block()
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', pending_filter_id))
     assert len(logs[-1]) == 1
     assert logs[-1][0]['type'] == 'mined'
     assert logs[-1][0]['logIndex'] == '0x0'
@@ -950,25 +820,23 @@ def test_get_filter_changes(test_app):
     assert logs[-1][0]['address'] == contract_address
     logs_in_range.append(logs[-1][0])
 
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', latest_filter_id))
     assert logs[-1] == logs[-2]  # latest and pending filter see same (mined) log
 
-    logs.append(test_app.rpc_request('eth_getFilterChanges', latest_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', latest_filter_id))
     assert logs[-1] == []
 
     test_app.mine_next_block()
-    logs.append(test_app.rpc_request('eth_getFilterChanges', pending_filter_id))
+    logs.append(test_app.client.call('eth_getFilterChanges', pending_filter_id))
     assert logs[-1] == []
 
-    range_filter_id = test_app.rpc_request('eth_newFilter', {
+    range_filter_id = test_app.client.call('eth_newFilter', {
         'fromBlock': quantity_encoder(test_app.services.chain.chain.head.number - 3),
         'toBlock': 'pending'
     })
-    tx_hashes.append(test_app.rpc_request('eth_sendTransaction', tx))
-    logs.append(test_app.rpc_request('eth_getFilterChanges', range_filter_id))
+    tx_hashes.append(test_app.client.call('eth_sendTransaction', tx))
+    logs.append(test_app.client.call('eth_getFilterChanges', range_filter_id))
     assert sorted(logs[-1]) == sorted(logs_in_range + [pending_log])
-
-
 
 
 def test_eth_nonce(test_app):
@@ -978,20 +846,20 @@ def test_eth_nonce(test_app):
     :param test_app:
     :return:
     """
-    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
+    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
     assert (
-        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        int(test_app.client.call('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
         test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'])
 
-    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
-    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
+    assert test_app.client.call('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
     assert (
-        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        int(test_app.client.call('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
         test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 1)
-    assert test_app.rpc_request('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
-    assert test_app.rpc_request('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
+    assert test_app.client.call('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
     test_app.mine_next_block()
     assert test_app.services.chain.chain.head.number == 1
     assert (
-        int(test_app.rpc_request('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
+        int(test_app.client.call('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
         test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 2)
