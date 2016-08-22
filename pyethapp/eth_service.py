@@ -1,27 +1,29 @@
+# -*- coding: utf8 -*-
 import time
-from ethereum.config import Env
-from ethereum.utils import sha3
-import rlp
-from rlp.utils import encode_hex
-from ethereum import processblock
-from ethereum import config as ethereum_config
-from synchronizer import Synchronizer
-from ethereum.slogging import get_logger
-from ethereum.processblock import validate_transaction
-from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
-    InsufficientBalance, InsufficientStartGas
-from ethereum.chain import Chain
-from ethereum.refcount_db import RefcountDB
-from ethereum.blocks import Block, VerificationFailed
-from ethereum.transactions import Transaction
-from devp2p.service import WiredService
-from devp2p.protocol import BaseProtocol
+from collections import deque
+
 import eth_protocol
 import gevent
 import gevent.lock
+import rlp
 import statistics
-from collections import deque
+from devp2p.protocol import BaseProtocol
+from devp2p.service import WiredService
+from ethereum.blocks import Block, VerificationFailed
+from ethereum.chain import Chain
+from ethereum.config import Env
+from ethereum.exceptions import InvalidTransaction, InvalidNonce, InsufficientBalance, InsufficientStartGas
+from ethereum import config as ethereum_config
+from ethereum import processblock
+from ethereum.processblock import validate_transaction
+from ethereum.refcount_db import RefcountDB
+from ethereum.slogging import get_logger
+from ethereum.transactions import Transaction
+from ethereum.utils import sha3
 from gevent.queue import Queue
+from rlp.utils import encode_hex
+from synchronizer import Synchronizer
+
 from pyethapp import sentry
 
 
@@ -33,15 +35,13 @@ processblock_apply_transaction = processblock.apply_transaction
 
 
 def apply_transaction(block, tx):
-    # import traceback
-    # print traceback.print_stack()
     log.debug('apply_transaction ctx switch', tx=tx.hash.encode('hex')[:8])
     gevent.sleep(0.001)
     return processblock_apply_transaction(block, tx)
-#processblock.apply_transaction = apply_transaction
 
 
-rlp_hash_hex = lambda data: encode_hex(sha3(rlp.encode(data)))
+def rlp_hash_hex(data):
+    return encode_hex(sha3(rlp.encode(data)))
 
 
 class DuplicatesFilter(object):
@@ -274,7 +274,7 @@ class ChainService(WiredService):
                     elapsed = time.time() - st
                     log.debug('deserialized', elapsed='%.4fs' % elapsed, ts=time.time(),
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
-                except processblock.InvalidTransaction as e:
+                except InvalidTransaction as e:
                     log.warn('invalid transaction', block=t_block, error=e, FIXME='ban node')
                     errtype = \
                         'InvalidNonce' if isinstance(e, InvalidNonce) else \
