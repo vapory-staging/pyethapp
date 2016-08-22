@@ -117,10 +117,13 @@ class JSONRPCClient(object):
     protocol = JSONRPCProtocol()
 
     def __init__(self, host='127.0.0.1', port=4000, print_communication=True,
-                 privkey=None, sender=None, use_ssl=False):
+                 privkey=None, sender=None, use_ssl=False, transport=None):
         "specify privkey for local signing"
-        self.transport = HttpPostClientTransport('{}://{}:{}'.format(
-            'https' if use_ssl else 'http', host, port))
+        if transport is None:
+            self.transport = HttpPostClientTransport('{}://{}:{}'.format(
+                'https' if use_ssl else 'http', host, port))
+        else:
+            self.transport = transport
         self.print_communication = print_communication
         self.privkey = privkey
         self._sender = sender
