@@ -15,7 +15,7 @@ from ethereum.config import Env
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, InsufficientBalance, InsufficientStartGas
 from ethereum import config as ethereum_config
 from ethereum import processblock
-from ethereum.processblock import validate_transaction
+from ethereum.state_transition import validate_transaction
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
 from ethereum.blocks import get_block_header
@@ -28,23 +28,7 @@ from synchronizer import Synchronizer
 from pyethapp import sentry
 from pyethapp.dao import is_dao_challenge, build_dao_header
 
-
 log = get_logger('eth.chainservice')
-
-
-# patch to get context switches between tx replay
-processblock_apply_transaction = processblock.apply_transaction
-
-
-def apply_transaction(block, tx):
-    log.debug('apply_transaction ctx switch', tx=tx.hash.encode('hex')[:8])
-    gevent.sleep(0.001)
-    return processblock_apply_transaction(block, tx)
-
-
-def rlp_hash_hex(data):
-    return encode_hex(sha3(rlp.encode(data)))
-
 
 class DuplicatesFilter(object):
 
@@ -146,7 +130,7 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
-        self.chain = Chain(env, new_head_cb=self._on_new_head, coinbase=coinbase)
+        self.chain = Chain(env=env, coinbase=coinbase)
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
@@ -157,7 +141,8 @@ class ChainService(WiredService):
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
-        self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
+        #self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
+        self.transaction_queue = TransactionQueue()
         self.add_blocks_lock = False
         self.add_transaction_lock = gevent.lock.Semaphore()
         self.broadcast_filter = DuplicatesFilter()
@@ -175,12 +160,14 @@ class ChainService(WiredService):
             return self.app.services.pow.active
         return False
 
+    # TODO: still need?
     def _on_new_head(self, block):
         log.debug('new head cbs', num=len(self.on_new_head_cbs))
         for cb in self.on_new_head_cbs:
             cb(block)
         self._on_new_head_candidate()  # we implicitly have a new head_candidate
 
+    # TODO: still need?
     def _on_new_head_candidate(self):
         # DEBUG('new head candidate cbs', len(self.on_new_head_candidate_cbs))
         for cb in self.on_new_head_candidate_cbs:
@@ -203,7 +190,10 @@ class ChainService(WiredService):
 
         # validate transaction
         try:
-            validate_transaction(self.chain.head_candidate, tx)
+            # Transaction validation for broadcasting. Transaction is validated
+            # against the (same) head state each time. Conflicting transaction
+            # may pass the check.
+            validate_transaction(self.chain.state, tx)
             log.debug('valid tx, broadcasting')
             self.broadcast_transaction(tx, origin=origin)  # asap
         except InvalidTransaction as e:
@@ -216,11 +206,9 @@ class ChainService(WiredService):
                 return
 
         self.add_transaction_lock.acquire()
-        success = self.chain.add_transaction(tx)
+        self.transaction_queue.add_transaction(tx)
         self.add_transaction_lock.release()
-        if success:
-            self._on_new_head_candidate()
-        return success
+        return len(self.transaction_queue)
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
