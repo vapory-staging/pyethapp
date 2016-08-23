@@ -16,6 +16,7 @@ from ethereum.exceptions import InvalidTransaction, InvalidNonce, InsufficientBa
 from ethereum import config as ethereum_config
 from ethereum import processblock
 from ethereum.state_transition import validate_transaction
+from ethereum.transaction_queue import TransactionQueue
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
 from ethereum.blocks import get_block_header
@@ -130,13 +131,13 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
-        self.chain = Chain(env=env, coinbase=coinbase)
+        self.chain = Chain(env=env, genesis=sce['genesis_data'], coinbase=coinbase)
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
-            assert sce['genesis_hash'] == self.chain.genesis.hex_hash(), \
+            assert sce['genesis_hash'] == self.chain.genesis.hex_hash, \
                 "Genesis hash mismatch.\n  Expected: %s\n  Got: %s" % (
-                    sce['genesis_hash'], self.chain.genesis.hex_hash())
+                    sce['genesis_hash'], self.chain.genesis.hex_hash)
 
         self.synchronizer = Synchronizer(self, force_sync=None)
 
