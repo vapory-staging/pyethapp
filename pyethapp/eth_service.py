@@ -3,11 +3,10 @@ from ethereum.config import Env
 from ethereum.utils import sha3
 import rlp
 from rlp.utils import encode_hex
-from ethereum import processblock
 from ethereum import config as ethereum_config
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
-from ethereum.processblock import validate_transaction
+from ethereum.state_transition import validate_transaction
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
 from ethereum.chain import Chain
@@ -24,25 +23,7 @@ from collections import deque
 from gevent.queue import Queue
 from pyethapp import sentry
 
-
 log = get_logger('eth.chainservice')
-
-
-# patch to get context switches between tx replay
-processblock_apply_transaction = processblock.apply_transaction
-
-
-def apply_transaction(block, tx):
-    # import traceback
-    # print traceback.print_stack()
-    log.debug('apply_transaction ctx switch', tx=tx.hash.encode('hex')[:8])
-    gevent.sleep(0.001)
-    return processblock_apply_transaction(block, tx)
-#processblock.apply_transaction = apply_transaction
-
-
-rlp_hash_hex = lambda data: encode_hex(sha3(rlp.encode(data)))
-
 
 class DuplicatesFilter(object):
 
@@ -144,7 +125,7 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
-        self.chain = Chain(env, new_head_cb=self._on_new_head, coinbase=coinbase)
+        self.chain = Chain(env=env, coinbase=coinbase)
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
@@ -155,7 +136,8 @@ class ChainService(WiredService):
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
-        self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
+        #self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
+        self.transaction_queue = TransactionQueue()
         self.add_blocks_lock = False
         self.add_transaction_lock = gevent.lock.Semaphore()
         self.broadcast_filter = DuplicatesFilter()
@@ -173,12 +155,14 @@ class ChainService(WiredService):
             return self.app.services.pow.active
         return False
 
+    # TODO: still need?
     def _on_new_head(self, block):
         log.debug('new head cbs', num=len(self.on_new_head_cbs))
         for cb in self.on_new_head_cbs:
             cb(block)
         self._on_new_head_candidate()  # we implicitly have a new head_candidate
 
+    # TODO: still need?
     def _on_new_head_candidate(self):
         # DEBUG('new head candidate cbs', len(self.on_new_head_candidate_cbs))
         for cb in self.on_new_head_candidate_cbs:
@@ -201,7 +185,10 @@ class ChainService(WiredService):
 
         # validate transaction
         try:
-            validate_transaction(self.chain.head_candidate, tx)
+            # Transaction validation for broadcasting. Transaction is validated
+            # against the (same) head state each time. Conflicting transaction
+            # may pass the check.
+            validate_transaction(self.chain.state, tx)
             log.debug('valid tx, broadcasting')
             self.broadcast_transaction(tx, origin=origin)  # asap
         except InvalidTransaction as e:
@@ -214,11 +201,9 @@ class ChainService(WiredService):
                 return
 
         self.add_transaction_lock.acquire()
-        success = self.chain.add_transaction(tx)
+        self.transaction_queue.add_transaction(tx)
         self.add_transaction_lock.release()
-        if success:
-            self._on_new_head_candidate()
-        return success
+        return len(self.transaction_queue)
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
@@ -274,7 +259,7 @@ class ChainService(WiredService):
                     elapsed = time.time() - st
                     log.debug('deserialized', elapsed='%.4fs' % elapsed, ts=time.time(),
                               gas_used=block.gas_used, gpsec=self.gpsec(block.gas_used, elapsed))
-                except processblock.InvalidTransaction as e:
+                except InvalidTransaction as e:
                     log.warn('invalid transaction', block=t_block, error=e, FIXME='ban node')
                     errtype = \
                         'InvalidNonce' if isinstance(e, InvalidNonce) else \
