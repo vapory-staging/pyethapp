@@ -206,6 +206,9 @@ def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
     if unknown_keys:
         raise ValueError('genesis_dict contains invalid keys.')
 
+    # TODO: we should only keep raw genesis data to have better interoperability?
+    config['eth']['genesis_data'] = genesis_dict
+
     config.setdefault('eth', {}).setdefault('block', {})
     ethblock_config = config['eth']['block']
 
