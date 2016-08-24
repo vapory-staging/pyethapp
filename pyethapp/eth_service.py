@@ -126,6 +126,7 @@ class ChainService(WiredService):
         log.info('initializing chain')
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
+
         self.chain = Chain(env=env, genesis=sce['genesis_data'], coinbase=coinbase)
 
         log.info('chain at', number=self.chain.head.number)
