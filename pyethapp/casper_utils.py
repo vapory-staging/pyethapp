@@ -1,5 +1,5 @@
 from ethereum import utils
-from ethereum.casper_utils import RandaoManager
+from ethereum.casper_utils import RandaoManager, generate_validation_code
 
 num_participants = 3
 

@@ -23,12 +23,14 @@ from gevent.event import Event
 import config as konfig
 import eth_protocol
 import utils
+from casper_utils import casper_genesis
 from accounts import AccountsService, Account
 from console_service import Console
 from db_service import DBService
 from eth_service import ChainService
 from jsonrpc import JSONRPCServer, IPCRPCServer
 from pow_service import PoWService
+from validator_service import ValidatorService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
@@ -36,8 +38,8 @@ from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, en
 
 log = slogging.get_logger('app')
 
-services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
-            JSONRPCServer, IPCRPCServer, Console]
+services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService,
+            PoWService, ValidatorService, JSONRPCServer, IPCRPCServer, Console]
 
 
 class EthApp(BaseApp):
@@ -78,12 +80,14 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
+@click.option('-j', '--join_validators', multiple=False, type=str,
+              help='run as a Casper validator')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, unlock, password, log_file):
+        mining_pct, join_validators, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
@@ -153,6 +157,16 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
     if not config.get('pow', {}).get('activated'):
         config['deactivated_services'].append(PoWService.name)
+
+    if join_validators > 0:
+        config['validator'] = {
+            'activated': True,
+            'privkey': casper_genesis["privkeys"][0],
+            'deposit_size': 256,
+            'seed': join_validators
+        }
+    if not config.get('validator', {}).get('activated'):
+        config['deactivated_services'].append(ValidatorService)
 
     ctx.obj = {'config': config,
                'unlock': unlock,

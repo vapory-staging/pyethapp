@@ -1,12 +1,12 @@
 import time
 from ethereum.config import Env
-from ethereum.utils import sha3
+from ethereum.utils import sha3, privtoaddr
 import rlp
 from rlp.utils import encode_hex
 from ethereum import config as ethereum_config
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
-from ethereum.state_transition import validate_transaction
+from ethereum.state_transition import validate_transaction, apply_transaction, casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas
@@ -14,6 +14,7 @@ from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
 from ethereum.blocks import Block, VerificationFailed
 from ethereum.transactions import Transaction
+from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, validator_inject, generate_validation_code, RandaoManager
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
 import eth_protocol
@@ -25,6 +26,7 @@ from gevent.queue import Queue
 from pyethapp import sentry
 
 log = get_logger('eth.chainservice')
+
 
 class DuplicatesFilter(object):
 
@@ -127,7 +129,27 @@ class ChainService(WiredService):
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
 
-        self.chain = Chain(env=env, genesis=sce['genesis_data'], coinbase=coinbase)
+        def post_state_initialize(state):
+            scv = self.config.get('validator', {})
+            i_am_a_validator = scv.get('activated', False)
+            i_am_the_first = len(self.config.get('discovery', {}).get('bootstrap_nodes', [])) == 0
+            if i_am_the_first:
+                state.gas_limit = 10**9
+                casper_contract_bootstrap(state, timestamp=int(time.time()))
+                log.info('casper contract initialized')
+                if i_am_a_validator:
+                    addr = privtoaddr(scv['privkey'])
+                    vcode = generate_validation_code(addr)
+                    randao = RandaoManager(sha3(scv['seed']))
+                    ds = scv['deposit_size']
+                    validator_inject(state, vcode, ds * 10**18, randao.get(9999))
+                    log.info('validator 0x%s injected' % encode_hex(addr))
+                state.commit()
+
+        self.chain = Chain(env=env,
+                           genesis=sce['genesis_data'],
+                           coinbase=coinbase,
+                           post_state_initialize=post_state_initialize)
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
