@@ -9,10 +9,10 @@ from ethereum.slogging import get_logger
 from ethereum.state_transition import validate_transaction, apply_transaction, casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
-    InsufficientBalance, InsufficientStartGas
+    InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
-from ethereum.blocks import Block, VerificationFailed
+from ethereum.block import Block
 from ethereum.transactions import Transaction
 from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, validator_inject, generate_validation_code, RandaoManager
 from devp2p.service import WiredService

@@ -8,12 +8,13 @@ from copy import deepcopy
 from decorator import decorator
 from collections import Iterable
 import inspect
-import ethereum.blocks
 from ethereum.utils import (is_numeric, is_string, int_to_big_endian, big_endian_to_int,
                             encode_hex, decode_hex, sha3, zpad)
 import ethereum.slogging as slogging
 from ethereum.slogging import LogRecorder
+from ethereum.block import Block
 from ethereum.transactions import Transaction
+from ethereum.parse_genesis_declaration import mk_genesis_block
 from ethereum import processblock
 import gevent
 import gevent.wsgi
@@ -441,7 +442,7 @@ def bool_decoder(data):
 def block_encoder(block, include_transactions=False, pending=False, is_header=False):
     """Encode a block as JSON object.
 
-    :param block: a :class:`ethereum.blocks.Block`
+    :param block: a :class:`ethereum.block.Block`
     :param include_transactions: if true transactions are included, otherwise
                                  only their hashes
     :param pending: if `True` the block number of transactions, if included, is set to `None`
@@ -1151,11 +1152,11 @@ class Chain(Subdispatcher):
                 assert success
         else:
             env = ethereum.config.Env(db=block.db)
-            test_block = ethereum.blocks.genesis(env)
+            test_block = mk_genesis_block(env)
             original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
             original = deepcopy(original)
             original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
-            test_block = ethereum.blocks.genesis(env)
+            test_block = mk_genesis_block(env)
             test_block.revert(original)
 
         # validate transaction
@@ -1219,11 +1220,12 @@ class Chain(Subdispatcher):
                 success, output = processblock.apply_transaction(test_block, tx)
                 assert success
         else:
-            test_block = ethereum.blocks.genesis(block.db)
+            env = ethereum.config.Env(db=block.db)
+            test_block = mk_genesis_block(env)
             original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
             original = deepcopy(original)
             original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
-            test_block = ethereum.blocks.genesis(block.db)
+            test_block = mk_genesis_block(env)
             test_block.revert(original)
 
         # validate transaction
@@ -1352,7 +1354,7 @@ class LogFilter(object):
         # logger.debug('blocks to check', blocks=blocks_to_check)
         new_logs = {}
         for i, block in enumerate(blocks_to_check):
-            if not isinstance(block, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
+            if not isinstance(block, Block):
                 _bloom = self.chain.get_bloom(block)
                 # Check that the bloom for this block contains at least one of the desired
                 # addresses
@@ -1404,7 +1406,7 @@ class LogFilter(object):
             self.last_block_checked = blocks_to_check[-1]
         else:
             self.last_block_checked = blocks_to_check[-2] if len(blocks_to_check) >= 2 else None
-        if self.last_block_checked and not isinstance(self.last_block_checked, (ethereum.blocks.Block, ethereum.blocks.CachedBlock)):
+        if self.last_block_checked and not isinstance(self.last_block_checked, Block):
             self.last_block_checked = self.chain.get(self.last_block_checked)
         actually_new_ids = new_logs.viewkeys() - self.log_dict.viewkeys()
         self.log_dict.update(new_logs)
@@ -1567,11 +1569,11 @@ class FilterManager(Subdispatcher):
     def _get_block_before_tx(self, txhash):
         tx, blk, i = self.app.services.chain.chain.index.get_transaction(txhash)
         # get the state we had before this transaction
-        test_blk = ethereum.blocks.Block.init_from_parent(blk.get_parent(),
-                                                          blk.coinbase,
-                                                          extra_data=blk.extra_data,
-                                                          timestamp=blk.timestamp,
-                                                          uncles=blk.uncles)
+        test_blk = Block.init_from_parent(blk.get_parent(),
+                                          blk.coinbase,
+                                          extra_data=blk.extra_data,
+                                          timestamp=blk.timestamp,
+                                          uncles=blk.uncles)
         pre_state = test_blk.state_root
         for i in range(blk.transaction_count):
             tx_lst_serialized, sr, _ = blk.get_transaction(i)

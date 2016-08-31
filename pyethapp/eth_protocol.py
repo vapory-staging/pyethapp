@@ -1,6 +1,6 @@
 from devp2p.protocol import BaseProtocol, SubProtocolError
 from ethereum.transactions import Transaction
-from ethereum.blocks import Block, BlockHeader
+from ethereum.block import Block, BlockHeader
 import rlp
 import gevent
 import time
