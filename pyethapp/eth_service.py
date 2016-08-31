@@ -6,7 +6,8 @@ from rlp.utils import encode_hex
 from ethereum import config as ethereum_config
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
-from ethereum.state_transition import validate_transaction, apply_transaction, casper_config
+from ethereum.state_transition import validate_transaction, apply_transaction
+from ethereum.casper_utils import casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas, VerificationFailed
