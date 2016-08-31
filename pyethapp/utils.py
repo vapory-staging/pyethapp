@@ -7,11 +7,12 @@ import click
 import ethereum
 import gevent
 from IPython.core import ultratb
-from ethereum.blocks import Block, genesis
+from ethereum.block import Block
 from devp2p.service import BaseService
 import rlp
 import sys
 from ethereum import slogging
+from ethereum.parse_genesis_declaration import mk_genesis_block
 from ethereum.slogging import bcolors
 import types
 
@@ -105,7 +106,8 @@ def load_block_tests(data, db):
             'storage': acct_state['storage']
         }
     env = ethereum.config.Env(db=db)
-    genesis(env, start_alloc=initial_alloc)  # builds the state trie
+    mk_genesis_block(env, start_alloc=initial_alloc)
+    env.db.commit()
     genesis_block = rlp.decode(ethereum.utils.decode_hex(data['genesisRLP'][2:]), Block, env=env)
     blocks = {genesis_block.hash: genesis_block}
     for blk in data['blocks']:

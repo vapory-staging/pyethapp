@@ -1,6 +1,6 @@
 from devp2p.protocol import BaseProtocol, SubProtocolError
 from ethereum.transactions import Transaction
-from ethereum.blocks import Block, BlockHeader
+from ethereum.block import Block, BlockHeader
 from ethereum.utils import hash32, int_to_big_endian, big_endian_to_int
 import rlp
 import gevent

@@ -9,16 +9,17 @@ import rlp
 import statistics
 from devp2p.protocol import BaseProtocol
 from devp2p.service import WiredService
-from ethereum.blocks import Block, VerificationFailed
+from ethereum.block import Block
 from ethereum.chain import Chain
 from ethereum.config import Env
-from ethereum.exceptions import InvalidTransaction, InvalidNonce, InsufficientBalance, InsufficientStartGas
 from ethereum import config as ethereum_config
 from ethereum.state_transition import validate_transaction, apply_transaction, casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
 from ethereum.blocks import get_block_header
+from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
+    InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.transactions import Transaction
 from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, validator_inject, generate_validation_code, RandaoManager
 from ethereum.utils import sha3, privtoaddr
