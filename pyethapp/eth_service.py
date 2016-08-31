@@ -400,7 +400,7 @@ class ChainService(WiredService):
         self.synchronizer.receive_status(proto, chain_head_hash, chain_difficulty)
 
         # send transactions
-        transactions = self.chain.get_transactions()
+        transactions = self.transaction_queue.peek()
         if transactions:
             log.debug("sending transactions", remote_id=proto)
             proto.send_transactions(*transactions)
