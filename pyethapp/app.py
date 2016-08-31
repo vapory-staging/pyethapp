@@ -16,11 +16,12 @@ from devp2p.app import BaseApp
 from devp2p.discovery import NodeDiscovery
 from devp2p.peermanager import PeerManager
 from devp2p.service import BaseService
-from ethereum import blocks
+from ethereum import blocks, casper_utils
+from ethereum import config as eth_config
 from ethereum.blocks import Block
 from gevent.event import Event
 
-import config as konfig
+import config as app_config
 import eth_protocol
 import utils
 from casper_utils import casper_genesis
@@ -64,12 +65,12 @@ class EthApp(BaseApp):
                   "'livenet' and 'testnet'. The previous values 'frontier' and "
                   "'morden' will be removed in a future update."),
               default=DEFAULT_PROFILE, help="Configuration profile.", show_default=True)
-@click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
+@click.option('alt_config', '--Config', '-C', type=str, callback=app_config.validate_alt_config_file,
               help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('alt_data_dir', '-d', '--data-dir', multiple=False, type=str,
-              help='data directory', default=konfig.default_data_dir, show_default=True)
+              help='data directory', default=app_config.default_data_dir, show_default=True)
 @click.option('-l', '--log_config', multiple=False, type=str, default=":info",
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
@@ -93,18 +94,18 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
 
     # data dir default or from cli option
     alt_data_dir = os.path.expanduser(alt_data_dir)
-    data_dir = alt_data_dir or konfig.default_data_dir
-    konfig.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
+    data_dir = alt_data_dir or app_config.default_data_dir
+    app_config.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
     log.info('using data in', path=data_dir)
 
     # prepare configuration
     # config files only contain required config (privkeys) and config different from the default
     if alt_config:  # specified config file
-        config = konfig.load_config(alt_config)
+        config = app_config.load_config(alt_config)
         if not config:
             log.warning('empty config given. default config values will be used')
     else:  # load config from default or set data_dir
-        config = konfig.load_config(data_dir)
+        config = app_config.load_config(data_dir)
 
     config['data_dir'] = data_dir
 
@@ -115,9 +116,10 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     bootstrap_nodes_from_config_file = config.get('discovery', {}).get('bootstrap_nodes')
 
     # add default config
-    konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
+    app_config.update_config_with_defaults(config, app_config.get_default_config([EthApp] + services))
+    app_config.update_config_with_defaults(config, {'eth': {'block': casper_utils.casper_config}})
 
-    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
+    app_config.update_config_with_defaults(config, {'eth': {'block': eth_config.default_config}})
 
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
@@ -136,7 +138,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     # override values with values from cmd line
     for config_value in config_values:
         try:
-            konfig.set_config_param(config, config_value)
+            app_config.set_config_param(config, config_value)
         except ValueError:
             raise BadParameter('Config parameter must be of the form "a.b.c=d" where "a.b.c" '
                                'specifies the parameter to set and d is a valid yaml value '
@@ -148,7 +150,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
             del config['eth']['genesis_hash']
 
     # Load genesis config
-    konfig.update_config_from_genesis_json(config,
+    app_config.update_config_from_genesis_json(config,
                                            genesis_json_filename_or_dict=config['eth']['genesis'])
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
@@ -272,7 +274,7 @@ def dump_config(config):
     if len(alloc) > 100:
         log.info('omitting reporting of %d accounts in genesis' % len(alloc))
         del cfg['eth']['block']['GENESIS_INITIAL_ALLOC']
-    konfig.dump_config(cfg)
+    app_config.dump_config(cfg)
 
 
 @app.command()
