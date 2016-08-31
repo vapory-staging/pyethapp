@@ -27,7 +27,7 @@ from devp2p.service import BaseService
 from devp2p.app import BaseApp
 from accounts import mk_random_privkey
 from ethereum.keys import decode_hex
-from ethereum.utils import parse_int_or_hex, remove_0x_head, int_to_addr
+from ethereum.utils import parse_int_or_hex, remove_0x_head
 
 
 CONFIG_FILE_NAME = 'config.yaml'
@@ -211,19 +211,6 @@ def update_config_from_genesis_json(config, genesis_json_filename_or_dict):
 
     config.setdefault('eth', {}).setdefault('block', {})
     ethblock_config = config['eth']['block']
-
-    # TODO: fix hardcoded casper configs
-    ethblock_config['HOMESTEAD_FORK_BLKNUM'] = 0
-    ethblock_config['METROPOLIS_FORK_BLKNUM'] = 0
-    ethblock_config['SERENITY_FORK_BLKNUM'] = 0
-    ethblock_config['HEADER_VALIDATION'] = 'contract'
-    ethblock_config['HEADER_STRATEGY'] = 'casper'
-    ethblock_config['FINALIZATION'] = 'contract'
-    ethblock_config['CASPER_ADDR'] = int_to_addr(255)
-    ethblock_config['RLP_DECODER_ADDR'] = int_to_addr(253)
-    ethblock_config['HASH_WITHOUT_BLOOM_ADDR'] = int_to_addr(252)
-    ethblock_config['MAX_UNCLE_DEPTH'] = 0
-    ethblock_config['PREV_HEADER_DEPTH'] = 1
 
     def _dec(data):
         return decode_hex(remove_0x_head(data))
