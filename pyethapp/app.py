@@ -83,12 +83,14 @@ class EthApp(BaseApp):
               help='pct cpu used for mining')
 @click.option('-j', '--join_validators', multiple=False, type=str,
               help='run as a Casper validator')
+@click.option('-k', '--validator_key', multiple=False, type=str,
+              help='set validator public key')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, join_validators, unlock, password, log_file):
+        mining_pct, join_validators, validator_key, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
@@ -160,10 +162,11 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     if not config.get('pow', {}).get('activated'):
         config['deactivated_services'].append(PoWService.name)
 
-    if join_validators > 0:
+    if join_validators:
+        privkey = casper_genesis["privkeys"][int(validator_key)] # TODO: fix privkey mock
         config['validator'] = {
             'activated': True,
-            'privkey': casper_genesis["privkeys"][0],
+            'privkey': privkey,
             'deposit_size': 256,
             'seed': join_validators
         }
