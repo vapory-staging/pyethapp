@@ -13,7 +13,8 @@ from ethereum.block import Block
 from ethereum.chain import Chain
 from ethereum.config import Env
 from ethereum import config as ethereum_config
-from ethereum.state_transition import validate_transaction, apply_transaction, casper_config
+from ethereum.state_transition import validate_transaction, apply_transaction
+from ethereum.casper_utils import casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
