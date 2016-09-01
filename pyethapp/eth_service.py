@@ -15,7 +15,7 @@ from ethereum.chain import Chain
 from ethereum.refcount_db import RefcountDB
 from ethereum.block import Block
 from ethereum.transactions import Transaction
-from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, validator_inject, generate_validation_code, RandaoManager
+from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, casper_start_epoch, validator_inject, generate_validation_code, RandaoManager, call_casper
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
 import eth_protocol
@@ -145,6 +145,8 @@ class ChainService(WiredService):
                     ds = scv['deposit_size']
                     validator_inject(state, vcode, ds * 10**18, randao.get(9999))
                     log.info('validator 0x%s injected' % encode_hex(addr))
+                    casper_start_epoch(state)
+                    log.info('casper epoch: ', call_casper(state, 'getEpoch', []))
                 state.commit()
 
         self.chain = Chain(env=env,
