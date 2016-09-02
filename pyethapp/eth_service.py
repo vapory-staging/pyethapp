@@ -1,6 +1,6 @@
 import time
 from ethereum.config import Env
-from ethereum.utils import sha3, privtoaddr
+from ethereum.utils import privtoaddr, decode_hex, remove_0x_head, normalize_address
 import rlp
 from rlp.utils import encode_hex
 from ethereum import config as ethereum_config
@@ -141,12 +141,16 @@ class ChainService(WiredService):
                 if i_am_a_validator:
                     addr = privtoaddr(scv['privkey'])
                     vcode = generate_validation_code(addr)
-                    randao = RandaoManager(sha3(scv['seed']))
+                    randao = RandaoManager(decode_hex(remove_0x_head(scv['seed'])))
                     ds = scv['deposit_size']
                     validator_inject(state, vcode, ds * 10**18, randao.get(9999))
                     log.info('validator 0x%s injected' % encode_hex(addr))
                     casper_start_epoch(state)
-                    log.info('casper epoch: ', call_casper(state, 'getEpoch', []))
+                log.info("before set blockhash: %s" % repr(state.prev_headers[0].hash))
+                state.set_storage_data(normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
+                                       state.block_number % state.config['METROPOLIS_WRAPAROUND'],
+                                       state.prev_headers[0].hash)
+                log.info("after set blockhash: %s" % repr(state.prev_headers[0].hash))
                 state.commit()
 
         self.chain = Chain(env=env,
