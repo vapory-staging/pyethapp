@@ -132,26 +132,26 @@ class ChainService(WiredService):
 
         def post_state_initialize(state):
             scv = self.config.get('validator', {})
-            i_am_a_validator = scv.get('activated', False)
-            i_am_the_first = len(self.config.get('discovery', {}).get('bootstrap_nodes', [])) == 0
-            if i_am_the_first:
-                state.gas_limit = 10**9
-                casper_contract_bootstrap(state, timestamp=int(time.time()))
-                log.info('casper contract initialized')
-                if i_am_a_validator:
-                    addr = privtoaddr(scv['privkey'])
-                    vcode = generate_validation_code(addr)
-                    randao = RandaoManager(decode_hex(remove_0x_head(scv['seed'])))
-                    ds = scv['deposit_size']
-                    validator_inject(state, vcode, ds * 10**18, randao.get(9999))
-                    log.info('validator 0x%s injected' % encode_hex(addr))
-                    casper_start_epoch(state)
-                log.info("before set blockhash: %s" % repr(state.prev_headers[0].hash))
-                state.set_storage_data(normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
-                                       state.block_number % state.config['METROPOLIS_WRAPAROUND'],
-                                       state.prev_headers[0].hash)
-                log.info("after set blockhash: %s" % repr(state.prev_headers[0].hash))
-                state.commit()
+
+            # build genesis state
+            state.gas_limit = 10**9
+            casper_contract_bootstrap(state, timestamp=int(time.time()))
+            log.info('casper contract initialized')
+
+            addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
+            vcode = generate_validation_code(addr)
+            randao = RandaoManager(decode_hex(remove_0x_head('0xffeeaacc09182345678900100010')))
+            ds = 256
+            validator_inject(state, vcode, ds * 10**18, randao.get(9999))
+            log.info('validator 0x%s injected' % encode_hex(addr))
+
+            casper_start_epoch(state)
+            log.info("before set blockhash: %s" % repr(state.prev_headers[0].hash))
+            state.set_storage_data(normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
+                                   state.block_number % state.config['METROPOLIS_WRAPAROUND'],
+                                   state.prev_headers[0].hash)
+            log.info("after set blockhash: %s" % repr(state.prev_headers[0].hash))
+            state.commit()
 
         self.chain = Chain(env=env,
                            genesis=sce['genesis_data'],
