@@ -80,7 +80,7 @@ class SyncTask(object):
         # get block hashes until we found a known one
         retry = 0
         max_blockheaders_per_request = self.initial_blockheaders_per_request
-        while blockhash not in self.chain:
+        while not self.chain.has_blockhash(blockhash):
             # proto with highest_difficulty should be the proto we got the newblock from
             blockheaders_batch = []
 
@@ -133,7 +133,7 @@ class SyncTask(object):
 
             for header in blockheaders_batch:  # youngest to oldest
                 blockhash = header.hash
-                if blockhash not in self.chain:
+                if not self.chain.has_blockhash(blockhash):
                     if header.number <= self.start_block_number_min:
                         # We have received so many headers that a very unlikely big revert will happen,
                         # which is nearly impossible.
@@ -159,8 +159,8 @@ class SyncTask(object):
             self.end_block_number = self.chain.head.number + len(blockheaders_chain)
             max_blockheaders_per_request = self.max_blockheaders_per_request
 
-        self.start_block_number = self.chain.get(blockhash).number
-        self.end_block_number = self.chain.get(blockhash).number + len(blockheaders_chain)
+        self.start_block_number = self.chain.get_block(blockhash).number
+        self.end_block_number = self.chain.get_block(blockhash).number + len(blockheaders_chain)
         log_st.debug('computed missing numbers', start_number=self.start_block_number, end_number=self.end_block_number)
         self.fetch_blocks(blockheaders_chain)
 

@@ -468,7 +468,12 @@ class ChainService(WiredService):
             if not origin_hash:
                 break
             try:
-                origin = get_block_header(self.chain.db, origin_hash)
+                block_rlp = self.chain.db.get(last)
+                if block_rlp == 'GENESIS':
+                    #last = self.chain.genesis.header.prevhash
+                    break
+                else:
+                    last = rlp.decode_lazy(block_rlp)[0][0]  # [head][prevhash]
             except KeyError:
                 break
             assert origin
