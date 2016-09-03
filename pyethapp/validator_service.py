@@ -30,24 +30,22 @@ class ValidatorService(BaseService):
     def active(self):
         return self.app.config['validator']['activated']
 
-    def create_next_block(self, block):
-        pass
-
     def _run(self):
         while True:
-            print time.time()
-            skip_count, timestamp = get_skips_and_block_making_time(self.chain, self.get_indices())
-            if skip_count == 0:
-                wait = timestamp - time.time()
-                if wait > 0:
-                    gevent.sleep(wait)
-                blk = self.make_block(skip_count)
-                delay = time.time() - blk.timestamp
-                log.info("block created", height=blk.header.number, delay=delay)
-                assert self.chain.add_block(blk)
-            else:
-                log.info("not my turn: ", skip_count=skip_count)
-                gevent.sleep(BLOCK_TIME)
+            if self.active:
+                print time.time()
+                skip_count, timestamp = get_skips_and_block_making_time(self.chain, self.get_indices())
+                if skip_count == 0:
+                    wait = timestamp - time.time()
+                    if wait > 0:
+                        gevent.sleep(wait)
+                    blk = self.make_block(skip_count)
+                    delay = time.time() - blk.timestamp
+                    log.info("block created", height=blk.header.number, delay=delay)
+                    assert self.chain.add_block(blk)
+                else:
+                    log.info("not my turn: ", skip_count=skip_count)
+                    gevent.sleep(BLOCK_TIME)
 
     def make_block(self, skips):
         h = make_head_candidate(self.chain,

@@ -77,7 +77,7 @@ class SyncTask(object):
 
         # get block hashes until we found a known one
         max_blockhashes_per_request = self.initial_blockhashes_per_request
-        while blockhash not in self.chain:
+        while not self.chain.has_blockhash(blockhash):
             # proto with highest_difficulty should be the proto we got the newblock from
             blockhashes_batch = []
 
@@ -123,18 +123,20 @@ class SyncTask(object):
 
             for blockhash in blockhashes_batch:  # youngest to oldest
                 assert utils.is_string(blockhash)
-                if blockhash not in self.chain:
+                if not self.chain.has_blockhash(blockhash):
                     blockhashes_chain.append(blockhash)
                 else:
                     log_st.debug('found known blockhash', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
+            print "self.genesis.hash", repr(self.chain.genesis.hash)
+            print repr(blockhashes_chain)
             log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes, ending with %s' % utils.encode_hex(blockhashes_chain[-1]))
             self.end_block_number = self.chain.head.number + len(blockhashes_chain)
             max_blockhashes_per_request = self.max_blockhashes_per_request
 
-        self.start_block_number = self.chain.get(blockhash).number
-        self.end_block_number = self.chain.get(blockhash).number + len(blockhashes_chain)
+        self.start_block_number = self.chain.get_block(blockhash).number
+        self.end_block_number = self.chain.get_block(blockhash).number + len(blockhashes_chain)
         log_st.debug('computed missing numbers', start_number=self.start_block_number, end_number=self.end_block_number)
         self.fetch_blocks(blockhashes_chain)
 

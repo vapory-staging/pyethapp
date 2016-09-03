@@ -445,7 +445,12 @@ class ChainService(WiredService):
         last = child_block_hash
         while len(found) < max_hashes:
             try:
-                last = rlp.decode_lazy(self.chain.db.get(last))[0][0]  # [head][prevhash]
+                block_rlp = self.chain.db.get(last)
+                if block_rlp == 'GENESIS':
+                    #last = self.chain.genesis.header.prevhash
+                    break
+                else:
+                    last = rlp.decode_lazy(block_rlp)[0][0]  # [head][prevhash]
             except KeyError:
                 # this can happen if we started a chain download, which did not complete
                 # should not happen if the hash is part of the canonical chain
