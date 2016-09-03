@@ -22,26 +22,26 @@ class TransientBlock(rlp.Serializable):
 
     fields = [
         ('header', BlockHeader),
-        ('transaction_list', rlp.sedes.CountableList(Transaction)),
+        ('transactions', rlp.sedes.CountableList(Transaction)),
         ('uncles', rlp.sedes.CountableList(BlockHeader))
     ]
 
     @classmethod
     def init_from_rlp(cls, block_data, newblock_timestamp=0):
         header = BlockHeader.deserialize(block_data[0])
-        transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
+        transactions = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
         uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
-        return cls(header, transaction_list, uncles, newblock_timestamp)
+        return cls(header, transactions, uncles, newblock_timestamp)
 
-    def __init__(self, header, transaction_list, uncles, newblock_timestamp=0):
+    def __init__(self, header, transactions, uncles, newblock_timestamp=0):
         self.newblock_timestamp = newblock_timestamp
         self.header = header
-        self.transaction_list = transaction_list
+        self.transactions = transactions
         self.uncles = uncles
 
     def to_block(self, env, parent=None):
         """Convert the transient block to a :class:`ethereum.blocks.Block`"""
-        return Block(self.header, self.transaction_list, self.uncles, env=env, parent=parent)
+        return Block(self.header, self.transactions, self.uncles, env=env, parent=parent)
 
     @property
     def hex_hash(self):
@@ -221,7 +221,7 @@ class ETHProtocol(BaseProtocol):
             if len(bodies) == 0:
                 return []
             if isinstance(bodies[0], Block):
-                bodies = [TransientBlockBody(b.transaction_list, b.uncles) for b in bodies]
+                bodies = [TransientBlockBody(b.transactions, b.uncles) for b in bodies]
             return bodies
 
     class newblock(BaseProtocol.command):
