@@ -129,8 +129,6 @@ class SyncTask(object):
                     log_st.debug('found known blockhash', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
-            print "self.genesis.hash", repr(self.chain.genesis.hash)
-            print repr(blockhashes_chain)
             log_st.debug('downloaded ' + str(len(blockhashes_chain)) + ' block hashes, ending with %s' % utils.encode_hex(blockhashes_chain[-1]))
             self.end_block_number = self.chain.head.number + len(blockhashes_chain)
             max_blockhashes_per_request = self.max_blockhashes_per_request

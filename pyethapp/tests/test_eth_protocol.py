@@ -86,10 +86,10 @@ def test_blocks():
     assert isinstance(blocks, list)
     for block in blocks:
         assert isinstance(block, TransientBlock)
-        assert isinstance(block.transaction_list, tuple)
+        assert isinstance(block.transactions, tuple)
         assert isinstance(block.uncles, tuple)
         # assert that transactions and uncles have not been decoded
-        assert len(block.transaction_list) == 0
+        assert len(block.transactions) == 0
         assert len(block.uncles) == 0
 
     # newblock
@@ -104,8 +104,8 @@ def test_blocks():
     assert 'chain_difficulty' in _d
     assert _d['chain_difficulty'] == approximate_difficulty
     assert _d['block'].header == chain.blocks[-1].header
-    assert isinstance(_d['block'].transaction_list, tuple)
+    assert isinstance(_d['block'].transactions, tuple)
     assert isinstance(_d['block'].uncles, tuple)
     # assert that transactions and uncles have not been decoded
-    assert len(_d['block'].transaction_list) == 0
+    assert len(_d['block'].transactions) == 0
     assert len(_d['block'].uncles) == 0

@@ -51,7 +51,6 @@ class ValidatorService(BaseService):
         h = make_head_candidate(self.chain,
                                 self.app.services.chain.transaction_queue,
                                 timestamp=get_timestamp(self.chain, skips))
-        print "header prevhash: ", repr(h.prevhash)
         privkey = self.config['validator']['privkey']
         indices = self.get_indices()[0:2]
         randao = call_casper(self.state, 'getRandao', indices)
