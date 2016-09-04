@@ -254,7 +254,7 @@ class ChainService(WiredService):
 
     def knows_block(self, block_hash):
         "if block is in chain or in queue"
-        if block_hash in self.chain:
+        if self.chain.has_blockhash(block_hash):
             return True
         # check if queued or processed
         for i in range(len(self.block_queue.queue)):
@@ -270,11 +270,11 @@ class ChainService(WiredService):
         try:
             while not self.block_queue.empty():
                 t_block, proto = self.block_queue.peek()  # peek: knows_block while processing
-                if t_block.header.hash in self.chain:
+                if self.chain.has_blockhash(t_block.header.hash):
                     log.warn('known block', block=t_block)
                     self.block_queue.get()
                     continue
-                if t_block.header.prevhash not in self.chain:
+                if not self.chain.has_blockhash(t_block.header.prevhash):
                     log.warn('missing parent', block=t_block, head=self.chain.head)
                     self.block_queue.get()
                     continue
@@ -338,7 +338,7 @@ class ChainService(WiredService):
 
     def broadcast_newblock(self, block, chain_difficulty=None, origin=None):
         if not chain_difficulty:
-            assert block.hash in self.chain
+            assert self.chain.has_blockhash(block.hash)
             chain_difficulty = block.chain_difficulty()
         assert isinstance(block, (eth_protocol.TransientBlock, Block))
         if self.broadcast_filter.update(block.header.hash):
@@ -437,7 +437,7 @@ class ChainService(WiredService):
         log.debug("handle_get_blockhashes", count=count, block_hash=encode_hex(child_block_hash))
         max_hashes = min(count, self.wire_protocol.max_getblockhashes_count)
         found = []
-        if child_block_hash not in self.chain:
+        if not self.chain.has_blockhash(child_block_hash):
             log.debug("unknown block")
             proto.send_blockhashes(*[])
             return

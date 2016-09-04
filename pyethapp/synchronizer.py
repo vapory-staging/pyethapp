@@ -73,7 +73,7 @@ class SyncTask(object):
         # blockhashes_chain = ast.literal_eval(open('/home/vub/blockhashes.pyast').read())[:299000]
 
         blockhash = self.blockhash = blockhashes_chain[-1]
-        assert blockhash not in self.chain
+        assert not self.chain.has_blockhash(blockhash)
 
         # get block hashes until we found a known one
         max_blockhashes_per_request = self.initial_blockhashes_per_request
@@ -291,8 +291,8 @@ class Synchronizer(object):
         log.debug('newblock', proto=proto, block=t_block, chain_difficulty=chain_difficulty,
                   client=proto.peer.remote_client_version)
 
-        if t_block.header.hash in self.chain:
-            assert chain_difficulty == self.chain.get(t_block.header.hash).chain_difficulty()
+        if self.chain.has_blockhash(t_block.header.hash):
+            assert chain_difficulty == self.chain.get_block(t_block.header.hash).chain_difficulty()
 
         # memorize proto with difficulty
         self._protocols[proto] = chain_difficulty

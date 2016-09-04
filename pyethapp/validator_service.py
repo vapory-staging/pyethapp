@@ -33,7 +33,6 @@ class ValidatorService(BaseService):
     def _run(self):
         while True:
             if self.active:
-                print time.time()
                 skip_count, timestamp = get_skips_and_block_making_time(self.chain, self.get_indices())
                 if skip_count == 0:
                     wait = timestamp - time.time()
