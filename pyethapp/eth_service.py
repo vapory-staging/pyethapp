@@ -286,12 +286,6 @@ class ChainService(WiredService):
                     log.warn('missing parent', block=t_block, head=self.chain.head)
                     self.block_queue.get()
                     continue
-                # FIXME, this is also done in validation and in synchronizer for new_blocks
-                if not t_block.header.check_pow():
-                    log.warn('invalid pow', block=t_block, FIXME='ban node')
-                    sentry.warn_invalid(t_block, 'InvalidBlockNonce')
-                    self.block_queue.get()
-                    continue
                 try:  # deserialize
                     st = time.time()
                     block = t_block.to_block(env=self.chain.env)
