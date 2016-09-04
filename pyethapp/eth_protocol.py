@@ -41,7 +41,7 @@ class TransientBlock(rlp.Serializable):
 
     def to_block(self, env, parent=None):
         """Convert the transient block to a :class:`ethereum.blocks.Block`"""
-        return Block(self.header, self.transactions, self.uncles, env=env, parent=parent)
+        return Block(self.header, self.transactions, self.uncles, env=env)
 
     @property
     def hex_hash(self):
