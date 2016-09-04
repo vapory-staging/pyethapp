@@ -301,9 +301,9 @@ class Synchronizer(object):
             log.debug('known block')
             return
 
-        # check pow
-        if not t_block.header.check_pow():
-            log.warn('check pow failed, should ban!')
+        # check header
+        if not self.chainservice.check_header(t_block.header):
+            log.warn('header check failed, should ban!')
             return
 
         expected_difficulty = self.chain.head.chain_difficulty() + t_block.header.difficulty

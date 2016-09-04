@@ -6,7 +6,7 @@ from rlp.utils import encode_hex
 from ethereum import config as ethereum_config
 from synchronizer import Synchronizer
 from ethereum.slogging import get_logger
-from ethereum.state_transition import validate_transaction, apply_transaction
+from ethereum.state_transition import check_block_header, validate_transaction, apply_transaction
 from ethereum.casper_utils import casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
@@ -136,7 +136,7 @@ class ChainService(WiredService):
             # build genesis state
             state.gas_limit = 10**9
             # TODO: choose fixed timestamp
-            casper_contract_bootstrap(state, timestamp=1472971759)
+            casper_contract_bootstrap(state, timestamp=1472977461)
             log.info('casper contract initialized')
 
             addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
@@ -239,6 +239,9 @@ class ChainService(WiredService):
         self.add_transaction_lock.release()
         return len(self.transaction_queue)
 
+    def check_header(self, header, **kwargs):
+        return check_block_header(self.chain.state, header, **kwargs)
+
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
         self.block_queue.put((t_block, proto))  # blocks if full
@@ -249,11 +252,13 @@ class ChainService(WiredService):
     def add_mined_block(self, block):
         log.debug('adding mined block', block=block)
         assert isinstance(block, Block)
-        assert block.header.check_pow()
         if self.chain.add_block(block):
             log.debug('added', block=block, ts=time.time())
             assert block == self.chain.head
+            self.transaction_queue = self.transaction_queue.diff(block.transactions)
             self.broadcast_newblock(block, chain_difficulty=block.chain_difficulty())
+            return True
+        return False
 
     def knows_block(self, block_hash):
         "if block is in chain or in queue"

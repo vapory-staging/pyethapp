@@ -1029,7 +1029,7 @@ class Chain(Subdispatcher):
         print 'seed: %s' % encode_hex(h.header.seed)
         h.header.nonce = nonce
         h.header.mixhash = mix_digest
-        if not h.header.check_pow():
+        if not self.chain.check_header(h.header):
             print 'PoW check false'
             return False
         print 'PoW check true'
