@@ -75,7 +75,7 @@ class SyncTask(object):
         log_st.debug('fetching hashchain')
         blockheaders_chain = [] # height falling order
         blockhash = self.blockhash
-        assert blockhash not in self.chain
+        assert not self.chain.has_blockhash(blockhash)
 
         # get block hashes until we found a known one
         retry = 0
@@ -322,8 +322,8 @@ class Synchronizer(object):
         log.debug('newblock', proto=proto, block=t_block, chain_difficulty=chain_difficulty,
                   client=proto.peer.remote_client_version)
 
-        if t_block.header.hash in self.chain:
-            assert chain_difficulty == self.chain.get(t_block.header.hash).chain_difficulty()
+        if self.chain.has_blockhash(t_block.header.hash):
+            assert chain_difficulty == self.chain.get_block(t_block.header.hash).chain_difficulty()
 
         # memorize proto with difficulty
         self._protocols[proto] = chain_difficulty
