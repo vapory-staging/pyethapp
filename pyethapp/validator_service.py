@@ -41,7 +41,7 @@ class ValidatorService(BaseService):
                     blk = self.make_block(skip_count)
                     delay = time.time() - blk.timestamp
                     log.info("block created", height=blk.header.number, delay=delay)
-                    assert self.chain.add_block(blk)
+                    assert self.app.services.chain.add_mined_block(blk)
                 else:
                     log.info("not my turn: ", skip_count=skip_count)
                     gevent.sleep(BLOCK_TIME)
