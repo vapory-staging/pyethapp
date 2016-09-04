@@ -135,7 +135,8 @@ class ChainService(WiredService):
 
             # build genesis state
             state.gas_limit = 10**9
-            casper_contract_bootstrap(state, timestamp=int(time.time()))
+            # TODO: choose fixed timestamp
+            casper_contract_bootstrap(state, timestamp=1472971759)
             log.info('casper contract initialized')
 
             addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
@@ -184,6 +185,8 @@ class ChainService(WiredService):
     def is_mining(self):
         if 'pow' in self.app.services:
             return self.app.services.pow.active
+        if 'validator' in self.app.services:
+            return self.app.services.validator.active
         return False
 
     # TODO: still need?
@@ -302,7 +305,7 @@ class ChainService(WiredService):
 
                 # All checks passed
                 log.debug('adding', block=block, ts=time.time())
-                if self.chain.add_block(block, forward_pending_transactions=self.is_mining):
+                if self.chain.add_block(block):
                     now = time.time()
                     log.info('added', block=block, txs=block.transaction_count,
                              gas_used=block.gas_used)
@@ -315,6 +318,8 @@ class ChainService(WiredService):
                         min_ = min(self.newblock_processing_times)
                         log.info('processing time', last=total, avg=avg, max=max_, min=min_,
                                  median=med)
+                    if self.is_mining:
+                        self.transaction_queue = self.transaction_queue.diff(block.transactions)
                 else:
                     log.warn('could not add', block=block)
 
