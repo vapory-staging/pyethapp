@@ -141,7 +141,7 @@ class ChainService(WiredService):
             # build genesis state
             state.gas_limit = 10**9
             # TODO: choose fixed timestamp
-            casper_contract_bootstrap(state, timestamp=1473071410)
+            casper_contract_bootstrap(state, timestamp=1473085854)
             log.info('casper contract initialized')
 
             addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
@@ -162,6 +162,7 @@ class ChainService(WiredService):
         self.chain = Chain(env=env,
                            genesis=sce['genesis_data'],
                            coinbase=coinbase,
+                           new_head_cb=self._on_new_head,
                            post_state_initialize=post_state_initialize)
 
         log.info('chain at', number=self.chain.head.number)
@@ -179,7 +180,6 @@ class ChainService(WiredService):
         self.add_transaction_lock = gevent.lock.Semaphore()
         self.broadcast_filter = DuplicatesFilter()
         self.on_new_head_cbs = []
-        self.on_new_head_candidate_cbs = []
         self.newblock_processing_times = deque(maxlen=1000)
 
     @property
@@ -194,20 +194,12 @@ class ChainService(WiredService):
             return self.app.services.validator.active
         return False
 
-    # TODO: still need?
     def _on_new_head(self, block):
         log.debug('new head cbs', num=len(self.on_new_head_cbs))
         for cb in self.on_new_head_cbs:
             cb(block)
-        self._on_new_head_candidate()  # we implicitly have a new head_candidate
 
-    # TODO: still need?
-    def _on_new_head_candidate(self):
-        # DEBUG('new head candidate cbs', len(self.on_new_head_candidate_cbs))
-        for cb in self.on_new_head_candidate_cbs:
-            cb(self.chain.head_candidate)
-
-    def add_transaction(self, tx, origin=None, force_broadcast=False):
+    def add_transaction(self, tx, origin=None, force_broadcast=False, force=False):
         if self.is_syncing:
             if force_broadcast:
                 assert origin is None  # only allowed for local txs
@@ -240,7 +232,7 @@ class ChainService(WiredService):
                 return
 
         self.add_transaction_lock.acquire()
-        self.transaction_queue.add_transaction(tx)
+        self.transaction_queue.add_transaction(tx, force=force)
         self.add_transaction_lock.release()
         return len(self.transaction_queue)
 
