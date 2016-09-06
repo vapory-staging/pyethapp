@@ -130,35 +130,11 @@ class ChainService(WiredService):
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
 
-        def post_state_initialize(state):
-            scv = self.config.get('validator', {})
-
-            # build genesis state
-            state.gas_limit = 10**9
-            # TODO: choose fixed timestamp
-            casper_contract_bootstrap(state, timestamp=1473148952)
-            log.info('casper contract initialized')
-
-            addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
-            vcode = generate_validation_code(addr)
-            randao = RandaoManager(decode_hex(remove_0x_head('0xffeeaacc09182345678900100010')))
-            ds = 256
-            validator_inject(state, vcode, ds * 10**18, randao.get(9999), addr)
-            log.info('validator 0x%s injected' % encode_hex(addr))
-
-            casper_start_epoch(state)
-            log.info("before set blockhash: %s" % repr(state.prev_headers[0].hash))
-            state.set_storage_data(normalize_address(state.config['METROPOLIS_BLOCKHASH_STORE']),
-                                   state.block_number % state.config['METROPOLIS_WRAPAROUND'],
-                                   state.prev_headers[0].hash)
-            log.info("after set blockhash: %s" % repr(state.prev_headers[0].hash))
-            state.commit()
-
         self.chain = Chain(env=env,
                            genesis=sce['genesis_data'],
                            coinbase=coinbase,
-                           new_head_cb=self._on_new_head,
-                           post_state_initialize=post_state_initialize)
+                           new_head_cb=self._on_new_head)
+        header = self.chain.state.prev_headers[0]
 
         log.info('chain at', number=self.chain.head.number)
         if 'genesis_hash' in sce:
