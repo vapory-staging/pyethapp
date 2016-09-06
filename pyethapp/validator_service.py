@@ -54,8 +54,6 @@ class ValidatorService(BaseService):
         self.active = False
         self.activated = self.app.config['validator']['activated']
 
-        self.min_gasprice = 20 * 10**9
-
         self.update_activity_status()
         self.cached_head = self.chain.head_hash
 
