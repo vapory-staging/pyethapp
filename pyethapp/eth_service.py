@@ -23,7 +23,7 @@ from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.transactions import Transaction
 from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, casper_start_epoch, validator_inject, generate_validation_code, RandaoManager, call_casper
-from ethereum.utils import privtoaddr, decode_hex, remove_0x_head, normalize_address
+from ethereum.utils import privtoaddr, encode_hex, decode_hex, remove_0x_head, normalize_address
 from gevent.queue import Queue
 from rlp.utils import encode_hex
 from synchronizer import Synchronizer
@@ -141,7 +141,7 @@ class ChainService(WiredService):
             # build genesis state
             state.gas_limit = 10**9
             # TODO: choose fixed timestamp
-            casper_contract_bootstrap(state, timestamp=1473085854)
+            casper_contract_bootstrap(state, timestamp=1473148952)
             log.info('casper contract initialized')
 
             addr = privtoaddr(decode_hex('044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d'))
@@ -176,6 +176,7 @@ class ChainService(WiredService):
         self.block_queue = Queue(maxsize=self.block_queue_size)
         #self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
         self.transaction_queue = TransactionQueue()
+        self.min_gasprice = 20 * 10**9 # TODO: better be an option to validator service?
         self.add_blocks_lock = False
         self.add_transaction_lock = gevent.lock.Semaphore()
         self.broadcast_filter = DuplicatesFilter()
@@ -231,9 +232,12 @@ class ChainService(WiredService):
                 log.debug('discarding tx', syncing=self.is_syncing, mining=self.is_mining)
                 return
 
-        self.add_transaction_lock.acquire()
-        self.transaction_queue.add_transaction(tx, force=force)
-        self.add_transaction_lock.release()
+        if tx.gasprice >= self.min_gasprice:
+            self.add_transaction_lock.acquire()
+            self.transaction_queue.add_transaction(tx, force=force)
+            self.add_transaction_lock.release()
+        else:
+            log.info("too low gasprice, ignore", tx=encode_hex(tx.hash)[:8], gasprice=tx.gasprice)
         return len(self.transaction_queue)
 
     def check_header(self, header, **kwargs):
