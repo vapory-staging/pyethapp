@@ -42,7 +42,8 @@ class ValidatorService(BaseService):
         self.validation_code = generate_validation_code(self.address)
         self.validation_code_hash = sha3(self.validation_code)
 
-        seed = decode_hex(remove_0x_head(self.config['validator']['seed'])) if self.config['validator']['seed'] else sha3(self.key)
+        # TODO: allow configure seed?
+        seed = sha3(self.key)
         self.randao = RandaoManager(seed)
 
         self.received_objects = {}

@@ -163,11 +163,12 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         config['deactivated_services'].append(PoWService.name)
 
     if join_validators:
-        privkey = casper_genesis["privkeys"][int(validator_key)] # TODO: fix privkey mock
+        i = int(validator_key)
+        privkey = casper_genesis["privkeys"][i] # TODO: fix privkey mock
         config['validator'] = {
             'activated': True,
             'privkey': privkey,
-            'deposit_size': 256,
+            'deposit_size': 500 + i*500,
             'seed': join_validators
         }
     if not config.get('validator', {}).get('activated'):

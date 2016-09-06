@@ -61,7 +61,7 @@ PROFILES = {
         'eth': {
             'network_id': 3,
             'genesis': path.join(genesisdata_dir, 'genesis_metropolis.json'),
-            'genesis_hash': '7a734129ffda64a275a806d4e7456d1e89b56d511a3e9832a5b041f7f2ac52a9'
+            'genesis_hash': '3e6f60536d78a7d7fe514ea0a7b3146194b394f201cd1daf0c99beb59d5431b7'
         },
         'discovery': {
             'bootstrap_nodes': [
