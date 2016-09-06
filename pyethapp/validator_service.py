@@ -74,7 +74,7 @@ class ValidatorService(BaseService):
             self.active = False
 
     def tick(self):
-        wait = 0
+        delay = 0
         # Try to create a block
         # Conditions:
         # (i) you are an active validator,
@@ -92,18 +92,18 @@ class ValidatorService(BaseService):
                 blk = self.make_block()
                 assert blk.timestamp >= self.next_skip_timestamp
                 assert self.chainservice.add_mined_block(blk)
-                self.update_head()
+                self.update()
                 self.received_objects[blk.hash] = True
                 log.debug('Validator %s making block %d (%s)' % (self.address[:8], blk.header.number, blk.header.hash[:8].encode('hex')))
             else:
-                wait = max(self.next_skip_timestamp - t, 0)
+                delay = max(self.next_skip_timestamp - t, 0)
         # Sometimes we received blocks too early or out of order;
         # run an occasional loop that processes these
         if random.random() < 0.02:
             self.chain.process_time_queue()
             self.chain.process_parent_queue()
-            self.update_head()
-        return wait
+            self.update()
+        return delay
 
     def make_block(self):
         pre_dunkle_count = self.call_casper('getTotalDunklesIncluded')
@@ -119,7 +119,7 @@ class ValidatorService(BaseService):
             log.debug('made block with timestamp %d and %d dunkles' % (blk.timestamp, len(dunkle_txs)))
         return blk
 
-    def update_head(self):
+    def update(self):
         if self.cached_head == self.chain.head_hash:
             return
         self.cached_head = self.chain.head_hash
@@ -145,8 +145,8 @@ class ValidatorService(BaseService):
     def _run(self):
         while True:
             if self.activated:
-                wait = self.tick()
-                gevent.sleep(wait)
+                delay = self.tick()
+                gevent.sleep(delay)
 
     def stop(self):
         super(ValidatorService, self).stop()
