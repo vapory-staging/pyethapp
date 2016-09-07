@@ -55,11 +55,16 @@ class ValidatorService(BaseService):
         self.active = False
         self.activated = self.app.config['validator']['activated']
 
+        app.services.chain.on_new_head_cbs.append(self.on_new_head)
         self.update_activity_status()
         self.cached_head = self.chain.head_hash
 
-    def call_casper(self, fun, args=[]):
-        return call_casper(self.chain.state, fun, args)
+    def on_new_head(self, block):
+        if not self.activated:
+            return
+        if self.app.services.chain.is_syncing:
+            return
+        self.update()
 
     def update_activity_status(self):
         start_epoch = self.call_casper('getStartEpoch', [self.validation_code_hash])
@@ -94,10 +99,12 @@ class ValidatorService(BaseService):
                 self.used_parents[self.chain.head_hash] = True
                 blk = self.make_block()
                 assert blk.timestamp >= self.next_skip_timestamp
-                assert self.chainservice.add_mined_block(blk)
+                if self.chainservice.add_mined_block(blk):
+                    self.received_objects[blk.hash] = True
+                    log.debug('0x%s made and added block %d (%s) to chain' % (encode_hex(self.address[:8]), blk.header.number, encode_hex(blk.header.hash[:8])))
+                else:
+                    log.debug('0x%s failed to make and add block %d (%s) to chain' % (encode_hex(self.address[:8]), blk.header.number, encode_hex(blk.header.hash[:8])))
                 self.update()
-                self.received_objects[blk.hash] = True
-                log.debug('Validator %s making block %d (%s)' % (encode_hex(self.address[:8]), blk.header.number, encode_hex(blk.header.hash[:8])))
             else:
                 delay = max(self.next_skip_timestamp - t, 0)
         # Sometimes we received blocks too early or out of order;
@@ -144,6 +151,9 @@ class ValidatorService(BaseService):
         tx = Transaction(self.chain.state.get_nonce(self.address) * 10**18, gasprice, 1000000,
                          casper_config['CASPER_ADDR'], value * 10**18,
                          ct.encode('deposit', [self.validation_code, self.randao.get(9999)]))
+
+    def call_casper(self, fun, args=[]):
+        return call_casper(self.chain.state, fun, args)
 
     def _run(self):
         while True:

@@ -24,6 +24,7 @@ def generate_genesis(path, num_participants=1):
     genesis_number = call_casper(s, 'getBlockNumber')
     print 'genesis block hash: %s' % utils.encode_hex(genesis_hash)
     print 'genesis block number: %d' % genesis_number
+    print '%d validators: %r' % (num_participants, [utils.encode_hex(a) for a in addrs])
 
     snapshot = s.to_snapshot()
     header = s.prev_headers[0]
