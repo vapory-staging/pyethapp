@@ -42,7 +42,8 @@ def generate_data_dirs(num_participants, prefix='v'):
                 "deposit_size": deposit_size
             },
             "eth": {
-                "genesis": genesis_path
+                "genesis": genesis_path,
+                "network_id": 42
             },
             "p2p": {
                 "num_peers": num_participants-1,
