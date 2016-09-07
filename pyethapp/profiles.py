@@ -56,16 +56,5 @@ PROFILES = {
                 )
             ]
         },
-    },
-    'metropolis': {
-        'eth': {
-            'network_id': 3,
-            'genesis': path.join(genesisdata_dir, 'genesis_metropolis.json'),
-            'genesis_hash': 'f06f4c6d6e362730fef41e70fb33b6c0a6e5aaa69737f91f0f03d187a05dc025'
-        },
-        'discovery': {
-            'bootstrap_nodes': [
-            ]
-        },
     }
 }
