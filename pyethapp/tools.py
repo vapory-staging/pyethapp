@@ -19,6 +19,7 @@ def generate_data_dirs(num_participants, prefix='v'):
         addr = addrs[i]
         port = 40000+i
         jsonrpc_port = 4000+i
+        deposit_size = 500 + 500*i
 
         bootstrap_nodes = range(num_participants)
         bootstrap_nodes.remove(i)
@@ -35,6 +36,10 @@ def generate_data_dirs(num_participants, prefix='v'):
         config = {
             "node": {
                 "privkey_hex": utils.encode_hex(privkey)
+            },
+            "validator": {
+                "privkey_hex": utils.encode_hex(privkey),
+                "deposit_size": deposit_size
             },
             "eth": {
                 "genesis": genesis_path

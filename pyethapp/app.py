@@ -19,6 +19,7 @@ from devp2p.service import BaseService
 from ethereum import casper_utils
 from ethereum import config as eth_config
 from ethereum.block import Block
+from ethereum.utils import decode_hex
 from gevent.event import Event
 
 import config as app_config
@@ -81,16 +82,14 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
-@click.option('-j', '--join_validators', multiple=False, type=str,
+@click.option('-j', '--join_validators', multiple=False, type=bool,
               help='run as a Casper validator')
-@click.option('-k', '--validator_key', multiple=False, type=str,
-              help='set validator public key')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, join_validators, validator_key, unlock, password, log_file):
+        mining_pct, join_validators, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
@@ -163,15 +162,21 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         config['deactivated_services'].append(PoWService.name)
 
     if join_validators:
-        i = int(validator_key)
-        privkey = casper_genesis["privkeys"][i] # TODO: fix privkey mock
+        privkey = decode_hex(config['validator']['privkey_hex'])
         config['validator'] = {
             'activated': True,
             'privkey': privkey,
-            'deposit_size': 500 + i*500,
+            'deposit_size': config['validator']['deposit_size'],
             'seed': join_validators
         }
-    if not config.get('validator', {}).get('activated'):
+    else:
+        config['validator'] = {
+            'activated': False,
+            'privkey': '\x00'*32,
+            'deposit_size': 0,
+            'seed': ''
+        }
+    if not config.get('validator', {}).get('activated', False):
         config['deactivated_services'].append(ValidatorService)
 
     ctx.obj = {'config': config,
