@@ -39,13 +39,15 @@ def generate_genesis(path, num_participants=1):
         "alloc": snapshot["alloc"]
     }
     with open(path, 'w') as f:
-        json.dump(genesis, f)
+        json.dump(genesis, f, sort_keys=False, indent=4, separators=(',', ': '))
     print 'casper genesis generated'
 
 
 if __name__ == "__main__":
     if sys.argv[1] == "genesis":
-        generate_genesis(sys.argv[2])
+        generate_genesis(sys.argv[2], int(sys.argv[3]))
     else:
         print "unknown command: %s" % sys.argv[1]
+        print "usage:"
+        print "python pyethapp/tools.py genesis pyethapp/genesisdata/genesis_metropolis.json 3"
         sys.exit(1)
