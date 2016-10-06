@@ -364,13 +364,13 @@ class Synchronizer(object):
         log.debug('received newblockhashes', num=len(newblockhashes), proto=proto)
         # log.debug('DISABLED')
         # return
-        newblockhashes = [h for h in newblockhashes if not self.chainservice.knows_block(h)]
+        newblockhashes = [h.hash for h in newblockhashes if not self.chainservice.knows_block(h)]
         if (proto not in self.protocols) or (not newblockhashes) or self.synctask:
             log.debug('discarding', known=bool(not newblockhashes), synctask=bool(self.synctask))
             return
         if len(newblockhashes) != 1:
             log.warn('supporting only one newblockhash', num=len(newblockhashes))
-        blockhash = newblockhashes[0]
+        blockhash = newblockhashes[0].hash
         log.debug('starting synctask for newblockhashes', blockhash=blockhash.encode('hex'))
         self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
 
