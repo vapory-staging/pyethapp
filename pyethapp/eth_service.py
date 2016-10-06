@@ -415,16 +415,16 @@ class ChainService(WiredService):
         assert len(newblockhashes) <= 256
         self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
-    def on_receive_getblockheaders(self, proto, block, amount, skip, reverse):
-        hash_mode = 1 if block.hash else 0
-        block_id = encode_hex(block.hash) if hash_mode else block.number
+    def on_receive_getblockheaders(self, proto, hash_or_number, block, amount, skip, reverse):
+        hash_mode = 1 if hash_or_number[0] else 0
+        block_id = encode_hex(hash_or_number[0]) if hash_mode else hash_or_number[1]
         log.debug('----------------------------------')
         log.debug("handle_getblockheaders", amount=amount, block=block_id)
 
         headers = []
         max_hashes = min(amount, self.wire_protocol.max_getblockheaders_count)
 
-        origin_hash = block.hash if hash_mode else self.chain.index.get_block_by_number(block.number)
+        origin_hash = hash_or_number[0] if hash_mode else self.chain.index.get_block_by_number(hash_or_number[1])
         if origin_hash not in self.chain:
             log.debug("unknown block")
             proto.send_blockheaders(*[])

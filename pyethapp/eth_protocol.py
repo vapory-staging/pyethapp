@@ -1,7 +1,7 @@
 from devp2p.protocol import BaseProtocol, SubProtocolError
 from ethereum.transactions import Transaction
 from ethereum.blocks import Block, BlockHeader
-from ethereum.utils import hash32, int64, int8
+from ethereum.utils import hash32, int_to_big_endian, big_endian_to_int
 import rlp
 import gevent
 import time
@@ -109,7 +109,7 @@ class ETHProtocol(BaseProtocol):
         class Data(rlp.Serializable):
             fields = [
                 ('hash', hash32),
-                ('number', int64)
+                ('number', rlp.sedes.big_endian_int)
             ]
         structure = rlp.sedes.CountableList(Data)
 
@@ -148,24 +148,31 @@ class ETHProtocol(BaseProtocol):
         """
         cmd_id = 3
 
-        class HashOrNumber(rlp.Serializable):
-            fields = [
-                ('hash', hash32),
-                ('number', int64)
-            ]
         structure = [
-            ('block', HashOrNumber),
-            ('amount', int64),
-            ('skip', int64),
-            ('reverse', int8)
+            ('block', rlp.sedes.binary),
+            ('amount', rlp.sedes.big_endian_int),
+            ('skip', rlp.sedes.big_endian_int),
+            ('reverse', rlp.sedes.big_endian_int)
         ]
 
         def create(self, proto, hash_or_number, amount, skip=0, reverse=1):
             if isinstance(hash_or_number, (int, long)):
-                origin = self.HashOrNumber(b'', hash_or_number)
+                block = int_to_big_endian(hash_or_number)
             else:
-                origin = self.HashOrNumber(hash_or_number, 0)
-            return [origin, amount, skip, reverse]
+                block = hash_or_number
+            return [block, amount, skip, reverse]
+
+        def receive(self, proto, data):
+            if len(data['block']) == 32:
+                hash_or_number = (data['block'], 0)
+            elif len(data['block']) <= 8:
+                hash_or_number = (b'', big_endian_to_int(data['block']))
+            else:
+                raise Exception('invalid hash_or_number value')
+            data['hash_or_number'] = hash_or_number
+
+            for cb in self.receive_callbacks:
+                cb(proto, **data)
 
     class blockheaders(BaseProtocol.command):
 
