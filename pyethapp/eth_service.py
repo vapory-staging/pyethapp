@@ -18,6 +18,7 @@ from ethereum import processblock
 from ethereum.processblock import validate_transaction
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
+from ethereum.blocks import get_block_header
 from ethereum.transactions import Transaction
 from ethereum.utils import sha3
 from gevent.queue import Queue
@@ -414,32 +415,67 @@ class ChainService(WiredService):
         assert len(newblockhashes) <= 256
         self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
-    def on_receive_getblockhashes(self, proto, child_block_hash, count):
+    def on_receive_getblockheaders(self, proto, block, amount, skip, reverse):
+        hash_mode = 1 if block.hash else 0
+        block_id = encode_hex(block.hash) if hash_mode else block.number
         log.debug('----------------------------------')
-        log.debug("handle_get_blockhashes", count=count, block_hash=encode_hex(child_block_hash))
-        max_hashes = min(count, self.wire_protocol.max_getblockhashes_count)
-        found = []
-        if child_block_hash not in self.chain:
+        log.debug("handle_getblockheaders", amount=amount, block=block_id)
+
+        headers = []
+        max_hashes = min(amount, self.wire_protocol.max_getblockheaders_count)
+
+        origin_hash = block.hash if hash_mode else self.chain.index.get_block_by_number(block.number)
+        if origin_hash not in self.chain:
             log.debug("unknown block")
-            proto.send_blockhashes(*[])
+            proto.send_blockheaders(*[])
             return
 
-        last = child_block_hash
-        while len(found) < max_hashes:
+        unknown = False
+        while not unknown and (headers) < max_hashes:
+            if not origin_hash:
+                break
             try:
-                last = rlp.decode_lazy(self.chain.db.get(last))[0][0]  # [head][prevhash]
+                origin = get_block_header(self.chain.db, origin_hash)
             except KeyError:
-                # this can happen if we started a chain download, which did not complete
-                # should not happen if the hash is part of the canonical chain
-                log.warn('KeyError in getblockhashes', hash=last)
                 break
-            if last:
-                found.append(last)
-            else:
-                break
+            assert origin
+            headers.append(origin)
 
-        log.debug("sending: found block_hashes", count=len(found))
-        proto.send_blockhashes(*found)
+            if hash_mode:  # hash traversal
+                if reverse:
+                    for i in xrange(skip+1):
+                        try:
+                            header = get_block_header(self.chain.db, origin_hash)
+                            origin_hash = header.prevhash
+                        except KeyError:
+                            unknown = True
+                            break
+                else:
+                    origin_hash = self.chain.index.get_block_by_number(origin.number + skip + 1)
+                    try:
+                        header = get_block_header(self.chain.db, origin_hash)
+                        if self.chain.get_blockhashes_from_hash(header.hash, skip+1)[skip] == origin_hash:
+                            origin_hash = header.hash
+                        else:
+                            unknown = True
+                    except KeyError:
+                        unknown = True
+            else:  # number traversal
+                if reverse:
+                    if origin.number >= (skip+1):
+                        number = origin.number - (skip + 1)
+                        origin_hash = self.chain.index.get_block_by_number(number)
+                    else:
+                        unknown = True
+                else:
+                    number = origin.number + skip + 1
+                    try:
+                        origin_hash = self.chain.index.get_block_by_number(number)
+                    except KeyError:
+                        unknown = True
+
+        log.debug("sending: found blockheaders", count=len(headers))
+        proto.send_blockheaders(*headers)
 
     def on_receive_blockhashes(self, proto, blockhashes):
         log.debug('----------------------------------')

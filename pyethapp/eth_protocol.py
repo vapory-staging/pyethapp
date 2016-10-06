@@ -27,7 +27,7 @@ class ETHProtocol(BaseProtocol):
     version = 62
 
     max_getblocks_count = 64
-    max_getblockhashes_count = 2048
+    max_getblockheaders_count = 192
 
     def __init__(self, peer, service):
         # required by P2PProtocol
