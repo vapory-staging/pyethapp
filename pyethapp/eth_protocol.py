@@ -9,6 +9,41 @@ from ethereum import slogging
 log = slogging.get_logger('protocol.eth')
 
 
+class TransientBlockBody(rlp.Serializable):
+    fields = [
+        ('transactions', rlp.sedes.CountableList(Transaction)),
+        ('uncles', rlp.sedes.CountableList(BlockHeader))
+    ]
+
+
+class TransientBlock(rlp.Serializable):
+
+    """A partially decoded, unvalidated block."""
+
+    fields = [
+        ('header', BlockHeader),
+        ('transaction_list', rlp.sedes.CountableList(Transaction)),
+        ('uncles', rlp.sedes.CountableList(BlockHeader))
+    ]
+
+    def __init__(self, header, transaction_list, uncles, newblock_timestamp=0):
+        self.newblock_timestamp = newblock_timestamp
+        self.header = header
+        self.transaction_list = transaction_list
+        self.uncles = uncles
+
+    def to_block(self, env, parent=None):
+        """Convert the transient block to a :class:`ethereum.blocks.Block`"""
+        return Block(self.header, self.transaction_list, self.uncles, env=env, parent=parent)
+
+    @property
+    def hex_hash(self):
+        return self.header.hex_hash()
+
+    def __repr__(self):
+        return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])
+
+
 class ETHProtocolError(SubProtocolError):
     pass
 
@@ -26,7 +61,7 @@ class ETHProtocol(BaseProtocol):
     name = 'eth'
     version = 62
 
-    max_getblocks_count = 64
+    max_getblocks_count = 128
     max_getblockheaders_count = 192
 
     def __init__(self, peer, service):
@@ -125,6 +160,13 @@ class ETHProtocol(BaseProtocol):
             ('reverse', int8)
         ]
 
+        def create(self, proto, hash_or_number, amount, skip=0, reverse=1):
+            if isinstance(hash_or_number, (int, long)):
+                origin = self.HashOrNumber(b'', hash_or_number)
+            else:
+                origin = self.HashOrNumber(hash_or_number, 0)
+            return [origin, amount, skip, reverse]
+
     class blockheaders(BaseProtocol.command):
 
         """
@@ -159,27 +201,14 @@ class ETHProtocol(BaseProtocol):
         no items if no blocks were able to be returned for the GetBlockBodies query.
         """
         cmd_id = 6
+        structure = rlp.sedes.CountableList(TransientBlockBody)
 
-        class Data(rlp.Serializable):
-            fields = [
-                ('transactions', rlp.sedes.CountableList(Transaction)),
-                ('uncles', rlp.sedes.CountableList(BlockHeader))
-            ]
-        structure = rlp.sedes.CountableList(Data)
-
-        @classmethod
-        def encode_payload(cls, list_of_rlp):
-            return rlp.encode([rlp.codec.RLPData(x) for x in list_of_rlp], infer_serializer=False)
-
-        @classmethod
-        def decode_payload(cls, rlp_data):
-            # fn = 'blocks.fromthewire.hex.rlp'
-            # open(fn, 'a').write(rlp_data.encode('hex') + '\n')
-            # convert to dict
-            blocks = []
-            for block in rlp.decode_lazy(rlp_data):
-                blocks.append(TransientBlock(block))
-            return blocks
+        def create(self, proto, bodies):
+            if len(bodies) == 0:
+                return []
+            if isinstance(bodies[0], Block):
+                bodies = [TransientBlockBody(b.transaction_list, b.uncles) for b in bodies]
+            return bodies
 
     class newblock(BaseProtocol.command):
 
@@ -204,31 +233,3 @@ class ETHProtocol(BaseProtocol):
             difficulty = rlp.sedes.big_endian_int.deserialize(ll[1])
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
-
-
-class TransientBlock(rlp.Serializable):
-
-    """A partially decoded, unvalidated block."""
-
-    fields = [
-        ('header', BlockHeader),
-        ('transaction_list', rlp.sedes.CountableList(Transaction)),
-        ('uncles', rlp.sedes.CountableList(BlockHeader))
-    ]
-
-    def __init__(self, block_data, newblock_timestamp=0):
-        self.newblock_timestamp = newblock_timestamp
-        self.header = BlockHeader.deserialize(block_data[0])
-        self.transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
-        self.uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
-
-    def to_block(self, env, parent=None):
-        """Convert the transient block to a :class:`ethereum.blocks.Block`"""
-        return Block(self.header, self.transaction_list, self.uncles, env=env, parent=parent)
-
-    @property
-    def hex_hash(self):
-        return self.header.hex_hash()
-
-    def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])

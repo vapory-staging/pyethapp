@@ -477,20 +477,20 @@ class ChainService(WiredService):
         log.debug("sending: found blockheaders", count=len(headers))
         proto.send_blockheaders(*headers)
 
-    def on_receive_blockhashes(self, proto, blockhashes):
+    def on_receive_blockheaders(self, proto, blockheaders):
         log.debug('----------------------------------')
-        if blockhashes:
-            log.debug("on_receive_blockhashes", count=len(blockhashes), remote_id=proto,
-                      first=encode_hex(blockhashes[0]), last=encode_hex(blockhashes[-1]))
+        if blockheaders:
+            log.debug("on_receive_blockheaders", count=len(blockheaders), remote_id=proto,
+                      first=encode_hex(blockheaders[0].hash), last=encode_hex(blockheaders[-1].hash))
         else:
-            log.debug("recv 0 remote block hashes, signifying genesis block")
-        self.synchronizer.receive_blockhashes(proto, blockhashes)
+            log.debug("recv 0 remote block headers, signifying genesis block")
+        self.synchronizer.receive_blockheaders(proto, blockheaders)
 
     # blocks ################
 
-    def on_receive_getblocks(self, proto, blockhashes):
+    def on_receive_getblockbodies(self, proto, blockhashes):
         log.debug('----------------------------------')
-        log.debug("on_receive_getblocks", count=len(blockhashes))
+        log.debug("on_receive_getblockbodies", count=len(blockhashes))
         found = []
         for bh in blockhashes[:self.wire_protocol.max_getblocks_count]:
             try:
@@ -499,15 +499,13 @@ class ChainService(WiredService):
                 log.debug("unknown block requested", block_hash=encode_hex(bh))
         if found:
             log.debug("found", count=len(found))
-            proto.send_blocks(*found)
+            proto.send_blockbodies(*found)
 
-    def on_receive_blocks(self, proto, transient_blocks):
+    def on_receive_blockbodies(self, proto, bodies):
         log.debug('----------------------------------')
-        blk_number = max(x.header.number for x in transient_blocks) if transient_blocks else 0
-        log.debug("recv blocks", count=len(transient_blocks), remote_id=proto,
-                  highest_number=blk_number)
-        if transient_blocks:
-            self.synchronizer.receive_blocks(proto, transient_blocks)
+        log.debug("recv block bodies", count=len(bodies), remote_id=proto)
+        if bodies:
+            self.synchronizer.receive_blockbodies(proto, bodies)
 
     def on_receive_newblock(self, proto, block, chain_difficulty):
         log.debug('----------------------------------')
