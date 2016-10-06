@@ -424,8 +424,14 @@ class ChainService(WiredService):
         headers = []
         max_hashes = min(amount, self.wire_protocol.max_getblockheaders_count)
 
-        origin_hash = hash_or_number[0] if hash_mode else self.chain.index.get_block_by_number(hash_or_number[1])
-        if origin_hash not in self.chain:
+        if hash_mode:
+            origin_hash = hash_or_number[0]
+        else:
+            try:
+                origin_hash = self.chain.index.get_block_by_number(hash_or_number[1])
+            except KeyError:
+                origin_hash = b''
+        if not origin_hash or origin_hash not in self.chain:
             log.debug("unknown block")
             proto.send_blockheaders(*[])
             return
