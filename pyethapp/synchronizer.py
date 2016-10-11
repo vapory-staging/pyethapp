@@ -133,6 +133,7 @@ class SyncTask(object):
             log_st.info('downloaded ' + str(len(blockheaders_chain)) + ' blockheaders', start=start, end=end)
             self.end_block_number = self.chain.head.number + len(blockheaders_chain)
             max_blockheaders_per_request = self.max_blockheaders_per_request
+            blockhash = header.prevhash
 
         self.start_block_number = self.chain.get(blockhash).number
         self.end_block_number = self.chain.get(blockhash).number + len(blockheaders_chain)
