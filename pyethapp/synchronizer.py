@@ -127,13 +127,14 @@ class SyncTask(object):
                     log_st.debug('found known block header', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
+            else:  # if all headers in batch added to blockheaders_chain
+                blockhash = header.prevhash
 
             start = "#%d %s" % (blockheaders_chain[0].number, utils.encode_hex(blockheaders_chain[0].hash)[:8])
             end = "#%d %s" % (blockheaders_chain[-1].number, utils.encode_hex(blockheaders_chain[-1].hash)[:8])
             log_st.info('downloaded ' + str(len(blockheaders_chain)) + ' blockheaders', start=start, end=end)
             self.end_block_number = self.chain.head.number + len(blockheaders_chain)
             max_blockheaders_per_request = self.max_blockheaders_per_request
-            blockhash = header.prevhash
 
         self.start_block_number = self.chain.get(blockhash).number
         self.end_block_number = self.chain.get(blockhash).number + len(blockheaders_chain)
