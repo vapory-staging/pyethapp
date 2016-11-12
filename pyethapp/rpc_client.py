@@ -118,7 +118,16 @@ class JSONRPCClient(object):
 
     def __init__(self, host='127.0.0.1', port=4000, print_communication=True,
                  privkey=None, sender=None, use_ssl=False, transport=None):
-        "specify privkey for local signing"
+        """
+        Args:
+            host (str): host address to connect to.
+            port (int): port number to connect to.
+            print_communication (bool): True to print the rpc communication.
+            privkey: specify privkey for local signing
+            sender (address): the sender address, computed from privkey if provided.
+            use_ssl (bool): Use https instead of http.
+            transport: Tiny rpc transport instance.
+        """
         if transport is None:
             self.transport = HttpPostClientTransport('{}://{}:{}'.format(
                 'https' if use_ssl else 'http', host, port), headers={'content-type': 'application/json'})
@@ -196,10 +205,11 @@ class JSONRPCClient(object):
             address,
             self.eth_call,
             self.send_transaction,
+            self.eth_estimateGas,
         )
 
     def deploy_solidity_contract(self, sender, contract_name, all_contracts,  # pylint: disable=too-many-locals
-                                 libraries, constructor_parameters, timeout=None, gasprice=denoms.wei):
+                                 libraries, constructor_parameters, timeout=None, gasprice=default_gasprice):
 
         if contract_name not in all_contracts:
             raise ValueError('Unkonwn contract {}'.format(contract_name))
@@ -236,22 +246,23 @@ class JSONRPCClient(object):
                 dependency_contract['bin_hex'] = hex_bytecode
                 dependency_contract['bin'] = bytecode
 
-                transaction_hash = self.send_transaction(
+                transaction_hash_hex = self.send_transaction(
                     sender,
                     to='',
                     data=bytecode,
                     gasprice=gasprice,
                 )
+                transaction_hash = transaction_hash_hex.decode('hex')
 
-                self.poll(transaction_hash.decode('hex'), timeout=timeout)
-                receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
+                self.poll(transaction_hash, timeout=timeout)
+                receipt = self.eth_getTransactionReceipt(transaction_hash)
 
                 contract_address = receipt['contractAddress']
                 contract_address = contract_address[2:]  # remove the hexadecimal prefix 0x from the address
 
                 libraries[deploy_contract] = contract_address
 
-                deployed_code = self.call('eth_getCode', address_encoder(contract_address), 'latest')
+                deployed_code = self.eth_getCode(contract_address.decode('hex'))
 
                 if deployed_code == '0x':
                     raise RuntimeError("Contract address has no code, check gas usage.")
@@ -269,30 +280,28 @@ class JSONRPCClient(object):
         else:
             bytecode = contract['bin']
 
-        transaction_hash = self.send_transaction(
+        transaction_hash_hex = self.send_transaction(
             sender,
             to='',
             data=bytecode,
             gasprice=gasprice,
         )
+        transaction_hash = transaction_hash_hex.decode('hex')
 
-        self.poll(transaction_hash.decode('hex'), timeout=timeout)
-        receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
+        self.poll(transaction_hash, timeout=timeout)
+        receipt = self.eth_getTransactionReceipt(transaction_hash)
         contract_address = receipt['contractAddress']
 
-        deployed_code = self.call('eth_getCode', address_encoder(contract_address), 'latest')
+        deployed_code = self.eth_getCode(contract_address[2:].decode('hex'))
 
         if deployed_code == '0x':
             raise RuntimeError("Deployment of {} failed. Contract address has no code, check gas usage.".format(
                 contract_name
             ))
 
-        return ContractProxy(
-            sender,
+        return self.new_contract_proxy(
             contract_interface,
             contract_address,
-            self.eth_call,
-            self.send_transaction,
         )
 
     def find_block(self, condition):
@@ -481,25 +490,9 @@ class JSONRPCClient(object):
 
         return data_decoder(res)
 
-    def eth_call(self, sender='', to='', value=0, data='',
-                 startgas=default_startgas, gasprice=default_gasprice,
-                 block_number='latest'):
-        """ Executes a new message call immediately without creating a
-        transaction on the block chain.
-
-        Args:
-            from: The address the transaction is send from.
-            to: The address the transaction is directed to.
-            gas (int): Gas provided for the transaction execution. eth_call
-                consumes zero gas, but this parameter may be needed by some
-                executions.
-            gasPrice (int): gasPrice used for each paid gas.
-            value (int): Integer of the value send with this transaction.
-            data (bin): Hash of the method signature and encoded parameters.
-                For details see Ethereum Contract ABI.
-            block_number: Determines the state of ethereum used in the
-                call.
-        """
+    def _format_call(self, sender='', to='', value=0, data='',
+                     startgas=default_startgas, gasprice=default_gasprice):
+        """ Helper to format the transaction data. """
 
         json_data = dict()
 
@@ -521,9 +514,139 @@ class JSONRPCClient(object):
         if data is not None:
             json_data['data'] = data_encoder(data)
 
+        return json_data
+
+    def eth_call(self, sender='', to='', value=0, data='',
+                 startgas=default_startgas, gasprice=default_gasprice,
+                 block_number='latest'):
+        """ Executes a new message call immediately without creating a
+        transaction on the block chain.
+
+        Args:
+            from: The address the transaction is send from.
+            to: The address the transaction is directed to.
+            gas (int): Gas provided for the transaction execution. eth_call
+                consumes zero gas, but this parameter may be needed by some
+                executions.
+            gasPrice (int): gasPrice used for each paid gas.
+            value (int): Integer of the value send with this transaction.
+            data (bin): Hash of the method signature and encoded parameters.
+                For details see Ethereum Contract ABI.
+            block_number: Determines the state of ethereum used in the
+                call.
+        """
+
+        json_data = self._format_call(
+            sender,
+            to,
+            value,
+            data,
+            startgas,
+            gasprice,
+        )
         res = self.call('eth_call', json_data, block_number)
 
         return data_decoder(res)
+
+    def eth_estimateGas(self, sender='', to='', value=0, data='',
+                        startgas=default_startgas, gasprice=default_gasprice):
+        """ Makes a call or transaction, which won't be added to the blockchain
+        and returns the used gas, which can be used for estimating the used
+        gas.
+
+        Args:
+            from: The address the transaction is send from.
+            to: The address the transaction is directed to.
+            gas (int): Gas provided for the transaction execution. eth_call
+                consumes zero gas, but this parameter may be needed by some
+                executions.
+            gasPrice (int): gasPrice used for each paid gas.
+            value (int): Integer of the value send with this transaction.
+            data (bin): Hash of the method signature and encoded parameters.
+                For details see Ethereum Contract ABI.
+            block_number: Determines the state of ethereum used in the
+                call.
+        """
+
+        json_data = self._format_call(
+            sender,
+            to,
+            value,
+            data,
+            startgas,
+            gasprice,
+        )
+        res = self.call('eth_estimateGas', json_data)
+
+        return quantity_decoder(res)
+
+    def eth_getTransactionReceipt(self, transaction_hash):
+        """ Returns the receipt of a transaction by transaction hash.
+
+        Args:
+            transaction_hash: Hash of a transaction.
+
+        Returns:
+            A dict representing the transaction receipt object, or null when no
+            receipt was found.
+        """
+        if transaction_hash.startswith('0x'):
+            warnings.warn(
+                'transaction_hash seems to be already encoded, this will'
+                ' result in unexpected behavior'
+            )
+
+        if len(transaction_hash) != 32:
+            raise ValueError(
+                'transaction_hash length must be 32 (it might be hex encode)'
+            )
+
+        transaction_hash = data_encoder(transaction_hash)
+        return self.call('eth_getTransactionReceipt', transaction_hash)
+
+    def eth_getCode(self, address, block='latest'):
+        """ Returns code at a given address.
+
+        Args:
+            address: An address.
+            block_number: Integer block number, or the string "latest",
+                "earliest" or "pending".
+        """
+        if address.startswith('0x'):
+            warnings.warn(
+                'address seems to be already encoded, this will result '
+                'in unexpected behavior'
+            )
+
+        if len(address) != 20:
+            raise ValueError(
+                'address length must be 20 (it might be hex encode)'
+            )
+
+        return self.call(
+            'eth_getCode',
+            address_encoder(address),
+            block,
+        )
+
+    def eth_getTransactionByHash(self, transaction_hash):
+        """ Returns the information about a transaction requested by
+        transaction hash.
+        """
+
+        if transaction_hash.startswith('0x'):
+            warnings.warn(
+                'transaction_hash seems to be already encoded, this will'
+                ' result in unexpected behavior'
+            )
+
+        if len(transaction_hash) != 32:
+            raise ValueError(
+                'transaction_hash length must be 32 (it might be hex encode)'
+            )
+
+        transaction_hash = data_encoder(transaction_hash)
+        return self.call('eth_getTransactionByHash', transaction_hash)
 
     def poll(self, transaction_hash, confirmations=None, timeout=None):
         """ Wait until the `transaction_hash` is applied or rejected.
@@ -538,41 +661,66 @@ class JSONRPCClient(object):
         """
         if transaction_hash.startswith('0x'):
             warnings.warn(
-                'transaction_hash seems to be already encoded, this will result '
-                'in unexpected behavior'
+                'transaction_hash seems to be already encoded, this will'
+                ' result in unexpected behavior'
             )
 
         if len(transaction_hash) != 32:
-            raise ValueError('transaction_hash length must be 32 (it might be hex encode)')
-
-        deadline = None
-        if timeout:
-            deadline = time.time() + timeout
+            raise ValueError(
+                'transaction_hash length must be 32 (it might be hex encode)'
+            )
 
         transaction_hash = data_encoder(transaction_hash)
 
-        transaction = self.call('eth_getTransactionByHash', transaction_hash)
-        while transaction is None or transaction["blockNumber"] is None:
-            if deadline and time.time() > deadline:
-                raise Exception('timeout when polling for transaction')
+        deadline = None
+        if timeout:
+            deadline = gevent.Timeout(timeout)
+            deadline.start()
 
-            gevent.sleep(.5)
-            transaction = self.call('eth_getTransactionByHash', transaction_hash)
+        try:
+            # used to check if the transaction was removed, this could happen
+            # if gas price is to low:
+            #
+            # > Transaction (acbca3d6) below gas price (tx=1 Wei ask=18
+            # > Shannon). All sequential txs from this address(7d0eae79)
+            # > will be ignored
+            #
+            last_result = None
 
-        if confirmations is None:
-            return
+            while True:
+                # Could return None for a short period of time, until the
+                # transaction is added to the pool
+                transaction = self.call('eth_getTransactionByHash', transaction_hash)
 
-        # this will wait for both APPLIED and REVERTED transactions
-        transaction_block = quantity_decoder(transaction['blockNumber'])
-        confirmation_block = transaction_block + confirmations
+                # if the transaction was added to the pool and then removed
+                if transaction is None and last_result is not None:
+                    raise Exception('invalid transaction, check gas price')
 
-        block_number = self.blocknumber()
-        while confirmation_block > block_number:
-            if deadline and time.time() > deadline:
-                raise Exception('timeout when waiting for confirmation')
+                # the transaction was added to the pool and mined
+                if transaction and transaction['blockNumber'] is not None:
+                    break
 
-            gevent.sleep(.5)
-            block_number = self.blocknumber()
+                last_result = transaction
+
+                gevent.sleep(.5)
+
+            if confirmations:
+                # this will wait for both APPLIED and REVERTED transactions
+                transaction_block = quantity_decoder(transaction['blockNumber'])
+                confirmation_block = transaction_block + confirmations
+
+                block_number = self.blocknumber()
+
+                while block_number < confirmation_block:
+                    gevent.sleep(.5)
+                    block_number = self.blocknumber()
+
+        except gevent.Timeout:
+            raise Exception('timeout when polling for transaction')
+
+        finally:
+            if deadline:
+                deadline.cancel()
 
 
 class MethodProxy(object):
@@ -580,13 +728,14 @@ class MethodProxy(object):
     valid_kargs = set(('gasprice', 'startgas', 'value'))
 
     def __init__(self, sender, contract_address, function_name, translator,
-                 call_function, transaction_function):
+                 call_function, transaction_function, estimate_function=None):
         self.sender = sender
         self.contract_address = contract_address
         self.function_name = function_name
         self.translator = translator
         self.call_function = call_function
         self.transaction_function = transaction_function
+        self.estimate_function = estimate_function
 
     def transact(self, *args, **kargs):
         assert set(kargs.keys()).issubset(self.valid_kargs)
@@ -619,6 +768,23 @@ class MethodProxy(object):
             res = res[0] if len(res) == 1 else res
         return res
 
+    def estimate_gas(self, *args, **kargs):
+        if not self.estimate_function:
+            raise RuntimeError('estimate_function wasnt supplied.')
+
+        assert set(kargs.keys()).issubset(self.valid_kargs)
+        data = self.translator.encode(self.function_name, args)
+
+        res = self.estimate_function(
+            sender=self.sender,
+            to=self.contract_address,
+            value=kargs.pop('value', 0),
+            data=data,
+            **kargs
+        )
+
+        return res
+
     def __call__(self, *args, **kargs):
         if self.translator.function_data[self.function_name]['is_constant']:
             return self.call(*args, **kargs)
@@ -634,7 +800,7 @@ class ContractProxy(object):
     translation.
     """
 
-    def __init__(self, sender, abi, address, call_func, transact_func):
+    def __init__(self, sender, abi, address, call_func, transact_func, estimate_function=None):
         sender = normalize_address(sender)
 
         self.abi = abi
@@ -649,6 +815,7 @@ class ContractProxy(object):
                 self.translator,
                 call_func,
                 transact_func,
+                estimate_function,
             )
 
             type_argument = self.translator.function_data[function_name]['signature']
