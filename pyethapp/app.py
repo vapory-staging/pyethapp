@@ -32,6 +32,7 @@ from pow_service import PoWService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
+from pyethapp.snapshot import create_snapshot
 
 
 log = slogging.get_logger('app')
@@ -333,6 +334,34 @@ def blocktest(ctx, file, name):
 
     # finally stop
     app.stop()
+
+
+@app.command('snapshot')
+@click.option('-f', '--filename', type=str, default=None,
+              help='Output file name. (default: auto-gen file prefixed by snapshot-')
+@click.pass_context
+def snapshot(ctx, filename):
+    """Take a snapshot of current world state.
+
+    The snapshot will be saved in JSON format, including data like chain configurations and accounts.
+
+    It will overwrite exiting file if it already exists.
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    head = app.services.chain.chain.head
+    s = create_snapshot(head)
+
+    if not filename:
+        import time
+        filename = 'snapshot-%d.json' % int(time.time()*1000)
+
+    with open(filename, 'w') as f:
+        json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
+        print 'snapshot saved to %s' % filename
 
 
 @app.command('export')
