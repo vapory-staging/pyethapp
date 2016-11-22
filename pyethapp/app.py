@@ -18,6 +18,7 @@ from devp2p.peermanager import PeerManager
 from devp2p.service import BaseService
 from ethereum import blocks
 from ethereum.blocks import Block
+from ethereum.snapshot import create_snapshot, load_snapshot as _load_snapshot
 from gevent.event import Event
 
 import config as konfig
@@ -32,7 +33,6 @@ from pow_service import PoWService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
-from pyethapp.snapshot import create_snapshot
 
 
 log = slogging.get_logger('app')
@@ -352,16 +352,33 @@ def snapshot(ctx, filename):
     AccountsService.register_with_app(app)
     ChainService.register_with_app(app)
 
-    head = app.services.chain.chain.head
-    s = create_snapshot(head)
-
     if not filename:
         import time
         filename = 'snapshot-%d.json' % int(time.time()*1000)
 
+    s = create_snapshot(app.services.chain.chain)
     with open(filename, 'w') as f:
         json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
         print 'snapshot saved to %s' % filename
+
+
+@app.command('load_snapshot')
+@click.argument('filename', type=str)
+@click.pass_context
+def load_snapshot(ctx, filename):
+    """Load snapshot FILE into local node database.
+
+    This process will OVERWRITE data in current database!!!
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    with open(filename, 'r') as f:
+        s = json.load(f, encoding='ascii')
+        _load_snapshot(app.services.chain.chain, s)
+        print 'snapshot %s loaded.' % filename
 
 
 @app.command('export')
