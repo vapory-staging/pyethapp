@@ -366,7 +366,7 @@ class Synchronizer(object):
             return
         if len(newblockhashes) != 1:
             log.warn('supporting only one newblockhash', num=len(newblockhashes))
-        blockhash = newblockhashes[0].hash
+        blockhash = newblockhashes[0]
         log.debug('starting synctask for newblockhashes', blockhash=blockhash.encode('hex'))
         self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
 
