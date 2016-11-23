@@ -360,7 +360,7 @@ class Synchronizer(object):
         log.debug('received newblockhashes', num=len(newblockhashes), proto=proto)
         # log.debug('DISABLED')
         # return
-        newblockhashes = [h.hash for h in newblockhashes if not self.chainservice.knows_block(h)]
+        newblockhashes = [h.hash for h in newblockhashes if not self.chainservice.knows_block(h.hash)]
         if (proto not in self.protocols) or (not newblockhashes) or self.synctask:
             log.debug('discarding', known=bool(not newblockhashes), synctask=bool(self.synctask))
             return

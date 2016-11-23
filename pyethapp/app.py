@@ -420,7 +420,7 @@ def import_blocks(ctx, file):
             try:
                 if not isinstance(block_data, list) or len(block_data) != 3:
                     raise rlp.DeserializationError('', block_data)
-                yield eth_protocol.TransientBlock(block_data)
+                yield eth_protocol.TransientBlock.init_from_rlp(block_data)
             except (IndexError, rlp.DeserializationError):
                 log.warning('not a valid block', byte_index=i)  # we can still continue
                 yield None

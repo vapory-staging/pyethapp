@@ -21,7 +21,7 @@ rlp_data = """f90201f901fca03a3ce492dd9865a0baeafbf4df006aff84e0b4ae39c8fbecfd99
 
 def import_block(chain, rlp_data):
     ll = rlp.decode_lazy(rlp_data)
-    transient_block = TransientBlock(ll, 0)
+    transient_block = TransientBlock.init_from_rlp(ll, 0)
     transient_block.to_block(chain.db)
 
 if __name__ == '__main__':

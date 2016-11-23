@@ -26,6 +26,13 @@ class TransientBlock(rlp.Serializable):
         ('uncles', rlp.sedes.CountableList(BlockHeader))
     ]
 
+    @classmethod
+    def init_from_rlp(cls, block_data, newblock_timestamp=0):
+        header = BlockHeader.deserialize(block_data[0])
+        transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
+        uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
+        return cls(header, transaction_list, uncles, newblock_timestamp)
+
     def __init__(self, header, transaction_list, uncles, newblock_timestamp=0):
         self.newblock_timestamp = newblock_timestamp
         self.header = header
@@ -236,7 +243,7 @@ class ETHProtocol(BaseProtocol):
             # print rlp_data.encode('hex')
             ll = rlp.decode_lazy(rlp_data)
             assert len(ll) == 2
-            transient_block = TransientBlock(ll[0], time.time())
+            transient_block = TransientBlock.init_from_rlp(ll[0], time.time())
             difficulty = rlp.sedes.big_endian_int.deserialize(ll[1])
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
