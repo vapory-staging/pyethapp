@@ -337,10 +337,12 @@ def blocktest(ctx, file, name):
 
 
 @app.command('snapshot')
+@click.option('-r', '--recent', type=int, default=1024,
+              help='Number of recent blocks. State before these blocks and these blocks will be dumped. On recover these blocks will be applied on restored state. (default: 1024)')
 @click.option('-f', '--filename', type=str, default=None,
               help='Output file name. (default: auto-gen file prefixed by snapshot-')
 @click.pass_context
-def snapshot(ctx, filename):
+def snapshot(ctx, recent, filename):
     """Take a snapshot of current world state.
 
     The snapshot will be saved in JSON format, including data like chain configurations and accounts.
@@ -356,7 +358,7 @@ def snapshot(ctx, filename):
         import time
         filename = 'snapshot-%d.json' % int(time.time()*1000)
 
-    s = create_snapshot(app.services.chain.chain)
+    s = create_snapshot(app.services.chain.chain, recent)
     with open(filename, 'w') as f:
         json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
         print 'snapshot saved to %s' % filename
