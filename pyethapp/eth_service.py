@@ -26,6 +26,7 @@ from rlp.utils import encode_hex
 from synchronizer import Synchronizer
 
 from pyethapp import sentry
+from pyethapp.dao import is_dao_challenge, build_dao_header
 
 
 log = get_logger('eth.chainservice')
@@ -427,6 +428,11 @@ class ChainService(WiredService):
         if hash_mode:
             origin_hash = hash_or_number[0]
         else:
+            if is_dao_challenge(self.config['eth']['block'], hash_or_number[1], amount, skip):
+                log.debug("sending: answer DAO challenge")
+                headers.append(build_dao_header(self.config['eth']['block']))
+                proto.send_blockheaders(*headers)
+                return
             try:
                 origin_hash = self.chain.index.get_block_by_number(hash_or_number[1])
             except KeyError:
