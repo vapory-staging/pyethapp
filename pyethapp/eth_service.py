@@ -255,6 +255,9 @@ class ChainService(WiredService):
         self.add_transaction_lock.acquire()
         try:
             while not self.block_queue.empty():
+                # sleep at the beginning because continue keywords will skip bottom
+                gevent.sleep()
+
                 t_block, proto = self.block_queue.peek()  # peek: knows_block while processing
                 if t_block.header.hash in self.chain:
                     log.warn('known block', block=t_block)
@@ -311,7 +314,6 @@ class ChainService(WiredService):
                     log.warn('could not add', block=block)
 
                 self.block_queue.get()  # remove block from queue (we peeked only)
-                gevent.sleep(0.001)
         finally:
             self.add_blocks_lock = False
             self.add_transaction_lock.release()
@@ -412,7 +414,7 @@ class ChainService(WiredService):
         chances are high, that we get the newblock, though.
         """
         log.debug('----------------------------------')
-        log.debug("recv newnewblockhashes", num=len(newblockhashes), remote_id=proto)
+        log.debug("recv newblockhashes", num=len(newblockhashes), remote_id=proto)
         assert len(newblockhashes) <= 256
         self.synchronizer.receive_newblockhashes(proto, newblockhashes)
 
