@@ -195,9 +195,13 @@ class SyncTask(object):
             ts = time.time()
             log_st.debug('adding blocks', qsize=self.chainservice.block_queue.qsize())
             for body in bodies:
-                h = blockheaders_chain.pop(0)
-                t_block = TransientBlock(h, body.transactions, body.uncles)
-                self.chainservice.add_block(t_block, proto)  # this blocks if the queue is full
+                try:
+                    h = blockheaders_chain.pop(0)
+                    t_block = TransientBlock(h, body.transactions, body.uncles)
+                    self.chainservice.add_block(t_block, proto)  # this blocks if the queue is full
+                except IndexError as e:
+                    log_st.error('headers and bodies mismatch', error=e)
+                    self.exit(success=False)
             log_st.debug('adding blocks done', took=time.time() - ts)
 
         # done
