@@ -152,6 +152,7 @@ class SyncTask(object):
         while blockheaders_chain:
             blockhashes_batch = [h.hash for h in blockheaders_chain[:self.max_blocks_per_request]]
             t_blocks = []
+            bodies = []
 
             # try with protos
             protocols = self.protocols
@@ -164,7 +165,7 @@ class SyncTask(object):
                     continue
                 assert proto not in self.requests
                 # request
-                log_st.debug('requesting blocks', num=len(blockhashes_batch))
+                log_st.debug('requesting blocks', num=len(blockhashes_batch), missing=len(blockheaders_chain)-len(blockhashes_batch))
                 deferred = AsyncResult()
                 self.requests[proto] = deferred
                 proto.send_getblockbodies(*blockhashes_batch)
@@ -185,7 +186,7 @@ class SyncTask(object):
 
             # add received t_blocks
             num_fetched += len(bodies)
-            log_st.debug('received blcok bodies', num=len(bodies), num_fetched=num_fetched,
+            log_st.debug('received block bodies', num=len(bodies), num_fetched=num_fetched,
                          total=num_blocks, missing=num_blocks - num_fetched)
 
             if not bodies:
@@ -376,7 +377,7 @@ class Synchronizer(object):
             self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
 
     def receive_blockbodies(self, proto, bodies):
-        log.debug('blocks received', proto=proto, num=len(bodies))
+        log.debug('blockbodies received', proto=proto, num=len(bodies))
         if self.synctask:
             self.synctask.receive_blockbodies(proto, bodies)
         else:
