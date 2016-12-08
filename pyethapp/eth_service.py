@@ -256,7 +256,7 @@ class ChainService(WiredService):
         try:
             while not self.block_queue.empty():
                 # sleep at the beginning because continue keywords will skip bottom
-                gevent.sleep()
+                gevent.sleep(0.001)
 
                 t_block, proto = self.block_queue.peek()  # peek: knows_block while processing
                 if t_block.header.hash in self.chain:

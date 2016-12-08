@@ -44,6 +44,8 @@ class SyncTask(object):
         self.requests = dict()  # proto: Event
         self.start_block_number = self.chain.head.number
         self.end_block_number = self.start_block_number + 1  # minimum synctask
+        self.max_block_revert = 3600*24 / self.chainservice.config['eth']['block']['DIFF_ADJUSTMENT_CUTOFF']
+        self.start_block_number_min = max(self.chain.head.number-self.max_block_revert, 0)
         gevent.spawn(self.run)
 
     def run(self):
@@ -122,7 +124,18 @@ class SyncTask(object):
             for header in blockheaders_batch:  # youngest to oldest
                 blockhash = header.hash
                 if blockhash not in self.chain:
-                    blockheaders_chain.append(header)
+                    if header.number <= self.start_block_number_min:
+                        # We have received so many headers that a very unlikely big revert will happen,
+                        # which is nearly impossible.
+                        log_st.warn('syncing failed with endless headers',
+                                    end=header.number, len=len(blockheaders_chain))
+                        return self.exit(success=False)
+                    elif len(blockheaders_chain) == 0 or blockheaders_chain[-1].prevhash == header.hash:
+                        blockheaders_chain.append(header)
+                    else:
+                        log_st.warn('syncing failed because discontinuous header received',
+                                    child=blockheaders_chain[-1], parent=header)
+                        return self.exit(success=False)
                 else:
                     log_st.debug('found known block header', blockhash=utils.encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
@@ -151,7 +164,6 @@ class SyncTask(object):
 
         while blockheaders_chain:
             blockhashes_batch = [h.hash for h in blockheaders_chain[:self.max_blocks_per_request]]
-            t_blocks = []
             bodies = []
 
             # try with protos
@@ -180,7 +192,7 @@ class SyncTask(object):
                     log_st.warn('empty getblockbodies reply, trying next proto')
                     continue
                 elif not isinstance(bodies[0], TransientBlockBody):
-                    log_st.warn('received unexpected data', data=repr(t_blocks))
+                    log_st.warn('received unexpected data')
                     bodies = []
                     continue
 
