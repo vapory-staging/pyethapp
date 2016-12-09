@@ -342,7 +342,7 @@ class Synchronizer(object):
         if self.chainservice.knows_block(block_hash=t_block.header.prevhash):
             log.debug('adding block')
             self.chainservice.add_block(t_block, proto)
-        elif not self.chainservice.is_syncing:
+        else:
             log.debug('missing parent')
             if not self.synctask:
                 self.synctask = SyncTask(self, proto, t_block.header.hash, chain_difficulty)
