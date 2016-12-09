@@ -30,10 +30,10 @@ class SyncTask(object):
     initial_blockheaders_per_request = 32
     max_blockheaders_per_request = 192
     max_blocks_per_request = 128
-    max_retries = 5
-    retry_delay = 0.5
-    blocks_request_timeout = 32.
-    blockheaders_request_timeout = 32.
+    max_retries = 3
+    retry_delay = 8.
+    blocks_request_timeout = 8.
+    blockheaders_request_timeout = 8.
 
     def __init__(self, synchronizer, proto, blockhash, chain_difficulty=0, originator_only=False):
         self.synchronizer = synchronizer
@@ -102,7 +102,7 @@ class SyncTask(object):
                 proto.send_getblockheaders(blockhash, max_blockheaders_per_request)
                 try:
                     blockheaders_batch = deferred.get(block=True,
-                                                     timeout=self.blockheaders_request_timeout)
+                                                      timeout=self.blockheaders_request_timeout)
                 except gevent.Timeout:
                     log_st.warn('syncing hashchain timed out')
                     continue
@@ -123,9 +123,10 @@ class SyncTask(object):
             if not blockheaders_batch:
                 retry += 1
                 if retry >= self.max_retries:
-                    log_st.warn('syncing failed with all peers', num_protos=len(protocols))
+                    log_st.warn('headers sync failed with all peers', num_protos=len(protocols))
                     return self.exit(success=False)
                 else:
+                    log_st.info('headers sync failed with peers, retry', retry=retry)
                     gevent.sleep(self.retry_delay)
                     continue
             retry = 0
@@ -214,9 +215,10 @@ class SyncTask(object):
             if not bodies:
                 retry += 1
                 if retry >= self.max_retries:
-                    log_st.warn('failed to fetch block bodies', missing=len(blockheaders_chain))
+                    log_st.warn('bodies sync failed with all peers', missing=len(blockheaders_chain))
                     return self.exit(success=False)
                 else:
+                    log_st.info('bodies sync failed with peers, retry', retry=retry)
                     gevent.sleep(self.retry_delay)
                     continue
             retry = 0
@@ -359,11 +361,11 @@ class Synchronizer(object):
             log.debug('adding block')
             self.chainservice.add_block(t_block, proto)
         else:
-            log.debug('missing parent')
+            log.debug('missing parent for new block', block=t_block)
             if not self.synctask:
                 self.synctask = SyncTask(self, proto, t_block.header.hash, chain_difficulty)
             else:
-                log.debug('existing task, discarding')
+                log.debug('already syncing, won\'t start new sync task')
 
     def receive_status(self, proto, blockhash, chain_difficulty):
         "called if a new peer is connected"
