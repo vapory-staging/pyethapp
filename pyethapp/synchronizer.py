@@ -30,6 +30,8 @@ class SyncTask(object):
     initial_blockheaders_per_request = 32
     max_blockheaders_per_request = 192
     max_blocks_per_request = 128
+    max_retries = 5
+    retry_delay = 0.5
     blocks_request_timeout = 32.
     blockheaders_request_timeout = 32.
 
@@ -76,6 +78,7 @@ class SyncTask(object):
         assert blockhash not in self.chain
 
         # get block hashes until we found a known one
+        retry = 0
         max_blockheaders_per_request = self.initial_blockheaders_per_request
         while blockhash not in self.chain:
             # proto with highest_difficulty should be the proto we got the newblock from
@@ -118,8 +121,14 @@ class SyncTask(object):
                 break
 
             if not blockheaders_batch:
-                log_st.warn('syncing failed with all peers', num_protos=len(protocols))
-                return self.exit(success=False)
+                retry += 1
+                if retry >= self.max_retries:
+                    log_st.warn('syncing failed with all peers', num_protos=len(protocols))
+                    return self.exit(success=False)
+                else:
+                    gevent.sleep(self.retry_delay)
+                    continue
+            retry = 0
 
             for header in blockheaders_batch:  # youngest to oldest
                 blockhash = header.hash
@@ -161,6 +170,7 @@ class SyncTask(object):
         blockheaders_chain.reverse()  # height rising order
         num_blocks = len(blockheaders_chain)
         num_fetched = 0
+        retry = 0
 
         while blockheaders_chain:
             blockhashes_batch = [h.hash for h in blockheaders_chain[:self.max_blocks_per_request]]
@@ -202,8 +212,14 @@ class SyncTask(object):
                          total=num_blocks, missing=num_blocks - num_fetched)
 
             if not bodies:
-                log_st.warn('failed to fetch block bodies', missing=len(blockheaders_chain))
-                return self.exit(success=False)
+                retry += 1
+                if retry >= self.max_retries:
+                    log_st.warn('failed to fetch block bodies', missing=len(blockheaders_chain))
+                    return self.exit(success=False)
+                else:
+                    gevent.sleep(self.retry_delay)
+                    continue
+            retry = 0
 
             ts = time.time()
             log_st.debug('adding blocks', qsize=self.chainservice.block_queue.qsize())
