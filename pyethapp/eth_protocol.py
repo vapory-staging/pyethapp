@@ -217,7 +217,7 @@ class ETHProtocol(BaseProtocol):
         cmd_id = 6
         structure = rlp.sedes.CountableList(TransientBlockBody)
 
-        def create(self, proto, bodies):
+        def create(self, proto, *bodies):
             if len(bodies) == 0:
                 return []
             if isinstance(bodies[0], Block):
