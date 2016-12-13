@@ -30,8 +30,8 @@ class SyncTask(object):
     initial_blockheaders_per_request = 32
     max_blockheaders_per_request = 192
     max_blocks_per_request = 128
-    max_retries = 3
-    retry_delay = 8.
+    max_retries = 16
+    retry_delay = 2.
     blocks_request_timeout = 8.
     blockheaders_request_timeout = 8.
 
