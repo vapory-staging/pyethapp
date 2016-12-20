@@ -251,7 +251,7 @@ class JSONRPCClient(object):
 
                 libraries[deploy_contract] = contract_address
 
-                deployed_code = self.call('eth_getCode', contract_address, 'latest')
+                deployed_code = self.call('eth_getCode', address_encoder(contract_address), 'latest')
 
                 if deployed_code == '0x':
                     raise RuntimeError("Contract address has no code, check gas usage.")
@@ -280,7 +280,7 @@ class JSONRPCClient(object):
         receipt = self.call('eth_getTransactionReceipt', '0x' + transaction_hash)
         contract_address = receipt['contractAddress']
 
-        deployed_code = self.call('eth_getCode', contract_address, 'latest')
+        deployed_code = self.call('eth_getCode', address_encoder(contract_address), 'latest')
 
         if deployed_code == '0x':
             raise RuntimeError("Deployment of {} failed. Contract address has no code, check gas usage.".format(
