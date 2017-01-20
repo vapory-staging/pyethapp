@@ -318,6 +318,7 @@ contract SampleContract {
 """
 
 
+@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
 def test_logfilters_topics(test_app):
     # slogging.configure(':trace')
     sample_compiled = _solidity.compile_code(
