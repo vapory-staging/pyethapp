@@ -25,7 +25,6 @@ from gevent.event import Event
 import config as app_config
 import eth_protocol
 import utils
-from casper_utils import casper_genesis
 from accounts import AccountsService, Account
 from console_service import Console
 from db_service import DBService

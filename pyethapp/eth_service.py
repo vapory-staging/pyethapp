@@ -13,12 +13,12 @@ from ethereum.block import Block
 from ethereum.chain import Chain
 from ethereum.config import Env
 from ethereum import config as ethereum_config
+from ethereum.state import get_block
 from ethereum.state_transition import check_block_header, validate_transaction, apply_transaction
 from ethereum.casper_utils import casper_config
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
-from ethereum.blocks import get_block_header
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.transactions import Transaction
@@ -459,7 +459,7 @@ class ChainService(WiredService):
                 if reverse:
                     for i in xrange(skip+1):
                         try:
-                            header = get_block_header(self.chain.db, origin_hash)
+                            header = get_block(self.chain.db, origin_hash)
                             origin_hash = header.prevhash
                         except KeyError:
                             unknown = True
@@ -467,7 +467,7 @@ class ChainService(WiredService):
                 else:
                     origin_hash = self.chain.index.get_block_by_number(origin.number + skip + 1)
                     try:
-                        header = get_block_header(self.chain.db, origin_hash)
+                        header = get_block(self.chain.db, origin_hash)
                         if self.chain.get_blockhashes_from_hash(header.hash, skip+1)[skip] == origin_hash:
                             origin_hash = header.hash
                         else:

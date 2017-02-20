@@ -1,4 +1,4 @@
-from ethereum.blocks import BlockHeader
+from ethereum.block import BlockHeader
 from ethereum.utils import decode_hex, int256, big_endian_to_int
 
 

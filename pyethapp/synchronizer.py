@@ -2,7 +2,7 @@ from gevent.event import AsyncResult
 import gevent
 import time
 from eth_protocol import TransientBlockBody, TransientBlock
-from ethereum.blocks import BlockHeader
+from ethereum.block import BlockHeader
 from ethereum.slogging import get_logger
 import ethereum.utils as utils
 import traceback
