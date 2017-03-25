@@ -40,7 +40,7 @@ from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, en
 log = slogging.get_logger('app')
 
 services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService,
-            PoWService, ValidatorService, JSONRPCServer, IPCRPCServer, Console]
+            PoWService, JSONRPCServer, IPCRPCServer, Console]
 
 
 class EthApp(BaseApp):
