@@ -16,7 +16,6 @@ from ethereum.ethpow import mine
 from ethereum import tester
 from ethereum.slogging import get_logger
 from devp2p.peermanager import PeerManager
-import ethereum._solidity
 
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
 from pyethapp.app import EthApp
@@ -326,8 +325,11 @@ def test_logfilters_topics(test_app):
     combined='bin,abi',
     )
 
-    theabi = sample_compiled['SampleContract']['abi']
-    theevm = sample_compiled['SampleContract']['bin_hex']
+    filepath = None
+    contract_data = _solidity.solidity_get_contract_data(
+        sample_compiled, filepath, 'SampleContract')
+    theabi = contract_data['abi']
+    theevm = contract_data['bin_hex']
 
     sender_address = test_app.services.accounts.unlocked_accounts[0].address
     sender = address_encoder(sender_address)
