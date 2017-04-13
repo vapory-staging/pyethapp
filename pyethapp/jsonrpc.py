@@ -499,6 +499,9 @@ def tx_encoder(transaction, block, i, pending):
         'gasPrice': quantity_encoder(transaction.gasprice),
         'gas': quantity_encoder(transaction.startgas),
         'input': data_encoder(transaction.data),
+        'r': quantity_encoder(transaction.r),
+        's': quantity_encoder(transaction.s),
+        'v': quantity_encoder(transaction.v),
     }
 
 
