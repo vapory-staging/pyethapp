@@ -772,7 +772,8 @@ class Miner(Subdispatcher):
 
     @public
     def accounts(self):
-        return [address_encoder(account.address) for account in self.app.services.accounts]
+        return [address_encoder(self.app.services.accounts.coinbase)] + \
+            [address_encoder(account.address) for account in self.app.services.accounts]
 
 
 class DB(Subdispatcher):
