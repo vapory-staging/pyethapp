@@ -20,6 +20,7 @@ from ethereum import casper_utils
 from ethereum import config as eth_config
 from ethereum.block import Block
 from ethereum.utils import decode_hex
+from ethereum.snapshot import create_snapshot, load_snapshot as _load_snapshot
 from gevent.event import Event
 
 import config as app_config
@@ -352,6 +353,53 @@ def blocktest(ctx, file, name):
 
     # finally stop
     app.stop()
+
+
+@app.command('snapshot')
+@click.option('-r', '--recent', type=int, default=1024,
+              help='Number of recent blocks. State before these blocks and these blocks will be dumped. On recover these blocks will be applied on restored state. (default: 1024)')
+@click.option('-f', '--filename', type=str, default=None,
+              help='Output file name. (default: auto-gen file prefixed by snapshot-')
+@click.pass_context
+def snapshot(ctx, recent, filename):
+    """Take a snapshot of current world state.
+
+    The snapshot will be saved in JSON format, including data like chain configurations and accounts.
+
+    It will overwrite exiting file if it already exists.
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    if not filename:
+        import time
+        filename = 'snapshot-%d.json' % int(time.time()*1000)
+
+    s = create_snapshot(app.services.chain.chain, recent)
+    with open(filename, 'w') as f:
+        json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
+        print 'snapshot saved to %s' % filename
+
+
+@app.command('load_snapshot')
+@click.argument('filename', type=str)
+@click.pass_context
+def load_snapshot(ctx, filename):
+    """Load snapshot FILE into local node database.
+
+    This process will OVERWRITE data in current database!!!
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    with open(filename, 'r') as f:
+        s = json.load(f, encoding='ascii')
+        _load_snapshot(app.services.chain.chain, s)
+        print 'snapshot %s loaded.' % filename
 
 
 @app.command('export')
