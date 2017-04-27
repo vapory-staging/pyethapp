@@ -27,7 +27,7 @@ def import_block(chain, rlp_data):
 if __name__ == '__main__':
     chain = get_chain()
     print '\nIMPORTING BLOCK'
-    # h = chain.index.get_block_by_number(447360)
+    # h = chain.get_blockhash_by_number(447360)
     # b = chain.get(h)
     # rlp_data = rlp.encode(b)
     import_block(chain, rlp_data)

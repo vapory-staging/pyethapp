@@ -35,7 +35,7 @@ def export_blocks(chain, head_number=None):
     head_number = head_number or chain.head.header.number
     block_number = 0
     while block_number < head_number:
-        h = chain.index.get_block_by_number(block_number)
+        h = chain.get_blockhash_by_number(block_number)
         raw = chain.blockchain.get(h)
         print raw.encode('hex')
         _progress(block_number)

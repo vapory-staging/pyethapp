@@ -443,7 +443,7 @@ def export_blocks(ctx, from_, to, file):
         log.debug('Exporting block {}'.format(n))
         if (n - from_) % 50000 == 0:
             log.info('Exporting block {} to {}'.format(n, min(n + 50000, to)))
-        block_hash = app.services.chain.chain.index.get_block_by_number(n)
+        block_hash = app.services.chain.chain.get_blockhash_by_number(n)
         # bypass slow block decoding by directly accessing db
         block_rlp = app.services.db.get(block_hash)
         file.write(block_rlp)

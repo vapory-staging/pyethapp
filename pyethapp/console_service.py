@@ -236,7 +236,7 @@ class Console(BaseService):
 
             def find_transaction(this, tx):
                 try:
-                    t, blk, idx = this.chain.index.get_transaction(tx.hash)
+                    t, blk, idx = this.chain.get_transaction(tx.hash)
                 except:
                     return {}
                 return dict(tx=t, block=blk, index=idx)

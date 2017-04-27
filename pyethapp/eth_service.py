@@ -431,7 +431,7 @@ class ChainService(WiredService):
                 proto.send_blockheaders(*headers)
                 return
             try:
-                origin_hash = self.chain.index.get_block_by_number(hash_or_number[1])
+                origin_hash = self.chain.get_blockhash_by_number(hash_or_number[1])
             except KeyError:
                 origin_hash = b''
         if not origin_hash or self.chain.has_blockhash(origin_hash):
@@ -465,7 +465,7 @@ class ChainService(WiredService):
                             unknown = True
                             break
                 else:
-                    origin_hash = self.chain.index.get_block_by_number(origin.number + skip + 1)
+                    origin_hash = self.chain.get_blockhash_by_number(origin.number + skip + 1)
                     try:
                         header = get_block(self.chain.db, origin_hash)
                         if self.chain.get_blockhashes_from_hash(header.hash, skip+1)[skip] == origin_hash:
@@ -478,13 +478,13 @@ class ChainService(WiredService):
                 if reverse:
                     if origin.number >= (skip+1):
                         number = origin.number - (skip + 1)
-                        origin_hash = self.chain.index.get_block_by_number(number)
+                        origin_hash = self.chain.get_blockhash_by_number(number)
                     else:
                         unknown = True
                 else:
                     number = origin.number + skip + 1
                     try:
-                        origin_hash = self.chain.index.get_block_by_number(number)
+                        origin_hash = self.chain.get_blockhash_by_number(number)
                     except KeyError:
                         unknown = True
 
