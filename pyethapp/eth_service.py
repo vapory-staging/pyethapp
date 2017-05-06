@@ -5,6 +5,7 @@ from collections import deque
 import eth_protocol
 import gevent
 import gevent.lock
+from gevent.event import AsyncResult
 import rlp
 import statistics
 from devp2p.protocol import BaseProtocol
@@ -68,6 +69,38 @@ def update_watcher(chainservice):
         last = d['head']
         gevent.sleep(timeout)
         assert last != d['head'], 'no updates for %d secs' % timeout
+
+
+class DAOChallenger(object):
+
+    request_timeout = 8.
+
+    def __init__(self, chainservice, proto):
+        self.chainservice = chainservice
+        self.config = chainservice.config['eth']['block']
+        self.proto = proto
+        self.deferred = None
+        gevent.spawn(self.run)
+
+    def run(self):
+        self.deferred = AsyncResult()
+        self.proto.send_getblockheaders(self.config['DAO_FORK_BLKNUM'], 1, 0)
+        try:
+            dao_headers = self.deferred.get(block=True, timeout=self.request_timeout)
+            log.debug("received DAO challenge answer", proto=self.proto, answer=dao_headers)
+            result = len(dao_headers) == 1 and \
+                    dao_headers[0].hash == self.config['DAO_FORK_BLKHASH'] and \
+                    dao_headers[0].extra_data == self.config['DAO_FORK_BLKEXTRA']
+            self.chainservice.on_dao_challenge_answer(self.proto, result)
+        except gevent.Timeout:
+            log.debug('challenge dao timed out', proto=self.proto)
+            self.chainservice.on_dao_challenge_answer(self.proto, False)
+
+    def receive_blockheaders(self, proto, blockheaders):
+        log.debug('blockheaders received', proto=proto, num=len(blockheaders))
+        if proto != self.proto:
+            return
+        self.deferred.set(blockheaders)
 
 
 class ChainService(WiredService):
@@ -147,6 +180,7 @@ class ChainService(WiredService):
                 "Genesis hash mismatch.\n  Expected: %s\n  Got: %s" % (
                     sce['genesis_hash'], self.chain.genesis.hex_hash)
 
+        self.dao_challenges = dict()
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
@@ -383,14 +417,25 @@ class ChainService(WiredService):
             log.warn("invalid genesis hash", remote_id=proto, genesis=genesis_hash.encode('hex'))
             raise eth_protocol.ETHProtocolError('wrong genesis block')
 
-        # request chain
-        self.synchronizer.receive_status(proto, chain_head_hash, chain_difficulty)
+        # initiate DAO challenge
+        self.dao_challenges[proto] = (DAOChallenger(self, proto), chain_head_hash, chain_difficulty)
 
-        # send transactions
-        transactions = self.transaction_queue.peek()
-        if transactions:
-            log.debug("sending transactions", remote_id=proto)
-            proto.send_transactions(*transactions)
+    def on_dao_challenge_answer(self, proto, result):
+        if result:
+            log.debug("DAO challenge passed")
+            _, chain_head_hash, chain_difficulty = self.dao_challenges[proto]
+
+            # request chain
+            self.synchronizer.receive_status(proto, chain_head_hash, chain_difficulty)
+            # send transactions
+            transactions = self.transaction_queue.peek()
+            if transactions:
+                log.debug("sending transactions", remote_id=proto)
+                proto.send_transactions(*transactions)
+        else:
+            log.debug("peer failed to answer DAO challenge, stop.", proto=proto)
+            proto.peer.stop()
+        del self.dao_challenges[proto]
 
     # transactions
 
@@ -498,7 +543,11 @@ class ChainService(WiredService):
                       first=encode_hex(blockheaders[0].hash), last=encode_hex(blockheaders[-1].hash))
         else:
             log.debug("recv 0 remote block headers, signifying genesis block")
-        self.synchronizer.receive_blockheaders(proto, blockheaders)
+
+        if proto in self.dao_challenges:
+            self.dao_challenges[proto][0].receive_blockheaders(proto, blockheaders)
+        else:
+            self.synchronizer.receive_blockheaders(proto, blockheaders)
 
     # blocks ################
 
