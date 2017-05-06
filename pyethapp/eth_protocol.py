@@ -1,11 +1,54 @@
 from devp2p.protocol import BaseProtocol, SubProtocolError
 from ethereum.transactions import Transaction
-from ethereum.blocks import Block, BlockHeader
+from ethereum.block import Block, BlockHeader
+from ethereum.utils import hash32, int_to_big_endian, big_endian_to_int
 import rlp
 import gevent
 import time
 from ethereum import slogging
 log = slogging.get_logger('protocol.eth')
+
+
+class TransientBlockBody(rlp.Serializable):
+    fields = [
+        ('transactions', rlp.sedes.CountableList(Transaction)),
+        ('uncles', rlp.sedes.CountableList(BlockHeader))
+    ]
+
+
+class TransientBlock(rlp.Serializable):
+
+    """A partially decoded, unvalidated block."""
+
+    fields = [
+        ('header', BlockHeader),
+        ('transactions', rlp.sedes.CountableList(Transaction)),
+        ('uncles', rlp.sedes.CountableList(BlockHeader))
+    ]
+
+    @classmethod
+    def init_from_rlp(cls, block_data, newblock_timestamp=0):
+        header = BlockHeader.deserialize(block_data[0])
+        transactions = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
+        uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
+        return cls(header, transactions, uncles, newblock_timestamp)
+
+    def __init__(self, header, transactions, uncles, newblock_timestamp=0):
+        self.newblock_timestamp = newblock_timestamp
+        self.header = header
+        self.transactions = transactions
+        self.uncles = uncles
+
+    def to_block(self):
+        """Convert the transient block to a :class:`ethereum.blocks.Block`"""
+        return Block(self.header, transactions=self.transactions, uncles=self.uncles)
+
+    @property
+    def hex_hash(self):
+        return self.header.hex_hash()
+
+    def __repr__(self):
+        return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])
 
 
 class ETHProtocolError(SubProtocolError):
@@ -23,10 +66,10 @@ class ETHProtocol(BaseProtocol):
     network_id = 0
     max_cmd_id = 15  # FIXME
     name = 'eth'
-    version = 61
+    version = 62
 
-    max_getblocks_count = 64
-    max_getblockhashes_count = 2048
+    max_getblocks_count = 128
+    max_getblockheaders_count = 192
 
     def __init__(self, peer, service):
         # required by P2PProtocol
@@ -60,10 +103,22 @@ class ETHProtocol(BaseProtocol):
     class newblockhashes(BaseProtocol.command):
 
         """
-        NewBlockHashes [+0x01: P, hash1: B_32, hash2: B_32, ...] Specify one or more new blocks which have appeared on the network. Including hashes that the sending peer could reasonable be considered to know that the receiving node is aware of is considered Bad Form, and may reduce the reputation of the sending node. Including hashes that the sending node later refuses to honour with a proceeding GetBlocks message is considered Bad Form, and may reduce the reputation of the sending node.
+        NewBlockHashes [+0x01: P, [hash_0: B_32, number_0: P], [hash_1: B_32, number_1: P], ...]
+        Specify one or more new blocks which have appeared on the network.
+        Including hashes that the sending peer could reasonable be considered to know that
+        the receiving node is aware of is considered Bad Form, and may reduce the
+        reputation of the sending node. Including hashes that the sending node later
+        refuses to honour with a proceeding GetBlocks message is considered Bad Form, and
+        may reduce the reputation of the sending node.
         """
         cmd_id = 1
-        structure = rlp.sedes.CountableList(rlp.sedes.binary)
+
+        class Data(rlp.Serializable):
+            fields = [
+                ('hash', hash32),
+                ('number', rlp.sedes.big_endian_int)
+            ]
+        structure = rlp.sedes.CountableList(Data)
 
     class transactions(BaseProtocol.command):
 
@@ -89,56 +144,85 @@ class ETHProtocol(BaseProtocol):
                     gevent.sleep(0.0001)
             return txs
 
-    class getblockhashes(BaseProtocol.command):
+    class getblockheaders(BaseProtocol.command):
 
         """
-        Requests a BlockHashes message of at most maxBlocks entries, of block hashes from
-        the blockchain, starting at the parent of block hash. Does not require the peer
-        to give maxBlocks hashes - they could give somewhat fewer.
+        [+0x03: P, block: { P , B_32 }, maxHeaders: P, skip: P, reverse: P in { 0 , 1 } ]
+        Require peer to return a BlockHeaders message.
+        Reply must contain a number of block headers, of rising number when reverse is 0,
+        falling when 1, skip blocks apart, beginning at block block (denoted by either number
+        or hash) in the canonical chain, and with at most maxHeaders items.
         """
         cmd_id = 3
 
         structure = [
-            ('child_block_hash', rlp.sedes.binary),
-            ('count', rlp.sedes.big_endian_int),
+            ('block', rlp.sedes.binary),
+            ('amount', rlp.sedes.big_endian_int),
+            ('skip', rlp.sedes.big_endian_int),
+            ('reverse', rlp.sedes.big_endian_int)
         ]
 
-    class blockhashes(BaseProtocol.command):
+        def create(self, proto, hash_or_number, amount, skip=0, reverse=1):
+            if isinstance(hash_or_number, (int, long)):
+                block = int_to_big_endian(hash_or_number)
+            else:
+                block = hash_or_number
+            return [block, amount, skip, reverse]
+
+        def receive(self, proto, data):
+            if len(data['block']) == 32:
+                hash_or_number = (data['block'], 0)
+            elif len(data['block']) <= 8:
+                hash_or_number = (b'', big_endian_to_int(data['block']))
+            else:
+                raise Exception('invalid hash_or_number value')
+            data['hash_or_number'] = hash_or_number
+
+            for cb in self.receive_callbacks:
+                cb(proto, **data)
+
+    class blockheaders(BaseProtocol.command):
 
         """
-        Gives a series of hashes of blocks (each the child of the next). This implies that
-        the blocks are ordered from youngest to oldest.
+        [+0x04, blockHeader_0, blockHeader_1, ...]
+        Reply to GetBlockHeaders.
+        The items in the list (following the message ID) are block headers in the
+        format described in the main Ethereum specification, previously asked for
+        in a GetBlockHeaders message. This may validly contain no block headers
+         if no block headers were able to be returned for the GetBlockHeaders query.
         """
         cmd_id = 4
-        structure = rlp.sedes.CountableList(rlp.sedes.binary)
+        structure = rlp.sedes.CountableList(BlockHeader)
 
-    class getblocks(BaseProtocol.command):
+    class getblockbodies(BaseProtocol.command):
 
         """
-        Requests a Blocks message detailing a number of blocks to be sent, each referred to
-        by a hash. Note: Don't expect that the peer necessarily give you all these blocks
-        in a single message - you might have to re-request them.
+        [+0x05, hash_0: B_32, hash_1: B_32, ...]
+        Require peer to return a BlockBodies message.
+        Specify the set of blocks that we're interested in with the hashes.
         """
         cmd_id = 5
         structure = rlp.sedes.CountableList(rlp.sedes.binary)
 
-    class blocks(BaseProtocol.command):
+    class blockbodies(BaseProtocol.command):
+
+        """
+        [+0x06, [transactions_0, uncles_0] , ...]
+        Reply to GetBlockBodies.
+        The items in the list (following the message ID) are some of the blocks,
+        minus the header, in the format described in the main Ethereum specification,
+        previously asked for in a GetBlockBodies message. This may validly contain
+        no items if no blocks were able to be returned for the GetBlockBodies query.
+        """
         cmd_id = 6
-        structure = rlp.sedes.CountableList(Block)
+        structure = rlp.sedes.CountableList(TransientBlockBody)
 
-        @classmethod
-        def encode_payload(cls, list_of_rlp):
-            return rlp.encode([rlp.codec.RLPData(x) for x in list_of_rlp], infer_serializer=False)
-
-        @classmethod
-        def decode_payload(cls, rlp_data):
-            # fn = 'blocks.fromthewire.hex.rlp'
-            # open(fn, 'a').write(rlp_data.encode('hex') + '\n')
-            # convert to dict
-            blocks = []
-            for block in rlp.decode_lazy(rlp_data):
-                blocks.append(TransientBlock(block))
-            return blocks
+        def create(self, proto, *bodies):
+            if len(bodies) == 0:
+                return []
+            if isinstance(bodies[0], Block):
+                bodies = [TransientBlockBody(b.transactions, b.uncles) for b in bodies]
+            return bodies
 
     class newblock(BaseProtocol.command):
 
@@ -159,80 +243,7 @@ class ETHProtocol(BaseProtocol):
             # print rlp_data.encode('hex')
             ll = rlp.decode_lazy(rlp_data)
             assert len(ll) == 2
-            transient_block = TransientBlock(ll[0], time.time())
+            transient_block = TransientBlock.init_from_rlp(ll[0], time.time())
             difficulty = rlp.sedes.big_endian_int.deserialize(ll[1])
             data = [transient_block, difficulty]
             return dict((cls.structure[i][0], v) for i, v in enumerate(data))
-
-    class getblockhashesfromnumber(BaseProtocol.command):
-
-        """
-        Requests block hashes starting from a particular block number
-        """
-        cmd_id = 8
-        structure = [('number', rlp.sedes.big_endian_int),
-                     ('count', rlp.sedes.big_endian_int)]
-
-    # class getblockheaders(BaseProtocol.command):
-
-    #     """
-    #     Requests a BlockHeaders message detailing a number of block headers to be sent,
-    #     each referred to by a hash. Note: Don't expect that the peer necessarily give you all
-    #     these block headers in a single message - you might have to re-request them.
-    #     """
-    #     cmd_id = 9
-    #     structure = rlp.sedes.CountableList(rlp.sedes.binary)
-
-    # class blockheaders(BaseProtocol.command):
-    #     cmd_id = 10
-    #     structure = rlp.sedes.CountableList(Block)
-
-    #     @classmethod
-    #     def encode_payload(cls, list_of_rlp):
-    #         return rlp.encode([rlp.codec.RLPData(x) for x in list_of_rlp], infer_serializer=False)
-
-    #     @classmethod
-    #     def decode_payload(cls, rlp_data):
-    # fn = 'blocks.fromthewire.hex.rlp'
-    # open(fn, 'a').write(rlp_data.encode('hex') + '\n')
-    # convert to dict
-    #         blockheaders = []
-    #         for blockheader in rlp.decode_lazy(rlp_data):
-    #             blockheaders.append(BlockHeader(blockheader))
-    #         return blockheaders
-
-    # class hashlookup(BaseProtocol.command):
-    #     cmd_id = 11
-    #     structure = rlp.sedes.CountableList(rlp.sedes.binary)
-
-    # class hashlookupresponse(BaseProtocol.command):
-    #     cmd_id = 12
-    #     structure = rlp.sedes.CountableList(rlp.sedes.binary)
-
-
-class TransientBlock(rlp.Serializable):
-
-    """A partially decoded, unvalidated block."""
-
-    fields = [
-        ('header', BlockHeader),
-        ('transaction_list', rlp.sedes.CountableList(Transaction)),
-        ('uncles', rlp.sedes.CountableList(BlockHeader))
-    ]
-
-    def __init__(self, block_data, newblock_timestamp=0):
-        self.newblock_timestamp = newblock_timestamp
-        self.header = BlockHeader.deserialize(block_data[0])
-        self.transaction_list = rlp.sedes.CountableList(Transaction).deserialize(block_data[1])
-        self.uncles = rlp.sedes.CountableList(BlockHeader).deserialize(block_data[2])
-
-    def to_block(self, env, parent=None):
-        """Convert the transient block to a :class:`ethereum.blocks.Block`"""
-        return Block(self.header, self.transaction_list, self.uncles, env=env, parent=parent)
-
-    @property
-    def hex_hash(self):
-        return self.header.hex_hash()
-
-    def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])

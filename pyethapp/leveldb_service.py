@@ -59,7 +59,7 @@ class LevelDB(BaseDB):
                                                 corruption is detected
     """
 
-    max_open_files = 128
+    max_open_files = 32000
     block_cache_size = 8 * 1024**2
     write_buffer_size = 4 * 1024**2
 
@@ -71,7 +71,7 @@ class LevelDB(BaseDB):
                  write_buffer_size=self.write_buffer_size,
                  max_open_files=self.max_open_files)
         self.dbfile = dbfile
-        self.db = leveldb.LevelDB(dbfile)
+        self.db = leveldb.LevelDB(dbfile, max_open_files=self.max_open_files)
         self.commit_counter = 0
 
     def reopen(self):

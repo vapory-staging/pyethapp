@@ -16,11 +16,14 @@ from devp2p.app import BaseApp
 from devp2p.discovery import NodeDiscovery
 from devp2p.peermanager import PeerManager
 from devp2p.service import BaseService
-from ethereum import blocks
-from ethereum.blocks import Block
+from ethereum import casper_utils
+from ethereum import config as eth_config
+from ethereum.block import Block
+from ethereum.utils import decode_hex
+from ethereum.snapshot import create_snapshot, load_snapshot as _load_snapshot
 from gevent.event import Event
 
-import config as konfig
+import config as app_config
 import eth_protocol
 import utils
 from accounts import AccountsService, Account
@@ -29,6 +32,7 @@ from db_service import DBService
 from eth_service import ChainService
 from jsonrpc import JSONRPCServer, IPCRPCServer
 from pow_service import PoWService
+from validator_service import ValidatorService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
@@ -36,8 +40,8 @@ from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, en
 
 log = slogging.get_logger('app')
 
-services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService, PoWService,
-            JSONRPCServer, IPCRPCServer, Console]
+services = [DBService, AccountsService, NodeDiscovery, PeerManager, ChainService,
+            PoWService, JSONRPCServer, IPCRPCServer, Console]
 
 
 class EthApp(BaseApp):
@@ -62,12 +66,12 @@ class EthApp(BaseApp):
                   "'livenet' and 'testnet'. The previous values 'frontier' and "
                   "'morden' will be removed in a future update."),
               default=DEFAULT_PROFILE, help="Configuration profile.", show_default=True)
-@click.option('alt_config', '--Config', '-C', type=str, callback=konfig.validate_alt_config_file,
+@click.option('alt_config', '--Config', '-C', type=str, callback=app_config.validate_alt_config_file,
               help='Alternative config file')
 @click.option('config_values', '-c', multiple=True, type=str,
               help='Single configuration parameters (<param>=<value>)')
 @click.option('alt_data_dir', '-d', '--data-dir', multiple=False, type=str,
-              help='data directory', default=konfig.default_data_dir, show_default=True)
+              help='data directory', default=app_config.default_data_dir, show_default=True)
 @click.option('-l', '--log_config', multiple=False, type=str, default=":info",
               help='log_config string: e.g. ":info,eth:debug', show_default=True)
 @click.option('--log-json/--log-no-json', default=False,
@@ -78,29 +82,31 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
+@click.option('-j', '--join_validators', multiple=False, type=bool,
+              help='run as a Casper validator')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, unlock, password, log_file):
+        mining_pct, join_validators, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
     # data dir default or from cli option
     alt_data_dir = os.path.expanduser(alt_data_dir)
-    data_dir = alt_data_dir or konfig.default_data_dir
-    konfig.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
+    data_dir = alt_data_dir or app_config.default_data_dir
+    app_config.setup_data_dir(data_dir)  # if not available, sets up data_dir and required config
     log.info('using data in', path=data_dir)
 
     # prepare configuration
     # config files only contain required config (privkeys) and config different from the default
     if alt_config:  # specified config file
-        config = konfig.load_config(alt_config)
+        config = app_config.load_config(alt_config)
         if not config:
             log.warning('empty config given. default config values will be used')
     else:  # load config from default or set data_dir
-        config = konfig.load_config(data_dir)
+        config = app_config.load_config(data_dir)
 
     config['data_dir'] = data_dir
 
@@ -111,9 +117,9 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     bootstrap_nodes_from_config_file = config.get('discovery', {}).get('bootstrap_nodes')
 
     # add default config
-    konfig.update_config_with_defaults(config, konfig.get_default_config([EthApp] + services))
-
-    konfig.update_config_with_defaults(config, {'eth': {'block': blocks.default_config}})
+    app_config.update_config_with_defaults(config, app_config.get_default_config([EthApp] + services))
+    #app_config.update_config_with_defaults(config, {'eth': {'block': casper_utils.casper_config}})
+    app_config.update_config_with_defaults(config, {'eth': {'block': eth_config.default_config}})
 
     # Set config values based on profile selection
     merge_dict(config, PROFILES[profile])
@@ -132,7 +138,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     # override values with values from cmd line
     for config_value in config_values:
         try:
-            konfig.set_config_param(config, config_value)
+            app_config.set_config_param(config, config_value)
         except ValueError:
             raise BadParameter('Config parameter must be of the form "a.b.c=d" where "a.b.c" '
                                'specifies the parameter to set and d is a valid yaml value '
@@ -144,7 +150,7 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
             del config['eth']['genesis_hash']
 
     # Load genesis config
-    konfig.update_config_from_genesis_json(config,
+    app_config.update_config_from_genesis_json(config,
                                            genesis_json_filename_or_dict=config['eth']['genesis'])
     if bootstrap_node:
         config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
@@ -153,6 +159,24 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
     if not config.get('pow', {}).get('activated'):
         config['deactivated_services'].append(PoWService.name)
+
+    if join_validators:
+        privkey = decode_hex(config['validator']['privkey_hex'])
+        config['validator'] = {
+            'activated': True,
+            'privkey': privkey,
+            'deposit_size': config['validator']['deposit_size'],
+            'seed': join_validators
+        }
+    else:
+        config['validator'] = {
+            'activated': False,
+            'privkey': '\x00'*32,
+            'deposit_size': 0,
+            'seed': ''
+        }
+    if not config.get('validator', {}).get('activated', False):
+        config['deactivated_services'].append(ValidatorService)
 
     ctx.obj = {'config': config,
                'unlock': unlock,
@@ -181,10 +205,6 @@ def run(ctx, dev, nodial, fake, console):
         config['p2p']['min_peers'] = 0
 
     if fake:
-        from ethereum import blocks
-        blocks.GENESIS_DIFFICULTY = 1024
-        blocks.BLOCK_DIFF_FACTOR = 16
-        blocks.MIN_GAS_LIMIT = blocks.default_config['GENESIS_GAS_LIMIT'] / 2
         config['eth']['block']['GENESIS_DIFFICULTY'] = 1024
         config['eth']['block']['BLOCK_DIFF_FACTOR'] = 16
 
@@ -258,7 +278,7 @@ def dump_config(config):
     if len(alloc) > 100:
         log.info('omitting reporting of %d accounts in genesis' % len(alloc))
         del cfg['eth']['block']['GENESIS_INITIAL_ALLOC']
-    konfig.dump_config(cfg)
+    app_config.dump_config(cfg)
 
 
 @app.command()
@@ -335,6 +355,53 @@ def blocktest(ctx, file, name):
     app.stop()
 
 
+@app.command('snapshot')
+@click.option('-r', '--recent', type=int, default=1024,
+              help='Number of recent blocks. State before these blocks and these blocks will be dumped. On recover these blocks will be applied on restored state. (default: 1024)')
+@click.option('-f', '--filename', type=str, default=None,
+              help='Output file name. (default: auto-gen file prefixed by snapshot-')
+@click.pass_context
+def snapshot(ctx, recent, filename):
+    """Take a snapshot of current world state.
+
+    The snapshot will be saved in JSON format, including data like chain configurations and accounts.
+
+    It will overwrite exiting file if it already exists.
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    if not filename:
+        import time
+        filename = 'snapshot-%d.json' % int(time.time()*1000)
+
+    s = create_snapshot(app.services.chain.chain, recent)
+    with open(filename, 'w') as f:
+        json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
+        print 'snapshot saved to %s' % filename
+
+
+@app.command('load_snapshot')
+@click.argument('filename', type=str)
+@click.pass_context
+def load_snapshot(ctx, filename):
+    """Load snapshot FILE into local node database.
+
+    This process will OVERWRITE data in current database!!!
+    """
+    app = EthApp(ctx.obj['config'])
+    DBService.register_with_app(app)
+    AccountsService.register_with_app(app)
+    ChainService.register_with_app(app)
+
+    with open(filename, 'r') as f:
+        s = json.load(f, encoding='ascii')
+        _load_snapshot(app.services.chain.chain, s)
+        print 'snapshot %s loaded.' % filename
+
+
 @app.command('export')
 @click.option('--from', 'from_', type=int, help='Number of the first block (default: genesis)')
 @click.option('--to', type=int, help='Number of the last block (default: latest)')
@@ -376,7 +443,7 @@ def export_blocks(ctx, from_, to, file):
         log.debug('Exporting block {}'.format(n))
         if (n - from_) % 50000 == 0:
             log.info('Exporting block {} to {}'.format(n, min(n + 50000, to)))
-        block_hash = app.services.chain.chain.index.get_block_by_number(n)
+        block_hash = app.services.chain.chain.get_blockhash_by_number(n)
         # bypass slow block decoding by directly accessing db
         block_rlp = app.services.db.get(block_hash)
         file.write(block_rlp)
@@ -420,7 +487,7 @@ def import_blocks(ctx, file):
             try:
                 if not isinstance(block_data, list) or len(block_data) != 3:
                     raise rlp.DeserializationError('', block_data)
-                yield eth_protocol.TransientBlock(block_data)
+                yield eth_protocol.TransientBlock.init_from_rlp(block_data)
             except (IndexError, rlp.DeserializationError):
                 log.warning('not a valid block', byte_index=i)  # we can still continue
                 yield None

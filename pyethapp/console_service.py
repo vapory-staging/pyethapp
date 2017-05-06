@@ -236,7 +236,7 @@ class Console(BaseService):
 
             def find_transaction(this, tx):
                 try:
-                    t, blk, idx = this.chain.index.get_transaction(tx.hash)
+                    t, blk, idx = this.chain.get_transaction(tx.hash)
                 except:
                     return {}
                 return dict(tx=t, block=blk, index=idx)
@@ -248,7 +248,7 @@ class Console(BaseService):
                 from eth_protocol import TransientBlock
                 import rlp
                 l = rlp.decode_lazy(rlp_data)
-                return TransientBlock(l).to_block(this.chain.blockchain)
+                return TransientBlock.init_from_rlp(l).to_block()
 
         try:
             from ethereum._solidity import solc_wrapper
