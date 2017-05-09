@@ -4,7 +4,7 @@ from gevent.event import Event
 from devp2p.app import BaseApp
 from devp2p.service import BaseService
 from ethereum import slogging
-from ethereum.blocks import Block, BlockHeader
+from ethereum.block import Block, BlockHeader
 from ethereum.config import Env
 from ethereum.db import DB
 

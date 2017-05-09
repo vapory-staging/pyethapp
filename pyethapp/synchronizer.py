@@ -43,7 +43,8 @@ class SyncTask(object):
         self.originator_only = originator_only
         self.blockhash = blockhash
         self.chain_difficulty = chain_difficulty
-        self.requests = dict()  # proto: Event
+        self.header_requests = dict()  # proto: Event
+        self.body_requests = dict()
         self.start_block_number = self.chain.head.number
         self.end_block_number = self.start_block_number + 1  # minimum synctask
         self.max_block_revert = 3600*24 / self.chainservice.config['eth']['block']['DIFF_ADJUSTMENT_CUTOFF']
@@ -96,9 +97,9 @@ class SyncTask(object):
                     continue
 
                 # request
-                assert proto not in self.requests
+                assert proto not in self.header_requests
                 deferred = AsyncResult()
-                self.requests[proto] = deferred
+                self.header_requests[proto] = deferred
                 proto.send_getblockheaders(blockhash, max_blockheaders_per_request)
                 try:
                     blockheaders_batch = deferred.get(block=True,
@@ -109,7 +110,7 @@ class SyncTask(object):
                 finally:
                     # is also executed 'on the way out' when any other clause of the try statement
                     # is left via a break, continue or return statement.
-                    del self.requests[proto]
+                    del self.header_requests[proto]
 
                 if not blockheaders_batch:
                     log_st.warn('empty getblockheaders result')
@@ -186,11 +187,11 @@ class SyncTask(object):
             for proto in protocols:
                 if proto.is_stopped:
                     continue
-                assert proto not in self.requests
+                assert proto not in self.body_requests
                 # request
                 log_st.debug('requesting blocks', num=len(blockhashes_batch), missing=len(blockheaders_chain)-len(blockhashes_batch))
                 deferred = AsyncResult()
-                self.requests[proto] = deferred
+                self.body_requests[proto] = deferred
                 proto.send_getblockbodies(*blockhashes_batch)
                 try:
                     bodies = deferred.get(block=True, timeout=self.blocks_request_timeout)
@@ -198,7 +199,7 @@ class SyncTask(object):
                     log_st.warn('getblockbodies timed out, trying next proto')
                     continue
                 finally:
-                    del self.requests[proto]
+                    del self.body_requests[proto]
                 if not bodies:
                     log_st.warn('empty getblockbodies reply, trying next proto')
                     continue
@@ -248,17 +249,17 @@ class SyncTask(object):
 
     def receive_blockbodies(self, proto, bodies):
         log.debug('block bodies received', proto=proto, num=len(bodies))
-        if proto not in self.requests:
+        if proto not in self.body_requests:
             log.debug('unexpected blocks')
             return
-        self.requests[proto].set(bodies)
+        self.body_requests[proto].set(bodies)
 
     def receive_blockheaders(self, proto, blockheaders):
         log.debug('blockheaders received', proto=proto, num=len(blockheaders))
-        if proto not in self.requests:
+        if proto not in self.header_requests:
             log.debug('unexpected blockheaders')
             return
-        self.requests[proto].set(blockheaders)
+        self.header_requests[proto].set(blockheaders)
 
 
 class Synchronizer(object):

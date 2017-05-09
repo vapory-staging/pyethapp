@@ -168,8 +168,9 @@ class ChainService(WiredService):
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
 
+        genesis_data = sce['genesis_data'] if 'genesis_data' in sce else dict()
         self.chain = Chain(env=env,
-                           genesis=sce['genesis_data'],
+                           genesis=genesis_data,
                            coinbase=coinbase,
                            new_head_cb=self._on_new_head)
         header = self.chain.state.prev_headers[0]
