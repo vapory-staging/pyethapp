@@ -45,7 +45,7 @@ class TransientBlock(rlp.Serializable):
 
     @property
     def hex_hash(self):
-        return self.header.hex_hash()
+        return self.header.hex_hash
 
     def __repr__(self):
         return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])
