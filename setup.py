@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import codecs
+import os
 from setuptools import setup
 from setuptools.command.test import test as TestCommand
 
@@ -45,6 +46,14 @@ with open('requirements.txt') as requirements_file:
 
 INSTALL_REQUIRES = list(set(INSTALL_REQUIRES))
 
+DEPENDENCY_LINKS = []
+if os.environ.get("USE_PYETHEREUM_DEVELOP"):
+    # Force installation of develop branches of devp2p and pyethereum.
+    DEPENDENCY_LINKS = [
+        'http://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p-9.99.9',
+        'http://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum-9.99.9',
+        ]
+
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
 version = '1.5.0'
@@ -76,6 +85,7 @@ setup(
     ],
     cmdclass={'test': PyTest},
     install_requires=INSTALL_REQUIRES,
+    dependency_links=DEPENDENCY_LINKS,
     tests_require=[
         'ethereum-serpent>=1.8.1',
     ],
