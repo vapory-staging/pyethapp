@@ -409,7 +409,7 @@ class ChainService(WiredService):
         log.debug('status received', proto=proto, eth_version=eth_version)
         assert eth_version == proto.version, (eth_version, proto.version)
         if network_id != self.config['eth'].get('network_id', proto.network_id):
-            log.warn("invalid network id", remote_network_id=network_id,
+            log.debug("invalid network id", remote_network_id=network_id,
                      expected_network_id=self.config['eth'].get('network_id', proto.network_id))
             raise eth_protocol.ETHProtocolError('wrong network_id')
 
