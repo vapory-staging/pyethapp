@@ -196,14 +196,13 @@ class RPCServer(BaseService):
             block_id = 0
         if is_numeric(block_id):
             # by number
-            hash_ = chain.index.get_block_by_number(block_id)
+            return chain.get_block_by_number(block_id)
         elif block_id == chain.head_candidate.hash:
             return chain.head_candidate
         else:
             # by hash
             assert is_string(block_id)
-            hash_ = block_id
-        return chain.get(hash_)
+            return chain.get_block(block_id)
 
 
 class IPCRPCServer(RPCServer):
@@ -481,10 +480,10 @@ def block_encoder(block, include_transactions=False, pending=False, is_header=Fa
         d['uncles'] = [data_encoder(u.hash) for u in block.uncles]
         if include_transactions:
             d['transactions'] = []
-            for i, tx in enumerate(block.get_transactions()):
+            for i, tx in enumerate(block.transactions):
                 d['transactions'].append(tx_encoder(tx, block, i, pending))
         else:
-            d['transactions'] = [data_encoder(tx.hash) for tx in block.get_transactions()]
+            d['transactions'] = [data_encoder(tx.hash) for tx in block.transactions]
     return d
 
 
