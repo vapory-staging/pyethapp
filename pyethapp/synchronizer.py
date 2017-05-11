@@ -81,12 +81,16 @@ class SyncTask(object):
         # get block hashes until we found a known one
         retry = 0
         max_blockheaders_per_request = self.initial_blockheaders_per_request
+        last_proto = None
         while not self.chain.has_blockhash(blockhash):
             # proto with highest_difficulty should be the proto we got the newblock from
             blockheaders_batch = []
 
             # try with protos
             protocols = self.protocols
+            if last_proto:
+                protocols.remove(last_proto)
+                protocols.insert(0, last_proto)
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -119,6 +123,8 @@ class SyncTask(object):
                     log_st.warn('got wrong data type', expected='BlockHeader',
                                 received=type(blockheaders_batch[0]))
                     continue
+
+                last_proto = proto
                 break
 
             if not blockheaders_batch:
@@ -174,6 +180,8 @@ class SyncTask(object):
         log_st.debug('fetching blocks', num=len(blockheaders_chain))
         assert blockheaders_chain
         blockheaders_chain.reverse()  # height rising order
+
+        last_proto = None
         num_blocks = len(blockheaders_chain)
         num_fetched = 0
         retry = 0
@@ -184,6 +192,9 @@ class SyncTask(object):
 
             # try with protos
             protocols = self.protocols
+            if last_proto:
+                protocols.remove(last_proto)
+                protocols.insert(0, last_proto)
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -192,6 +203,7 @@ class SyncTask(object):
                 if proto.is_stopped:
                     continue
                 assert proto not in self.body_requests
+
                 # request
                 log_st.debug('requesting blocks', num=len(blockhashes_batch), missing=len(blockheaders_chain)-len(blockhashes_batch))
                 deferred = AsyncResult()
@@ -204,6 +216,7 @@ class SyncTask(object):
                     continue
                 finally:
                     del self.body_requests[proto]
+
                 if not bodies:
                     log_st.warn('empty getblockbodies reply, trying next proto')
                     continue
@@ -211,6 +224,9 @@ class SyncTask(object):
                     log_st.warn('received unexpected data')
                     bodies = []
                     continue
+
+                last_proto = proto
+                break
 
             # add received t_blocks
             num_fetched += len(bodies)
