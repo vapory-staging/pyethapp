@@ -386,7 +386,10 @@ class Synchronizer(object):
             if not self.synctask:
                 self.synctask = SyncTask(self, proto, t_block.header.hash, chain_difficulty)
             else:
-                log.debug('already syncing, won\'t start new sync task')
+                log.debug('received newblock but already syncing, won\'t start new sync task',
+                          proto=proto,
+                          block=t_block,
+                          chain_difficulty=chain_difficulty)
 
     def receive_status(self, proto, blockhash, chain_difficulty):
         "called if a new peer is connected"
@@ -406,7 +409,13 @@ class Synchronizer(object):
 
         elif chain_difficulty > self.chain.head.chain_difficulty():
             log.debug('sufficient difficulty')
-            self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
+            if not self.synctask:
+                self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
+            else:
+                log.debug('received status but already syncing, won\'t start new sync task',
+                          proto=proto,
+                          blockhash=encode_hex(blockhash),
+                          chain_difficulty=chain_difficulty)
 
     def receive_newblockhashes(self, proto, newblockhashes):
         """
@@ -422,7 +431,7 @@ class Synchronizer(object):
             return
         if len(newblockhashes) != 1:
             log.warn('supporting only one newblockhash', num=len(newblockhashes))
-        if not self.chainservice.is_syncing:
+        if not self.synctask:
             blockhash = newblockhashes[0]
             log.debug('starting synctask for newblockhashes', blockhash=blockhash.encode('hex'))
             self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
