@@ -39,6 +39,7 @@ class SyncTask(object):
         self.synchronizer = synchronizer
         self.chain = synchronizer.chain
         self.chainservice = synchronizer.chainservice
+        self.last_proto = None
         self.originating_proto = proto
         self.originator_only = originator_only
         self.blockhash = blockhash
@@ -69,8 +70,13 @@ class SyncTask(object):
     @property
     def protocols(self):
         if self.originator_only:
-            return [] if self.originating_proto.is_stopped else [self.originating_proto]
-        return self.synchronizer.protocols
+            protos = [] if self.originating_proto.is_stopped else [self.originating_proto]
+        else:
+            protos = self.synchronizer.protocols
+        if self.last_proto and not self.last_proto.is_stopped:
+            protos.remove(self.last_proto)
+            protos.insert(0, self.last_proto)
+        return protos
 
     def fetch_hashchain(self):
         log_st.debug('fetching hashchain')
@@ -81,16 +87,12 @@ class SyncTask(object):
         # get block hashes until we found a known one
         retry = 0
         max_blockheaders_per_request = self.initial_blockheaders_per_request
-        last_proto = None
         while not self.chain.has_blockhash(blockhash):
             # proto with highest_difficulty should be the proto we got the newblock from
             blockheaders_batch = []
 
             # try with protos
             protocols = self.protocols
-            if last_proto:
-                protocols.remove(last_proto)
-                protocols.insert(0, last_proto)
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -124,7 +126,7 @@ class SyncTask(object):
                                 received=type(blockheaders_batch[0]))
                     continue
 
-                last_proto = proto
+                self.last_proto = proto
                 break
 
             if not blockheaders_batch:
@@ -181,7 +183,6 @@ class SyncTask(object):
         assert blockheaders_chain
         blockheaders_chain.reverse()  # height rising order
 
-        last_proto = None
         num_blocks = len(blockheaders_chain)
         num_fetched = 0
         retry = 0
@@ -192,9 +193,6 @@ class SyncTask(object):
 
             # try with protos
             protocols = self.protocols
-            if last_proto:
-                protocols.remove(last_proto)
-                protocols.insert(0, last_proto)
             if not protocols:
                 log_st.warn('no protocols available')
                 return self.exit(success=False)
@@ -225,7 +223,7 @@ class SyncTask(object):
                     bodies = []
                     continue
 
-                last_proto = proto
+                self.last_proto = proto
                 break
 
             # add received t_blocks
