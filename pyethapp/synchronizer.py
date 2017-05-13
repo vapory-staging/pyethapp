@@ -163,17 +163,17 @@ class SyncTask(object):
             if len(blockheaders_chain) > 0:
                 start = "#%d %s" % (blockheaders_chain[0].number, utils.encode_hex(blockheaders_chain[0].hash)[:8])
                 end = "#%d %s" % (blockheaders_chain[-1].number, utils.encode_hex(blockheaders_chain[-1].hash)[:8])
+                log_st.info('downloaded ' + str(len(blockheaders_chain)) + ' blockheaders', start=start, end=end)
             else:
-                start = "none"
-                end = "none"
-            log_st.info('downloaded ' + str(len(blockheaders_chain)) + ' blockheaders', start=start, end=end)
+                log_st.debug('failed to download blockheaders')
             self.end_block_number = self.chain.head.number + len(blockheaders_chain)
             max_blockheaders_per_request = self.max_blockheaders_per_request
 
         self.start_block_number = self.chain.get_block(blockhash).number
         self.end_block_number = self.chain.get_block(blockhash).number + len(blockheaders_chain)
         log_st.debug('computed missing numbers', start_number=self.start_block_number, end_number=self.end_block_number)
-        self.fetch_blocks(blockheaders_chain)
+        if len(blockheaders_chain) > 0:
+            self.fetch_blocks(blockheaders_chain)
 
     def fetch_blocks(self, blockheaders_chain):
         # fetch blocks (no parallelism here)
