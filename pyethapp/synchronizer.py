@@ -69,7 +69,7 @@ class SyncTask(object):
     @property
     def protocols(self):
         if self.originator_only:
-            return [self.originating_proto]
+            return [] if self.originating_proto.is_stopped else [self.originating_proto]
         return self.synchronizer.protocols
 
     def fetch_hashchain(self):
