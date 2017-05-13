@@ -176,6 +176,9 @@ class SyncTask(object):
         log_st.debug('computed missing numbers', start_number=self.start_block_number, end_number=self.end_block_number)
         if len(blockheaders_chain) > 0:
             self.fetch_blocks(blockheaders_chain)
+        else:
+            log_st.debug('failed to download blockheaders, exit')
+            self.exit(success=False)
 
     def fetch_blocks(self, blockheaders_chain):
         # fetch blocks (no parallelism here)
