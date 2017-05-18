@@ -3,7 +3,6 @@ import gevent
 import gipc
 import random
 from devp2p.service import BaseService
-from ethereum.meta import make_head_candidate
 from ethereum.pow.ethpow import mine, TT64M1
 from ethereum.slogging import get_logger
 from ethereum.utils import encode_hex
@@ -24,7 +23,6 @@ class Miner(gevent.Greenlet):
         self.nonce_callback = nonce_callback
         self.hashrate_callback = hashrate_callback
         self.cpu_pct = cpu_pct
-        self.last = time.time()
         self.is_stopped = False
         super(Miner, self).__init__()
 
@@ -124,29 +122,19 @@ class PoWService(BaseService):
         self.worker_process = gipc.start_process(
             target=powworker_process, args=(self.cpipe, cpu_pct))
         self.chain = app.services.chain
-        self.chain.on_new_head_cbs.append(self.on_new_head)
+        self.chain.on_new_head_cbs.append(self.mine_head_candidate)
         self.hashrate = 0
-        self.head_candidate = None
 
     @property
     def active(self):
         return self.app.config['pow']['activated']
 
-    def on_new_head(self, block):
-        self.make_candidate_and_mine()
-
-    def make_head_candidate(self):
-        # This method exists only so that we can stub it in tests.
-        return make_head_candidate(self.chain.chain, self.chain.transaction_queue)
-
-    def make_candidate_and_mine(self):
+    def mine_head_candidate(self, _=None):
+        hc = self.chain.head_candidate
         if not self.active or self.chain.is_syncing:
             return
-
-        self.head_candidate = self.make_head_candidate()
-        hc = self.head_candidate
-        if (hc.transaction_count == 0 and
-                not self.app.config['pow']['mine_empty_blocks']):
+        elif (hc.transaction_count == 0 and
+              not self.app.config['pow']['mine_empty_blocks']):
             return
 
         log.debug('mining', difficulty=hc.difficulty)
@@ -160,23 +148,23 @@ class PoWService(BaseService):
 
     def recv_found_nonce(self, bin_nonce, mixhash, mining_hash):
         log.info('nonce found', mining_hash=mining_hash.encode('hex'))
-        block = self.head_candidate
+        block = self.chain.head_candidate
         if block.mining_hash != mining_hash:
             log.warn('mining_hash does not match')
-            self.make_candidate_and_mine()
-            return
-        block.mixhash = mixhash
-        block.nonce = bin_nonce
+            return False
+        block.header.mixhash = mixhash
+        block.header.nonce = bin_nonce
         if self.chain.add_mined_block(block):
             log.debug('mined block %d (%s) added to chain' % (
                 block.number, encode_hex(block.hash[:8])))
+            return True
         else:
             log.debug('failed to add mined block %d (%s) to chain' % (
                 block.number, encode_hex(block.hash[:8])))
-        self.make_candidate_and_mine()
+            return False
 
     def _run(self):
-        self.make_candidate_and_mine()
+        self.mine_head_candidate()
         while True:
             cmd, kargs = self.ppipe.get()
             assert isinstance(kargs, dict)

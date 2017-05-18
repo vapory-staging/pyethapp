@@ -1,30 +1,23 @@
 import os
-from pyethapp import monkeypatches
+import pytest
 from ethereum.db import EphemDB
+from pyethapp.config import update_config_with_defaults
 from pyethapp import eth_service
 from pyethapp import leveldb_service
 from pyethapp import codernitydb_service
 from pyethapp import eth_protocol
 from ethereum import slogging
+from ethereum.tools import tester
 from ethereum import config as eth_config
+from ethereum.transactions import Transaction
 import rlp
 import tempfile
-slogging.configure(config_string=':info')
+slogging.configure(config_string=':debug')
 
 empty = object()
 
 
 class AppMock(object):
-
-    config = dict(
-        app=dict(dir=tempfile.mkdtemp()),
-        db=dict(path='_db'),
-        eth=dict(
-            pruning=-1,
-            network_id=1,
-            block=eth_config.default_config
-        ),
-    )
 
     class Services(dict):
 
@@ -37,9 +30,19 @@ class AppMock(object):
             def broadcast(*args, **kwargs):
                 pass
 
-    def __init__(self, db=None):
+    def __init__(self, db=None, config={}):
         self.services = self.Services()
         self.services.db = EphemDB()
+        if 'app' not in config:
+            config['app'] = dict(dir=tempfile.mkdtemp())
+        if 'db' not in config:
+            config['db'] = dict(path='_db')
+        if 'eth' not in config:
+            config['eth'] = dict(
+                pruning=-1,
+                network_id=1,
+                block=eth_config.default_config)
+        self.config = config
 
 
 class PeerMock(object):
@@ -121,3 +124,49 @@ def test_receive_blockheaders_256():
 
 def test_receive_blockheaders_256_leveldb():
     receive_blockheaders(data256.decode('hex'), leveldb=True)
+
+
+@pytest.fixture
+def test_app(tmpdir):
+    config = {
+        'eth': {
+            'pruning': -1,
+            'network_id': 1,
+            'block': {  # reduced difficulty, increased gas limit, allocations to test accounts
+                'ACCOUNT_INITIAL_NONCE': 0,
+                'GENESIS_DIFFICULTY': 1,
+                'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
+                'GENESIS_GAS_LIMIT': 3141592,
+                'GENESIS_INITIAL_ALLOC': {
+                    tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
+                    tester.accounts[1].encode('hex'): {'balance': 10 ** 24},
+                    tester.accounts[2].encode('hex'): {'balance': 10 ** 24},
+                    tester.accounts[3].encode('hex'): {'balance': 10 ** 24},
+                    tester.accounts[4].encode('hex'): {'balance': 10 ** 24},
+                }
+            }
+        }
+    }
+    update_config_with_defaults(config, {'eth': {'block': eth_config.default_config}})
+    app = AppMock(config=config)
+    app.chain = eth_service.ChainService(app)
+    return app
+
+
+def test_head_candidate(test_app):
+    chainservice = test_app.chain
+    assert len(chainservice.head_candidate.transactions) == 0
+    for i in range(5):
+        tx = make_transaction(tester.keys[i], 0, 0, tester.accounts[2])
+        chainservice.add_transaction(tx)
+        assert len(chainservice.head_candidate.transactions) == i + 1
+
+
+def make_transaction(key, nonce, value, to):
+    gasprice = 20 * 10**9
+    startgas = 500 * 1000
+    v, r, s = 0, 0, 0
+    data = "foo"
+    tx = Transaction(nonce, gasprice, startgas, to, value, data, v, r, s)
+    tx.sign(key)
+    return tx

@@ -1,4 +1,5 @@
 # -*- coding: utf8 -*-
+import copy
 import time
 import statistics
 from collections import deque
@@ -14,11 +15,15 @@ from devp2p.protocol import BaseProtocol
 from devp2p.service import WiredService
 
 from ethereum.block import Block
+from ethereum.meta import make_head_candidate
 from ethereum.pow.chain import Chain
 from ethereum.config import Env
+from ethereum.consensus_strategy import get_consensus_strategy
+from ethereum.genesis_helpers import mk_genesis_data
 from ethereum import config as ethereum_config
-from ethereum.messages import validate_transaction
 from ethereum.pow.consensus import check_pow
+from ethereum.state import State
+from ethereum.messages import apply_transaction, validate_transaction
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.experimental.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
@@ -55,21 +60,6 @@ class DuplicatesFilter(object):
 
     def __contains__(self, v):
         return v in self.filter
-
-
-def update_watcher(chainservice):
-    timeout = 180
-    d = dict(head=chainservice.chain.head)
-
-    def up(b):
-        log.debug('watcher head updated')
-        d['head'] = b
-    chainservice.on_new_head_cbs.append(lambda b: up(b))
-
-    while True:
-        last = d['head']
-        gevent.sleep(timeout)
-        assert last != d['head'], 'no updates for %d secs' % timeout
 
 
 class DAOChallenger(object):
@@ -125,7 +115,6 @@ class ChainService(WiredService):
     synchronizer = None
     config = None
     block_queue_size = 1024
-    transaction_queue_size = 1024
     processed_gas = 0
     processed_elapsed = 0
 
@@ -169,11 +158,12 @@ class ChainService(WiredService):
         coinbase = app.services.accounts.coinbase
         env = Env(self.db, sce['block'])
 
-        genesis_data = sce['genesis_data'] if 'genesis_data' in sce else dict()
-        self.chain = Chain(env=env,
-                           genesis=genesis_data,
-                           coinbase=coinbase,
-                           new_head_cb=self._on_new_head)
+        genesis_data = sce.get('genesis_data', {})
+        if not genesis_data:
+            genesis_data = mk_genesis_data(env)
+        self.chain = Chain(
+            env=env, genesis=genesis_data, coinbase=coinbase,
+            new_head_cb=self._on_new_head)
         header = self.chain.state.prev_headers[0]
 
         log.info('chain at', number=self.chain.head.number)
@@ -186,8 +176,13 @@ class ChainService(WiredService):
         self.synchronizer = Synchronizer(self, force_sync=None)
 
         self.block_queue = Queue(maxsize=self.block_queue_size)
-        #self.transaction_queue = Queue(maxsize=self.transaction_queue_size)
+        # When the transaction_queue is modified, we must set
+        # self._head_candidate_needs_updating to True in order to force the
+        # head candidate to be updated.
         self.transaction_queue = TransactionQueue()
+        self._head_candidate_needs_updating = True
+        # Initialize a new head candidate.
+        _ = self.head_candidate
         self.min_gasprice = 20 * 10**9 # TODO: better be an option to validator service?
         self.add_blocks_lock = False
         self.add_transaction_lock = gevent.lock.Semaphore()
@@ -207,10 +202,33 @@ class ChainService(WiredService):
             return self.app.services.validator.active
         return False
 
+    # TODO: Move to pyethereum
+    def get_receipts(self, block):
+        # Receipts are no longer stored in the database, so need to generate
+        # them on the fly here.
+        state = self.chain.mk_poststate_of_blockhash(block.header.prevhash)
+        for tx in block.transactions:
+            apply_transaction(state, tx)
+        return state.receipts
+
     def _on_new_head(self, block):
         log.debug('new head cbs', num=len(self.on_new_head_cbs))
+        self.transaction_queue = self.transaction_queue.diff(
+            block.transactions)
+        self._head_candidate_needs_updating = True
         for cb in self.on_new_head_cbs:
             cb(block)
+
+    @property
+    def head_candidate(self):
+        if self._head_candidate_needs_updating:
+            self._head_candidate_needs_updating = False
+            # Make a copy of self.transaction_queue because
+            # make_head_candidate modifies it.
+            txqueue = copy.deepcopy(self.transaction_queue)
+            self._head_candidate, self._head_candidate_state = make_head_candidate(
+                self.chain, txqueue, timestamp=int(time.time()))
+        return self._head_candidate
 
     def add_transaction(self, tx, origin=None, force_broadcast=False, force=False):
         if self.is_syncing:
@@ -230,9 +248,9 @@ class ChainService(WiredService):
         # validate transaction
         try:
             # Transaction validation for broadcasting. Transaction is validated
-            # against the (same) head state each time. Conflicting transaction
-            # may pass the check.
-            validate_transaction(self.chain.state, tx)
+            # against the current head candidate.
+            validate_transaction(self._head_candidate_state, tx)
+
             log.debug('valid tx, broadcasting')
             self.broadcast_transaction(tx, origin=origin)  # asap
         except InvalidTransaction as e:
@@ -247,10 +265,10 @@ class ChainService(WiredService):
         if tx.gasprice >= self.min_gasprice:
             self.add_transaction_lock.acquire()
             self.transaction_queue.add_transaction(tx, force=force)
+            self._head_candidate_needs_updating = True
             self.add_transaction_lock.release()
         else:
             log.info("too low gasprice, ignore", tx=encode_hex(tx.hash)[:8], gasprice=tx.gasprice)
-        return len(self.transaction_queue)
 
     def check_header(self, header):
         return check_pow(self.chain.state, header)
@@ -269,8 +287,10 @@ class ChainService(WiredService):
             log.debug('added', block=block, ts=time.time())
             assert block == self.chain.head
             self.transaction_queue = self.transaction_queue.diff(block.transactions)
+            self._head_candidate_needs_updating = True
             self.broadcast_newblock(block, chain_difficulty=self.chain.get_score(block))
             return True
+        log.debug('failed to add', block=block, ts=time.time())
         return False
 
     def knows_block(self, block_hash):
