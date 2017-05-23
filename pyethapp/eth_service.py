@@ -435,7 +435,8 @@ class ChainService(WiredService):
                 proto.send_transactions(*transactions)
         else:
             log.debug("peer failed to answer DAO challenge, stop.", proto=proto)
-            proto.peer.stop()
+            if proto.peer:
+                proto.peer.stop()
         del self.dao_challenges[proto]
 
     # transactions
