@@ -17,4 +17,3 @@ ethereum>=1.5.1
 pbkdf2
 scrypt
 pexpect
-pyelliptic==1.5.7
