@@ -6,10 +6,10 @@ import json
 
 import gevent
 from ethereum.abi import ContractTranslator
-from ethereum.keys import privtoaddr
+from ethereum.tools.keys import privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, int_to_big_endian, big_endian_to_int, normalize_address
-from ethereum._solidity import solidity_unresolved_symbols, solidity_library_symbol, solidity_resolve_symbols
+from ethereum.tools._solidity import solidity_unresolved_symbols, solidity_library_symbol, solidity_resolve_symbols
 from tinyrpc.protocols.jsonrpc import JSONRPCErrorResponse, JSONRPCSuccessResponse
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from tinyrpc.transports.http import HttpPostClientTransport

@@ -3,8 +3,8 @@ import gevent
 import gipc
 import random
 from devp2p.service import BaseService
-from ethereum.block_creation import make_head_candidate
-from ethereum.ethpow import mine, TT64M1
+from ethereum.meta import make_head_candidate
+from ethereum.pow.ethpow import mine, TT64M1
 from ethereum.slogging import get_logger
 from ethereum.utils import encode_hex
 log = get_logger('pow')

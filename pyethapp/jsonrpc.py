@@ -3,16 +3,7 @@ import inspect
 from copy import deepcopy
 from collections import Iterable
 
-import ethereum.bloom as bloom
 import inspect
-from ethereum.utils import (is_numeric, is_string, int_to_big_endian, big_endian_to_int,
-                            encode_hex, decode_hex, sha3, zpad)
-import ethereum.slogging as slogging
-from ethereum.slogging import LogRecorder
-from ethereum.block import Block
-from ethereum.transactions import Transaction
-from ethereum.parse_genesis_declaration import mk_genesis_block
-from ethereum import processblock
 import gevent
 import gevent.queue
 import gevent.wsgi
@@ -20,7 +11,16 @@ import rlp
 from decorator import decorator
 from accounts import Account
 from devp2p.service import BaseService
-from ethereum import processblock
+
+import ethereum.bloom as bloom
+from ethereum.utils import (is_numeric, is_string, int_to_big_endian, big_endian_to_int,
+                            encode_hex, decode_hex, sha3, zpad)
+import ethereum.slogging as slogging
+from ethereum.slogging import LogRecorder
+from ethereum.block import Block
+from ethereum.transactions import Transaction
+from ethereum.genesis_helpers import mk_genesis_block
+from ethereum.messages import apply_transaction
 from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import LogRecorder
 from ethereum.transactions import Transaction
@@ -1163,7 +1163,7 @@ class Chain(Subdispatcher):
             test_block = block.init_from_parent(parent, block.coinbase,
                                                 timestamp=block.timestamp)
             for tx in block.get_transactions():
-                success, output = processblock.apply_transaction(test_block, tx)
+                success, output = apply_transaction(test_block, tx)
                 assert success
         else:
             env = ethereum.config.Env(db=block.db)
@@ -1205,7 +1205,7 @@ class Chain(Subdispatcher):
         tx.sender = sender
 
         try:
-            success, output = processblock.apply_transaction(test_block, tx)
+            success, output = apply_transaction(test_block, tx)
         except InvalidTransaction:
             success = False
         # make sure we didn't change the real state
@@ -1232,7 +1232,7 @@ class Chain(Subdispatcher):
             test_block = block.init_from_parent(parent, block.coinbase,
                                                 timestamp=block.timestamp)
             for tx in block.get_transactions():
-                success, output = processblock.apply_transaction(test_block, tx)
+                success, output = apply_transaction(test_block, tx)
                 assert success
         else:
             env = ethereum.config.Env(db=block.db)
@@ -1274,7 +1274,7 @@ class Chain(Subdispatcher):
         tx.sender = sender
 
         try:
-            success, output = processblock.apply_transaction(test_block, tx)
+            success, output = apply_transaction(test_block, tx)
         except InvalidTransaction:
             success = False
         # make sure we didn't change the real state
@@ -1640,7 +1640,7 @@ class FilterManager(Subdispatcher):
         recorder = LogRecorder()
         # apply tx (thread? we don't want logs from other invocations)
         self.app.services.chain.add_transaction_lock.acquire()
-        processblock.apply_transaction(test_blk, tx)  # FIXME deactivate tx context switch or lock
+        apply_transaction(test_blk, tx)  # FIXME deactivate tx context switch or lock
         self.app.services.chain.add_transaction_lock.release()
         return dict(tx=txhash, trace=recorder.pop_records())
 

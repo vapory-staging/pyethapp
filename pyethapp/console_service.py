@@ -16,7 +16,7 @@ import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from devp2p.service import BaseService
-from ethereum import processblock
+from ethereum.messages import apply_transaction
 from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import getLogger
 from ethereum.transactions import Transaction
@@ -214,7 +214,7 @@ class Console(BaseService):
                 test_block = block.init_from_parent(parent, block.coinbase,
                                                     timestamp=block.timestamp)
                 for tx in block.get_transactions():
-                    success, output = processblock.apply_transaction(test_block, tx)
+                    success, output = apply_transaction(test_block, tx)
                     assert success
 
                 # apply transaction
@@ -223,7 +223,7 @@ class Console(BaseService):
                 tx.sender = sender
 
                 try:
-                    success, output = processblock.apply_transaction(test_block, tx)
+                    success, output = apply_transaction(test_block, tx)
                 except InvalidTransaction:
                     success = False
 

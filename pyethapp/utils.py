@@ -12,7 +12,7 @@ from devp2p.service import BaseService
 import rlp
 import sys
 from ethereum import slogging
-from ethereum.parse_genesis_declaration import mk_genesis_block
+from ethereum.genesis_helpers import mk_genesis_block
 from ethereum.slogging import bcolors
 import types
 

@@ -4,7 +4,7 @@ import random
 import shutil
 from uuid import UUID
 from devp2p.service import BaseService
-from ethereum import keys
+from ethereum.tools import keys
 from ethereum.slogging import get_logger
 from ethereum.utils import privtopub  # this is different  than the one used in devp2p.crypto
 from ethereum.utils import sha3, is_string, decode_hex, remove_0x_head

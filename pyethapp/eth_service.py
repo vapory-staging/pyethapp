@@ -1,33 +1,34 @@
 # -*- coding: utf8 -*-
 import time
+import statistics
 from collections import deque
 
-import eth_protocol
 import gevent
 import gevent.lock
+from gevent.queue import Queue
 from gevent.event import AsyncResult
+
 import rlp
-import statistics
+
 from devp2p.protocol import BaseProtocol
 from devp2p.service import WiredService
+
 from ethereum.block import Block
-from ethereum.chain import Chain
+from ethereum.pow.chain import Chain
 from ethereum.config import Env
 from ethereum import config as ethereum_config
-from ethereum.state import get_block
-from ethereum.state_transition import check_block_header, validate_transaction, apply_transaction
-from ethereum.casper_utils import casper_config
+from ethereum.messages import validate_transaction
+from ethereum.pow.consensus import check_pow
 from ethereum.transaction_queue import TransactionQueue
-from ethereum.refcount_db import RefcountDB
+from ethereum.experimental.refcount_db import RefcountDB
 from ethereum.slogging import get_logger
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.transactions import Transaction
-from ethereum.casper_utils import get_casper_ct, casper_contract_bootstrap, casper_start_epoch, validator_inject, generate_validation_code, RandaoManager, call_casper
 from ethereum.utils import privtoaddr, encode_hex, decode_hex, remove_0x_head, normalize_address
-from gevent.queue import Queue
-from rlp.utils import encode_hex
+
 from synchronizer import Synchronizer
+import eth_protocol
 
 from pyethapp import sentry
 from pyethapp.dao import is_dao_challenge, build_dao_header
@@ -251,8 +252,8 @@ class ChainService(WiredService):
             log.info("too low gasprice, ignore", tx=encode_hex(tx.hash)[:8], gasprice=tx.gasprice)
         return len(self.transaction_queue)
 
-    def check_header(self, header, **kwargs):
-        return check_block_header(self.chain.state, header, **kwargs)
+    def check_header(self, header):
+        return check_pow(self.chain.state, header)
 
     def add_block(self, t_block, proto):
         "adds a block to the block_queue and spawns _add_block if not running"
@@ -506,7 +507,7 @@ class ChainService(WiredService):
                 if reverse:
                     for i in xrange(skip+1):
                         try:
-                            header = get_block(self.chain.db, origin_hash)
+                            header = self.chain.get_block(origin_hash)
                             origin_hash = header.prevhash
                         except KeyError:
                             unknown = True
@@ -514,7 +515,7 @@ class ChainService(WiredService):
                 else:
                     origin_hash = self.chain.get_blockhash_by_number(origin.number + skip + 1)
                     try:
-                        header = get_block(self.chain.db, origin_hash)
+                        header = self.chain.get_block(origin_hash)
                         if self.chain.get_blockhashes_from_hash(header.hash, skip+1)[skip] == origin_hash:
                             origin_hash = header.hash
                         else:

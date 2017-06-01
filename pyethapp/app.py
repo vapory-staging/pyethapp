@@ -31,7 +31,6 @@ from db_service import DBService
 from eth_service import ChainService
 from jsonrpc import JSONRPCServer, IPCRPCServer
 from pow_service import PoWService
-from validator_service import ValidatorService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
 from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
@@ -81,14 +80,12 @@ class EthApp(BaseApp):
               help='single bootstrap_node as enode://pubkey@host:port')
 @click.option('-m', '--mining_pct', multiple=False, type=int, default=0,
               help='pct cpu used for mining')
-@click.option('-j', '--join_validators', multiple=False, type=bool,
-              help='run as a Casper validator')
 @click.option('--unlock', multiple=True, type=str,
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
 def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, join_validators, unlock, password, log_file):
+        mining_pct, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
@@ -157,24 +154,6 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
     if not config.get('pow', {}).get('activated'):
         config['deactivated_services'].append(PoWService.name)
-
-    if join_validators:
-        privkey = decode_hex(config['validator']['privkey_hex'])
-        config['validator'] = {
-            'activated': True,
-            'privkey': privkey,
-            'deposit_size': config['validator']['deposit_size'],
-            'seed': join_validators
-        }
-    else:
-        config['validator'] = {
-            'activated': False,
-            'privkey': '\x00'*32,
-            'deposit_size': 0,
-            'seed': ''
-        }
-    if not config.get('validator', {}).get('activated', False):
-        config['deactivated_services'].append(ValidatorService)
 
     ctx.obj = {'config': config,
                'unlock': unlock,
