@@ -8,6 +8,7 @@ from ethereum.pow.ethpow import mine
 import ethereum.tools.keys
 import ethereum.config
 from ethereum.slogging import get_logger
+from ethereum.state import State
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
 from pyethapp.app import EthApp
 from pyethapp.config import update_config_with_defaults, get_default_config
@@ -47,7 +48,9 @@ def test_app(request, tmpdir):
             :returns: the new head
             """
             log.debug('mining next block')
-            block = self.services.chain.chain.head_candidate
+            block = self.services.chain.head_candidate
+            chain = self.services.chain.chain
+            head_number = chain.head.number
             delta_nonce = 10**6
             for start_nonce in count(0, delta_nonce):
                 bin_nonce, mixhash = mine(block.number, block.difficulty, block.mining_hash,
@@ -55,9 +58,20 @@ def test_app(request, tmpdir):
                 if bin_nonce:
                     break
             self.services.pow.recv_found_nonce(bin_nonce, mixhash, block.mining_hash)
+            if len(chain.time_queue) > 0:
+                # If we mine two blocks within one second, pyethereum will
+                # force the new block's timestamp to be in the future (see
+                # ethereum1_setup_block()), and when we try to add that block
+                # to the chain (via Chain.add_block()), it will be put in a
+                # queue for later processing. Since we need to ensure the
+                # block has been added before we continue the test, we
+                # have to manually process the time queue.
+                log.debug('block mined too fast, processing time queue')
+                chain.process_time_queue(new_time=block.timestamp)
             log.debug('block mined')
-            assert self.services.chain.chain.head.difficulty == 1
-            return self.services.chain.chain.head
+            assert chain.head.difficulty == 1
+            assert chain.head.number == head_number + 1
+            return chain.head
 
     config = {
         'data_dir': str(tmpdir),
@@ -112,21 +126,23 @@ def main(a,b):
     tx_to = b''
     evm_code = serpent.compile(serpent_code)
     chain = test_app.services.chain.chain
-    assert chain.head_candidate.get_balance(tx_to) == 0
+    chainservice = test_app.services.chain
+    hc_state = State(chainservice.head_candidate.state_root, chain.env)
     sender = test_app.services.accounts.unlocked_accounts[0].address
-    assert chain.head_candidate.get_balance(sender) > 0
+    assert hc_state.get_balance(sender) > 0
 
     eth = test_app.services.console.console_locals['eth']
     tx = eth.transact(to='', data=evm_code, startgas=500000, sender=sender)
 
-    code = chain.head_candidate.account_to_dict(tx.creates)['code']
+    hc_state_dict = State(chainservice.head_candidate.state_root, chain.env).to_dict()
+    code = hc_state_dict[tx.creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
     test_app.mine_next_block()
 
-    creates = chain.head.get_transaction(0).creates
-    code = chain.head.account_to_dict(creates)['code']
+    creates = chain.head.transactions[0].creates
+    code = chain.state.to_dict()[creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
@@ -161,22 +177,25 @@ def test_console_name_reg_contract(test_app):
         # create the NameReg contract
         tx_to = b''
         evm_code = solidity.compile(solidity_code)
+        chainservice = test_app.services.chain
         chain = test_app.services.chain.chain
-        assert chain.head_candidate.get_balance(tx_to) == 0
+        hc_state = State(chainservice.head_candidate.state_root, chain.env)
         sender = test_app.services.accounts.unlocked_accounts[0].address
-        assert chain.head_candidate.get_balance(sender) > 0
+        assert hc_state.get_balance(sender) > 0
 
         eth = test_app.services.console.console_locals['eth']
         tx = eth.transact(to='', data=evm_code, startgas=500000, sender=sender)
 
-        code = chain.head_candidate.account_to_dict(tx.creates)['code']
+        hc_state_dict = State(chainservice.head_candidate.state_root, chain.env).to_dict()
+        code = hc_state_dict[tx.creates.encode('hex')]['code']
         assert len(code) > 2
         assert code != '0x'
 
         test_app.mine_next_block()
 
-        creates = chain.head.get_transaction(0).creates
-        code = chain.head.account_to_dict(creates)['code']
+        creates = chain.head.transactions[0].creates
+        state_dict = State(chain.head.state_root, chain.env).to_dict()
+        code = state_dict[creates.encode('hex')]['code']
         assert len(code) > 2
         assert code != '0x'
 
