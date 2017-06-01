@@ -16,7 +16,6 @@ from devp2p.app import BaseApp
 from devp2p.discovery import NodeDiscovery
 from devp2p.peermanager import PeerManager
 from devp2p.service import BaseService
-from ethereum import casper_utils
 from ethereum import config as eth_config
 from ethereum.block import Block
 from ethereum.utils import decode_hex
@@ -118,7 +117,6 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
 
     # add default config
     app_config.update_config_with_defaults(config, app_config.get_default_config([EthApp] + services))
-    #app_config.update_config_with_defaults(config, {'eth': {'block': casper_utils.casper_config}})
     app_config.update_config_with_defaults(config, {'eth': {'block': eth_config.default_config}})
 
     # Set config values based on profile selection
