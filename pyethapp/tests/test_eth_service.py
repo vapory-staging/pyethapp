@@ -66,20 +66,20 @@ newblk_rlp = (
     "5f0b5d2a84fef43716c1f16c71d9a32193d881c2ea8eea335e950c0c08502595559e2")
 
 block_1 = (
-    "f901fcf901f7a0fd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604f"
-    "dcaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479415ca"
-    "a04a9407a2f242b2859005a379655bfb9b11a00298b547b494ff85b4750d90ad212269cf642"
-    "f4fb7e6b205e461f3e10d18a950a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cad"
-    "c001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb"
-    "5e363b421b90100000000000000000000000000000000000000000000000000000000000000"
+    "f901f7a0fd4af92a79c7fc2fd8bf0d342f2e832e1d4f485c85b9152d2039e03bc604fdcaa01"
+    "dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479415caa04a94"
+    "07a2f242b2859005a379655bfb9b11a00298b547b494ff85b4750d90ad212269cf642f4fb7e"
+    "6b205e461f3e10d18a950a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc00162"
+    "2fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b"
+    "421b90100000000000000000000000000000000000000000000000000000000000000000000"
     "000000000000000000000000000000000000000000000000000000000000000000000000000"
     "000000000000000000000000000000000000000000000000000000000000000000000000000"
     "000000000000000000000000000000000000000000000000000000000000000000000000000"
     "000000000000000000000000000000000000000000000000000000000000000000000000000"
     "000000000000000000000000000000000000000000000000000000000000000000000000000"
-    "000000000000000000000000000000000000000000000000000000000000000000000000000"
-    "008302000001832fefd880845504456080a0839bc994837a59595159fb15605b6db119237c7"
-    "504edf5c5853b248700e0789c8872cf25e7727307bac0c0")
+    "000000000000000000000000000000000000000000000000000000000000000000000008302"
+    "000001832fefd880845504456080a0839bc994837a59595159fb15605b6db119237c7504edf"
+    "5c5853b248700e0789c8872cf25e7727307ba")
 
 
 fn = 'blocks256.hex.rlp'
@@ -95,7 +95,7 @@ def test_receive_newblock():
     eth.on_receive_newblock(proto, **d)
 
 
-def receive_blocks(rlp_data, leveldb=False, codernitydb=False):
+def receive_blockheaders(rlp_data, leveldb=False, codernitydb=False):
     app = AppMock()
     if leveldb:
         app.db = leveldb_service.LevelDB(
@@ -106,18 +106,18 @@ def receive_blocks(rlp_data, leveldb=False, codernitydb=False):
 
     eth = eth_service.ChainService(app)
     proto = eth_protocol.ETHProtocol(PeerMock(app), eth)
-    b = eth_protocol.ETHProtocol.blocks.decode_payload(rlp_data)
-    eth.on_receive_blocks(proto, b)
+    b = eth_protocol.ETHProtocol.blockheaders.decode_payload(rlp_data)
+    eth.on_receive_blockheaders(proto, b)
 
 
 def test_receive_block1():
     rlp_data = rlp.encode([rlp.decode(block_1.decode('hex'))])
-    receive_blocks(rlp_data)
+    receive_blockheaders(rlp_data)
 
 
-def test_receive_blocks_256():
-    receive_blocks(data256.decode('hex'))
+def test_receive_blockheaders_256():
+    receive_blockheaders(data256.decode('hex'))
 
 
-def test_receive_blocks_256_leveldb():
-    receive_blocks(data256.decode('hex'), leveldb=True)
+def test_receive_blockheaders_256_leveldb():
+    receive_blockheaders(data256.decode('hex'), leveldb=True)
