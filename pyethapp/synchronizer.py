@@ -263,7 +263,7 @@ class SyncTask(object):
         assert last_block.header.hash == self.blockhash
         log_st.debug('syncing finished')
         # at this point blocks are not in the chain yet, but in the add_block queue
-        if self.chain_difficulty >= self.chain.get_score(head):
+        if self.chain_difficulty >= self.chain.get_score(self.chain.head):
             self.chainservice.broadcast_newblock(last_block, self.chain_difficulty, origin=proto)
 
         self.exit(success=True)
@@ -359,8 +359,8 @@ class Synchronizer(object):
             log.warn('header check failed, should ban!')
             return
 
-        expected_difficulty = self.chain.get_score(head) + t_block.header.difficulty
-        if chain_difficulty >= self.chain.get_score(head):
+        expected_difficulty = self.chain.get_score(self.chain.head) + t_block.header.difficulty
+        if chain_difficulty >= self.chain.get_score(self.chain.head):
             # broadcast duplicates filtering is done in eth_service
             log.debug('sufficient difficulty, broadcasting',
                       client=proto.peer.remote_client_version)
@@ -408,7 +408,7 @@ class Synchronizer(object):
             log.debug('starting forced syctask', blockhash=blockhash.encode('hex'))
             self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
 
-        elif chain_difficulty > self.chain.get_score(head):
+        elif chain_difficulty > self.chain.get_score(self.chain.head):
             log.debug('sufficient difficulty')
             if not self.synctask:
                 self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
