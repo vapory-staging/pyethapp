@@ -188,21 +188,25 @@ class RPCServer(BaseService):
             block_id = self.default_block
         else:
             self.default_block = block_id
+
         if block_id == 'pending':
-            return self.app.services.chain.chain.head_candidate
+            block = chain.head_candidate
         if block_id == 'latest':
-            return chain.head
+            block = chain.head
         if block_id == 'earliest':
             block_id = 0
         if is_numeric(block_id):
             # by number
-            return chain.get_block_by_number(block_id)
+            block = chain.get_block_by_number(block_id)
         elif block_id == chain.head_candidate.hash:
-            return chain.head_candidate
+            block = chain.head_candidate
         else:
             # by hash
             assert is_string(block_id)
-            return chain.get_block(block_id)
+            block = chain.get_block(block_id)
+
+        block.score = chain.get_score(block)
+        return block
 
 
 class IPCRPCServer(RPCServer):
@@ -475,7 +479,7 @@ def block_encoder(block, include_transactions=False, pending=False, is_header=Fa
         'timestamp': quantity_encoder(block.timestamp),
     }
     if not is_header:
-        d['totalDifficulty'] = quantity_encoder(block.chain_difficulty())
+        d['totalDifficulty'] = quantity_encoder(block.score)
         d['size'] = quantity_encoder(len(rlp.encode(block)))
         d['uncles'] = [data_encoder(u.hash) for u in block.uncles]
         if include_transactions:

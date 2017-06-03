@@ -263,7 +263,7 @@ class SyncTask(object):
         assert last_block.header.hash == self.blockhash
         log_st.debug('syncing finished')
         # at this point blocks are not in the chain yet, but in the add_block queue
-        if self.chain_difficulty >= self.chain.head.chain_difficulty():
+        if self.chain_difficulty >= self.chain.get_score(head):
             self.chainservice.broadcast_newblock(last_block, self.chain_difficulty, origin=proto)
 
         self.exit(success=True)
@@ -296,7 +296,7 @@ class Synchronizer(object):
     which has a fixed size queue, the synchronization blocks if the queue is full
 
     on_status:
-        if peer.head.chain_difficulty > chain.head.chain_difficulty
+        if peer.head.chain_difficulty > chain.get_score(head)
             fetch peer.head and handle as newblock
     on_newblock:
         if block.parent:
@@ -345,7 +345,7 @@ class Synchronizer(object):
                   client=proto.peer.remote_client_version)
 
         if self.chain.has_blockhash(t_block.header.hash):
-            assert chain_difficulty == self.chain.get_block(t_block.header.hash).chain_difficulty()
+            assert chain_difficulty == self.chain.get_score(self.chain.get_block(t_block.header.hash))
 
         # memorize proto with difficulty
         self._protocols[proto] = chain_difficulty
@@ -359,8 +359,8 @@ class Synchronizer(object):
             log.warn('header check failed, should ban!')
             return
 
-        expected_difficulty = self.chain.head.chain_difficulty() + t_block.header.difficulty
-        if chain_difficulty >= self.chain.head.chain_difficulty():
+        expected_difficulty = self.chain.get_score(head) + t_block.header.difficulty
+        if chain_difficulty >= self.chain.get_score(head):
             # broadcast duplicates filtering is done in eth_service
             log.debug('sufficient difficulty, broadcasting',
                       client=proto.peer.remote_client_version)
@@ -408,7 +408,7 @@ class Synchronizer(object):
             log.debug('starting forced syctask', blockhash=blockhash.encode('hex'))
             self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
 
-        elif chain_difficulty > self.chain.head.chain_difficulty():
+        elif chain_difficulty > self.chain.get_score(head):
             log.debug('sufficient difficulty')
             if not self.synctask:
                 self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)

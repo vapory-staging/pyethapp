@@ -269,7 +269,7 @@ class ChainService(WiredService):
             log.debug('added', block=block, ts=time.time())
             assert block == self.chain.head
             self.transaction_queue = self.transaction_queue.diff(block.transactions)
-            self.broadcast_newblock(block, chain_difficulty=block.chain_difficulty())
+            self.broadcast_newblock(block, chain_difficulty=self.chain.get_score(block))
             return True
         return False
 
@@ -358,7 +358,7 @@ class ChainService(WiredService):
     def broadcast_newblock(self, block, chain_difficulty=None, origin=None):
         if not chain_difficulty:
             assert self.chain.has_blockhash(block.hash)
-            chain_difficulty = block.chain_difficulty()
+            chain_difficulty = self.chain.get_score(block)
         assert isinstance(block, (eth_protocol.TransientBlock, Block))
         if self.broadcast_filter.update(block.header.hash):
             log.debug('broadcasting newblock', origin=origin)
@@ -396,7 +396,7 @@ class ChainService(WiredService):
 
         # send status
         head = self.chain.head
-        proto.send_status(chain_difficulty=head.chain_difficulty(), chain_head_hash=head.hash,
+        proto.send_status(chain_difficulty=self.chain.get_score(head), chain_head_hash=head.hash,
                           genesis_hash=self.chain.genesis.hash)
 
     def on_wire_protocol_stop(self, proto):
