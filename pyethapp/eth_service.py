@@ -408,7 +408,18 @@ class ChainService(WiredService):
                           genesis_hash):
         log.debug('----------------------------------')
         log.debug('status received', proto=proto, eth_version=eth_version)
-        assert eth_version == proto.version, (eth_version, proto.version)
+
+        if eth_version != proto.version:
+            if ('eth', proto.version) in proto.peer.remote_capabilities:
+                # if remote peer is capable of our version, keep the connection
+                # even the peer tried a different version
+                pass
+            else:
+                log.debug("no capable protocol to use, disconnect",
+                          proto=proto, eth_version=eth_version)
+                proto.send_disconnect(proto.disconnect.reason.useless_peer)
+                return
+
         if network_id != self.config['eth'].get('network_id', proto.network_id):
             log.debug("invalid network id", remote_network_id=network_id,
                      expected_network_id=self.config['eth'].get('network_id', proto.network_id))
