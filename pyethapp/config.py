@@ -26,7 +26,7 @@ import ethereum.slogging as slogging
 from devp2p.service import BaseService
 from devp2p.app import BaseApp
 from accounts import mk_random_privkey
-from ethereum.keys import decode_hex
+from ethereum.tools.keys import decode_hex
 from ethereum.utils import parse_int_or_hex, remove_0x_head
 
 
