@@ -2,7 +2,7 @@ from StringIO import StringIO
 import subprocess
 from pyethapp.app import app
 from click.testing import CliRunner
-from ethereum.blocks import BlockHeader
+from ethereum.block import BlockHeader
 import rlp
 import pytest
 
