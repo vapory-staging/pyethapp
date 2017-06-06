@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 from uuid import uuid4
-import ethereum.keys
+import ethereum.tools.keys
 from ethereum.slogging import get_logger
 from ethereum.utils import decode_hex, remove_0x_head
 from devp2p.app import BaseApp
@@ -11,7 +11,7 @@ from pyethapp.accounts import Account, AccountsService, DEFAULT_COINBASE
 
 
 # reduce key derivation iterations
-ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
+ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100
 
 log = get_logger('tests.account_service')
 
