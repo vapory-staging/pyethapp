@@ -1,13 +1,13 @@
 import json
 from uuid import uuid4
-import ethereum.keys
-from ethereum.keys import privtoaddr
+import ethereum.tools.keys
+from ethereum.tools.keys import privtoaddr
 from ethereum.transactions import Transaction
 from pyethapp.accounts import Account
 import pytest
 
 # reduce key derivation iterations
-ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
+ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100
 
 
 @pytest.fixture()
