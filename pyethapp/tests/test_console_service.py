@@ -163,14 +163,14 @@ def test_console_name_reg_contract(test_app):
         tx_to = b''
         evm_code = solidity.compile(solidity_code)
         chain = test_app.services.chain.chain
-        assert chain.head_candidate.get_balance(tx_to) == 0
+        assert chain.state.get_balance(tx_to) == 0
         sender = test_app.services.accounts.unlocked_accounts[0].address
-        assert chain.head_candidate.get_balance(sender) > 0
+        assert chain.state.get_balance(sender) > 0
 
         eth = test_app.services.console.console_locals['eth']
         tx = eth.transact(to='', data=evm_code, startgas=500000, sender=sender)
 
-        code = chain.head_candidate.account_to_dict(tx.creates)['code']
+        code = chain.state.account_to_dict(tx.creates)['code']
         assert len(code) > 2
         assert code != '0x'
 
