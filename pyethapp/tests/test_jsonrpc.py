@@ -14,7 +14,8 @@ import ethereum.config
 import ethereum.tools.keys
 from ethereum.pow.ethpow import mine
 from ethereum.tools import tester
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure_logging
+from ethereum.state import State
 from devp2p.peermanager import PeerManager
 
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
@@ -34,6 +35,7 @@ from pyethapp.rpc_client import ContractProxy
 
 ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
+configure_logging(':trace')
 SOLIDITY_AVAILABLE = 'solidity' in Compilers().compilers
 
 # EVM code corresponding to the following solidity code:
@@ -147,11 +149,14 @@ def test_app(request, tmpdir):
             log.debug('adding test accounts')
             # high balance account
             self.services.accounts.add_account(Account.new('', tester.keys[0]), store=False)
+            log.debug('added unlocked account %s' % tester.keys[0])
             # low balance account
             self.services.accounts.add_account(Account.new('', tester.keys[1]), store=False)
+            log.debug('added unlocked account %s' % tester.keys[1])
             # locked account
             locked_account = Account.new('', tester.keys[2])
             locked_account.lock()
+            log.debug('added locked account %s' % tester.keys[1])
             self.services.accounts.add_account(locked_account, store=False)
             self.privkey = None
             assert set(acct.address for acct in self.services.accounts) == set(tester.accounts[:3])
@@ -164,17 +169,31 @@ def test_app(request, tmpdir):
             :returns: the new head
             """
             log.debug('mining next block')
-            block = self.services.chain.chain.head_candidate
+            chain = self.services.chain.chain
+            head_number = chain.head.number
+            block = self.services.chain.head_candidate
             delta_nonce = 10 ** 6
             for start_nonce in count(0, delta_nonce):
                 bin_nonce, mixhash = mine(block.number, block.difficulty, block.mining_hash,
                                           start_nonce=start_nonce, rounds=delta_nonce)
                 if bin_nonce:
                     break
-            self.services.pow.recv_found_nonce(bin_nonce, mixhash, block.mining_hash)
+            self.services.pow.recv_found_nonce(
+                bin_nonce, mixhash, block.mining_hash)
+            if len(chain.time_queue) > 0:
+                # If we mine two blocks within one second, pyethereum will
+                # force the new block's timestamp to be in the future (see
+                # ethereum1_setup_block()), and when we try to add that block
+                # to the chain (via Chain.add_block()), it will be put in a
+                # queue for later processing. Since we need to ensure the
+                # block has been added before we continue the test, we
+                # have to manually process the time queue.
+                log.debug('block mined too fast, processing time queue')
+                chain.process_time_queue(new_time=block.timestamp)
             log.debug('block mined')
-            assert self.services.chain.chain.head.difficulty == 1
-            return self.services.chain.chain.head
+            assert chain.head.difficulty == 1
+            assert chain.head.number == head_number + 1
+            return chain.head
 
         def rpc_request(self, method, *args, **kwargs):
             """Simulate an incoming JSON RPC request and return the result.
@@ -317,9 +336,16 @@ contract SampleContract {
 """
 
 
+# XXX: This test is failing because the solidity-triggered transactions are
+# running out of gas and causing the test to fail. It fails on
+# validate_transaction() with a BlockGasLimitReached exception, and at first I
+# was able to get the test passing by changing
+# JSONRPCClient.send_transaction() to use default_startgas (instead of
+# self.gaslimit()-1) when no startgas arg is passed to it, but with the latest
+# merge of the state_revamp branch, the transaction fails in the EVM (because
+# it runs out of gas) and is thus reverted, causing the test to fail.
 @pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
 def test_logfilters_topics(test_app):
-    # slogging.configure(':trace')
     sample_compiled = _solidity.compile_code(
     sample_sol_code,
     combined='bin,abi',
@@ -529,26 +555,28 @@ def test_logfilters_topics(test_app):
 
 
 def test_send_transaction(test_app):
-    chain = test_app.services.chain.chain
-    assert chain.head_candidate.get_balance('\xff' * 20) == 0
+    chainservice = test_app.services.chain
+    chain = chainservice.chain
+    hc = chainservice.head_candidate
+    state = State(hc.state_root, chain.env)
+    assert state.get_balance('\xff' * 20) == 0
     sender = test_app.services.accounts.unlocked_accounts[0].address
-    assert chain.head_candidate.get_balance(sender) > 0
+    assert state.get_balance(sender) > 0
     tx = {
         'from': address_encoder(sender),
         'to': address_encoder('\xff' * 20),
         'value': quantity_encoder(1)
     }
     tx_hash = data_decoder(test_app.client.call('eth_sendTransaction', tx))
-    assert tx_hash == chain.head_candidate.get_transaction(0).hash
-    assert chain.head_candidate.get_balance('\xff' * 20) == 1
     test_app.mine_next_block()
-    assert tx_hash == chain.head.get_transaction(0).hash
-    assert chain.head.get_balance('\xff' * 20) == 1
+    assert len(chain.head.transactions) == 1
+    assert tx_hash == chain.head.transactions[0].hash
+    assert chain.state.get_balance('\xff' * 20) == 1
 
     # send transactions from account which can't pay gas
     tx['from'] = address_encoder(test_app.services.accounts.unlocked_accounts[1].address)
     tx_hash = data_decoder(test_app.client.call('eth_sendTransaction', tx))
-    assert chain.head_candidate.get_transactions() == []
+    assert chainservice.head_candidate.transactions == []
 
 
 def test_send_transaction_with_contract(test_app):
@@ -558,26 +586,31 @@ def main(a,b):
 '''
     tx_to = b''
     evm_code = serpent.compile(serpent_code)
+    chainservice = test_app.services.chain
     chain = test_app.services.chain.chain
-    assert chain.head_candidate.get_balance(tx_to) == 0
+    state = State(chainservice.head_candidate.state_root, chain.env)
     sender = test_app.services.accounts.unlocked_accounts[0].address
-    assert chain.head_candidate.get_balance(sender) > 0
+    assert state.get_balance(sender) > 0
     tx = {
         'from': address_encoder(sender),
         'to': address_encoder(tx_to),
         'data': evm_code.encode('hex')
     }
     data_decoder(test_app.client.call('eth_sendTransaction', tx))
-    creates = chain.head_candidate.get_transaction(0).creates
+    assert len(chainservice.head_candidate.transactions) == 1
+    creates = chainservice.head_candidate.transactions[0].creates
 
-    code = chain.head_candidate.account_to_dict(creates)['code']
+    candidate_state_dict = State(chainservice.head_candidate.state_root, chain.env).to_dict()
+    code = candidate_state_dict[creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
     test_app.mine_next_block()
 
-    creates = chain.head.get_transaction(0).creates
-    code = chain.head.account_to_dict(creates)['code']
+    assert len(chain.head.transactions) == 1
+    creates = chain.head.transactions[0].creates
+    state_dict = State(chain.head.state_root, chain.env).to_dict()
+    code = state_dict[creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
@@ -589,25 +622,30 @@ def main(a,b):
 '''
     tx_to = b''
     evm_code = serpent.compile(serpent_code)
+    chainservice = test_app.services.chain
     chain = test_app.services.chain.chain
-    assert chain.head_candidate.get_balance(tx_to) == 0
+    state = State(chainservice.head_candidate.state_root, chain.env)
     sender = test_app.services.accounts.unlocked_accounts[0].address
-    assert chain.head_candidate.get_balance(sender) > 0
-    nonce = chain.head_candidate.get_nonce(sender)
+    assert state.get_balance(sender) > 0
+    nonce = state.get_nonce(sender)
     tx = ethereum.transactions.Transaction(nonce, default_gasprice, default_startgas, tx_to, 0, evm_code, 0, 0, 0)
     test_app.services.accounts.sign_tx(sender, tx)
     raw_transaction = data_encoder(rlp.codec.encode(tx, ethereum.transactions.Transaction))
     data_decoder(test_app.client.call('eth_sendRawTransaction', raw_transaction))
-    creates = chain.head_candidate.get_transaction(0).creates
+    assert len(chainservice.head_candidate.transactions) == 1
+    creates = chainservice.head_candidate.transactions[0].creates
 
-    code = chain.head_candidate.account_to_dict(creates)['code']
+    candidate_state_dict = State(chainservice.head_candidate.state_root, chain.env).to_dict()
+    code = candidate_state_dict[creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
     test_app.mine_next_block()
 
-    creates = chain.head.get_transaction(0).creates
-    code = chain.head.account_to_dict(creates)['code']
+    assert len(chain.head.transactions) == 1
+    creates = chain.head.transactions[0].creates
+    state_dict = State(chain.head.state_root, chain.env).to_dict()
+    code = state_dict[creates.encode('hex')]['code']
     assert len(code) > 2
     assert code != '0x'
 
@@ -620,7 +658,17 @@ def test_pending_transaction_filter(test_app):
         'to': address_encoder('\xff' * 20)
     }
 
-    def test_sequence(s):
+    sequences = [
+        't',
+        'b',
+        'ttt',
+        'tbt',
+        'ttbttt',
+        'bttbtttbt',
+        'bttbtttbttbb',
+    ]
+    for s in sequences:
+        log.debug('testing sequence "%s"' % s)
         tx_hashes = []
         for c in s:
             if c == 't':
@@ -631,17 +679,6 @@ def test_pending_transaction_filter(test_app):
                 assert False
         assert test_app.client.call('eth_getFilterChanges', filter_id) == tx_hashes
         assert test_app.client.call('eth_getFilterChanges', filter_id) == []
-
-    sequences = [
-        't',
-        'b',
-        'ttt',
-        'tbt',
-        'ttbttt',
-        'bttbtttbt',
-        'bttbtttbttbb',
-    ]
-    map(test_sequence, sequences)
 
 
 def test_new_block_filter(test_app):
@@ -849,18 +886,23 @@ def test_eth_nonce(test_app):
     :param test_app:
     :return:
     """
-    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
+    assert test_app.client.call(
+        'eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x0'
     assert (
         int(test_app.client.call('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
         test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'])
 
-    assert test_app.client.call('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
-    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
+    assert test_app.client.call(
+        'eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.client.call(
+        'eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x1'
     assert (
         int(test_app.client.call('eth_nonce', address_encoder(tester.accounts[0])), 16) ==
         test_app.config['eth']['block']['ACCOUNT_INITIAL_NONCE'] + 1)
-    assert test_app.client.call('eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
-    assert test_app.client.call('eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
+    assert test_app.client.call(
+        'eth_sendTransaction', dict(sender=address_encoder(tester.accounts[0]), to=''))
+    assert test_app.client.call(
+        'eth_getTransactionCount', address_encoder(tester.accounts[0])) == '0x2'
     test_app.mine_next_block()
     assert test_app.services.chain.chain.head.number == 1
     assert (

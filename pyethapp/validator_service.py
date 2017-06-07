@@ -8,7 +8,6 @@ from ethereum.casper_utils import generate_validation_code, call_casper, check_s
                                   get_skips_and_block_making_time, get_timestamp, \
                                   get_casper_ct, get_dunkle_candidates, sign_block, \
                                   make_withdrawal_signature, RandaoManager
-from ethereum.block_creation import make_head_candidate
 
 log = get_logger('validator')
 
@@ -121,7 +120,7 @@ class ValidatorService(BaseService):
     def make_block(self):
         pre_dunkle_count = self.call_casper('getTotalDunklesIncluded')
         dunkle_txs = get_dunkle_candidates(self.chain, self.chain.state)
-        blk = make_head_candidate(self.chain, self.chainservice.transaction_queue)
+        blk = self.chainservice.head_candidate
         randao = self.randao.get_parent(self.call_casper('getRandao', [self.validation_code_hash]))
         blk = sign_block(blk, self.key, randao, self.validation_code_hash, self.next_skip_count)
         # Make sure it's valid

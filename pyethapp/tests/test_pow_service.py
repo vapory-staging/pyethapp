@@ -24,6 +24,7 @@ class ChainServiceMock(BaseService):
         self.is_syncing = False
         self.mined_block = None
         self.block_mined_event = Event()
+        self.head_candidate = Block(BlockHeader(difficulty=DIFFICULTY), db=DB())
 
     def add_mined_block(self, block):
         assert self.mined_block is None
@@ -36,8 +37,6 @@ class ChainServiceMock(BaseService):
 def app(request):
     app = BaseApp()
     ChainServiceMock.register_with_app(app)
-    PoWService.make_head_candidate = lambda self: Block(
-        BlockHeader(difficulty=DIFFICULTY), db=DB())
     PoWService.register_with_app(app)
     app.start()
     request.addfinalizer(lambda: app.stop())
