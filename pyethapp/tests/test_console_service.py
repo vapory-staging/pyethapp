@@ -3,9 +3,9 @@ import pytest
 import serpent
 from devp2p.peermanager import PeerManager
 import ethereum
-from ethereum import tester
-from ethereum.ethpow import mine
-import ethereum.keys
+from ethereum.tools import tester
+from ethereum.pow.ethpow import mine
+import ethereum.tools.keys
 import ethereum.config
 from ethereum.slogging import get_logger
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
@@ -17,7 +17,7 @@ from pyethapp.pow_service import PoWService
 from pyethapp.console_service import Console
 
 # reduce key derivation iterations
-ethereum.keys.PBKDF2_CONSTANTS['c'] = 100
+ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100
 
 
 log = get_logger('test.console_service')

@@ -1,6 +1,6 @@
 from pprint import pprint
 import pytest
-from ethereum import blocks
+from ethereum import block
 from ethereum.db import DB
 from ethereum.config import Env
 from pyethapp.utils import merge_dict

@@ -11,9 +11,9 @@ import rlp
 import serpent
 import ethereum
 import ethereum.config
-import ethereum.keys
-from ethereum.ethpow import mine
-from ethereum import tester
+import ethereum.tools.keys
+from ethereum.pow.ethpow import mine
+from ethereum.tools import tester
 from ethereum.slogging import get_logger
 from devp2p.peermanager import PeerManager
 
@@ -28,11 +28,11 @@ from pyethapp.rpc_client import JSONRPCClient
 from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
 from pyethapp.profiles import PROFILES
 from pyethapp.pow_service import PoWService
-from ethereum import _solidity
+from ethereum.tools import _solidity
 from ethereum.abi import event_id, normalize_name
 from pyethapp.rpc_client import ContractProxy
 
-ethereum.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
+ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100  # faster key derivation
 log = get_logger('test.jsonrpc')  # pylint: disable=invalid-name
 SOLIDITY_AVAILABLE = 'solidity' in Compilers().compilers
 
