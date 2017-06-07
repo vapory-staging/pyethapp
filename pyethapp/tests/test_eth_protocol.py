@@ -42,11 +42,11 @@ def test_basics():
 
 def test_status():
     peer, proto, chain, cb_data, cb = setup()
-    genesis = head = chain.blocks[-1]
+    genesis = head = chain.chain.get_descendants(chain.chain.get_block_by_number(0))[-1]
 
     # test status
     proto.send_status(
-        chain_difficulty=head.chain_difficulty(),
+        chain_difficulty=chain.chain.get_score(head),
         chain_head_hash=head.hash,
         genesis_hash=genesis.hash
     )
@@ -57,7 +57,7 @@ def test_status():
     _p, _d = cb_data.pop()
     assert _p == proto
     assert isinstance(_d, dict)
-    assert _d['chain_difficulty'] == head.chain_difficulty()
+    assert _d['chain_difficulty'] == chain.chain.get_score(head)
     print _d
     assert _d['chain_head_hash'] == head.hash
     assert _d['genesis_hash'] == genesis.hash
