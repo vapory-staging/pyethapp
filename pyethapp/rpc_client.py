@@ -411,6 +411,10 @@ class JSONRPCClient(object):
 
         if not startgas:
             startgas = self.gaslimit() - 1
+            # If we use default_startgas instead of "self.gaslimit() - 1" we
+            # don't get a BlockGasLimitReached in get_receipts when trying to
+            # apply transactions to re-generate receipts.
+            #startgas = default_startgas
 
         tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
 
@@ -419,6 +423,8 @@ class JSONRPCClient(object):
             tx.sign(self.privkey)
 
         tx_dict = tx.to_dict()
+        # Transaction.to_dict() encodes 'data', so we need to decode it here.
+        tx_dict['data'] = data_decoder(tx_dict['data'])
 
         # rename the fields to match the eth_sendTransaction signature
         tx_dict.pop('hash')
