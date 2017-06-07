@@ -183,7 +183,7 @@ class Console(BaseService):
 
             @property
             def pending(this):
-                return this.chain.head_candidate
+                return this.chainservice.head_candidate
 
             head_candidate = pending
 
@@ -195,7 +195,7 @@ class Console(BaseService):
                          startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
                 to = normalize_address(to, allow_blank=True)
-                nonce = this.pending.get_nonce(sender)
+                nonce = this.chain.state.get_nonce(sender)
                 tx = Transaction(nonce, gasprice, startgas, to, value, data)
                 this.app.services.accounts.sign_tx(sender, tx)
                 assert tx.sender == sender

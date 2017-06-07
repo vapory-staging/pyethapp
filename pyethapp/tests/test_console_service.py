@@ -112,14 +112,15 @@ def main(a,b):
     tx_to = b''
     evm_code = serpent.compile(serpent_code)
     chain = test_app.services.chain.chain
-    assert chain.head_candidate.get_balance(tx_to) == 0
+    head_candidate = test_app.services.chain.head_candidate
+    assert chain.state.get_balance(tx_to) == 0
     sender = test_app.services.accounts.unlocked_accounts[0].address
-    assert chain.head_candidate.get_balance(sender) > 0
+    assert chain.state.get_balance(sender) > 0
 
     eth = test_app.services.console.console_locals['eth']
     tx = eth.transact(to='', data=evm_code, startgas=500000, sender=sender)
 
-    code = chain.head_candidate.account_to_dict(tx.creates)['code']
+    code = chain.state.account_to_dict(tx.creates)['code']
     assert len(code) > 2
     assert code != '0x'
 
@@ -153,8 +154,8 @@ def test_console_name_reg_contract(test_app):
     }
     """
 
-    import ethereum._solidity
-    solidity = ethereum._solidity.get_solidity()
+    import ethereum.tools._solidity
+    solidity = ethereum.tools._solidity.get_solidity()
     if solidity is None:
         pytest.xfail("solidity not installed, not tested")
     else:

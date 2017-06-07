@@ -18,7 +18,7 @@ def setup():
     peer = PeerMock()
     proto = ETHProtocol(peer, WiredService(BaseApp()))
     proto.service.app.config['eth'] = dict(network_id=1337)
-    chain = tester.state()
+    chain = tester.Chain()
     cb_data = []
 
     def cb(proto, **data):
@@ -69,8 +69,10 @@ def test_blocks():
     peer, proto, chain, cb_data, cb = setup()
 
     # test blocks
-    chain.mine(n=2)
-    assert len(chain.blocks) == 3
+    chain.mine(number_of_blocks=2)
+    assert chain.block.number == 3
+    # monkey patch to make "blocks" attribute available
+    chain.blocks = chain.chain.get_descendants(chain.chain.get_block_by_number(0))
     payload = [rlp.encode(b) for b in chain.blocks]
     proto.send_blocks(*payload)
     packet = peer.packets.pop()
