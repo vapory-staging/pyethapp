@@ -1,4 +1,4 @@
-from pyethapp.eth_protocol import ETHProtocol, TransientBlock
+from pyethapp.eth_protocol import ETHProtocol, TransientBlockBody
 from devp2p.service import WiredService
 from devp2p.protocol import BaseProtocol
 from devp2p.app import BaseApp
@@ -73,21 +73,20 @@ def test_blocks():
     assert chain.block.number == 3
     # monkey patch to make "blocks" attribute available
     chain.blocks = chain.chain.get_descendants(chain.chain.get_block_by_number(0))
-    payload = [rlp.encode(b) for b in chain.blocks]
-    proto.send_blocks(*payload)
+    proto.send_blockbodies(*chain.blocks)
     packet = peer.packets.pop()
     assert len(rlp.decode(packet.payload)) == 3
 
     def list_cb(proto, blocks):  # different cb, as we expect a list of blocks
         cb_data.append((proto, blocks))
 
-    proto.receive_blocks_callbacks.append(list_cb)
-    proto._receive_blocks(packet)
+    proto.receive_blockbodies_callbacks.append(list_cb)
+    proto._receive_blockbodies(packet)
 
     _p, blocks = cb_data.pop()
-    assert isinstance(blocks, list)
+    assert isinstance(blocks, tuple)
     for block in blocks:
-        assert isinstance(block, TransientBlock)
+        assert isinstance(block, TransientBlockBody)
         assert isinstance(block.transactions, tuple)
         assert isinstance(block.uncles, tuple)
         # assert that transactions and uncles have not been decoded
