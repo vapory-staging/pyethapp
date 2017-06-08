@@ -16,9 +16,10 @@ import IPython
 import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from devp2p.service import BaseService
-from ethereum.messages import apply_transaction
 from ethereum.exceptions import InvalidTransaction
 from ethereum.slogging import getLogger
+from ethereum.messages import apply_transaction
+from ethereum.state import State
 from ethereum.transactions import Transaction
 from ethereum.utils import denoms, normalize_address
 
@@ -183,7 +184,7 @@ class Console(BaseService):
 
             @property
             def pending(this):
-                return this.chain.head_candidate
+                return this.chainservice.head_candidate
 
             head_candidate = pending
 
@@ -195,7 +196,8 @@ class Console(BaseService):
                          startgas=25000, gasprice=60 * denoms.shannon):
                 sender = normalize_address(sender or this.coinbase)
                 to = normalize_address(to, allow_blank=True)
-                nonce = this.pending.get_nonce(sender)
+                state = State(this.head_candidate.state_root, this.chain.env)
+                nonce = state.get_nonce(sender)
                 tx = Transaction(nonce, gasprice, startgas, to, value, data)
                 this.app.services.accounts.sign_tx(sender, tx)
                 assert tx.sender == sender
@@ -208,22 +210,20 @@ class Console(BaseService):
                 to = normalize_address(to, allow_blank=True)
                 block = this.head_candidate
                 state_root_before = block.state_root
-                assert block.has_parent()
+                assert block.prevhash == this.chain.head_hash
                 # rebuild block state before finalization
-                parent = block.get_parent()
-                test_block = block.init_from_parent(parent, block.coinbase,
-                                                    timestamp=block.timestamp)
-                for tx in block.get_transactions():
-                    success, output = apply_transaction(test_block, tx)
+                test_state = this.chain.mk_poststate_of_blockhash(block.prevhash)
+                for tx in block.transactions:
+                    success, _ = apply_transaction(test_state, tx)
                     assert success
 
                 # apply transaction
-                nonce = test_block.get_nonce(sender)
+                nonce = test_state.get_nonce(sender)
                 tx = Transaction(nonce, gasprice, startgas, to, value, data)
                 tx.sender = sender
 
                 try:
-                    success, output = apply_transaction(test_block, tx)
+                    success, output = apply_transaction(test_state, tx)
                 except InvalidTransaction:
                     success = False
 

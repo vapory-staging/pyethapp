@@ -411,10 +411,6 @@ class JSONRPCClient(object):
 
         if not startgas:
             startgas = self.gaslimit() - 1
-            # If we use default_startgas instead of "self.gaslimit() - 1" we
-            # don't get a BlockGasLimitReached in get_receipts when trying to
-            # apply transactions to re-generate receipts.
-            #startgas = default_startgas
 
         tx = Transaction(nonce, gasprice, startgas, to=to, value=value, data=data)
 
