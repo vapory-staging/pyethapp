@@ -336,15 +336,6 @@ contract SampleContract {
 """
 
 
-# XXX: This test is failing because the solidity-triggered transactions are
-# running out of gas and causing the test to fail. It fails on
-# validate_transaction() with a BlockGasLimitReached exception, and at first I
-# was able to get the test passing by changing
-# JSONRPCClient.send_transaction() to use default_startgas (instead of
-# self.gaslimit()-1) when no startgas arg is passed to it, but with the latest
-# merge of the state_revamp branch, the transaction fails in the EVM (because
-# it runs out of gas) and is thus reverted, causing the test to fail.
-@pytest.mark.skipif(not SOLIDITY_AVAILABLE, reason='solidity compiler not available')
 def test_logfilters_topics(test_app):
     sample_compiled = _solidity.compile_code(
     sample_sol_code,

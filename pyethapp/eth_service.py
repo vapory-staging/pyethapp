@@ -17,11 +17,10 @@ from devp2p.service import WiredService
 from ethereum.block import Block
 from ethereum.meta import make_head_candidate
 from ethereum.pow.chain import Chain
+from ethereum.pow.consensus import initialize, check_pow
 from ethereum.config import Env
-from ethereum.consensus_strategy import get_consensus_strategy
 from ethereum.genesis_helpers import mk_genesis_data
 from ethereum import config as ethereum_config
-from ethereum.pow.consensus import check_pow
 from ethereum.state import State
 from ethereum.messages import apply_transaction, validate_transaction
 from ethereum.transaction_queue import TransactionQueue
@@ -206,10 +205,11 @@ class ChainService(WiredService):
     def get_receipts(self, block):
         # Receipts are no longer stored in the database, so need to generate
         # them on the fly here.
-        state = self.chain.mk_poststate_of_blockhash(block.header.prevhash)
+        temp_state = self.chain.mk_poststate_of_blockhash(block.header.prevhash)
+        initialize(temp_state, block)
         for tx in block.transactions:
-            apply_transaction(state, tx)
-        return state.receipts
+            apply_transaction(temp_state, tx)
+        return temp_state.receipts
 
     def _on_new_head(self, block):
         log.debug('new head cbs', num=len(self.on_new_head_cbs))

@@ -419,6 +419,8 @@ class JSONRPCClient(object):
             tx.sign(self.privkey)
 
         tx_dict = tx.to_dict()
+        # Transaction.to_dict() encodes 'data', so we need to decode it here.
+        tx_dict['data'] = data_decoder(tx_dict['data'])
 
         # rename the fields to match the eth_sendTransaction signature
         tx_dict.pop('hash')
