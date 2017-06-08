@@ -711,8 +711,8 @@ class Compilers(Subdispatcher):
             except ImportError:
                 pass
             try:
-                import ethereum._solidity
-                s = ethereum._solidity.get_solidity()
+                import ethereum.tools._solidity
+                s = ethereum.tools._solidity.get_solidity()
                 if s:
                     self.compilers_['solidity'] = s.compile_rich
                 else:

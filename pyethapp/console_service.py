@@ -259,7 +259,7 @@ class Console(BaseService):
                 return TransientBlock.init_from_rlp(l).to_block()
 
         try:
-            from ethereum._solidity import solc_wrapper
+            from ethereum.tools._solidity import solc_wrapper
         except ImportError:
             solc_wrapper = None
             pass
