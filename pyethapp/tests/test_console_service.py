@@ -169,8 +169,8 @@ def test_console_name_reg_contract(test_app):
     }
     """
 
-    import ethereum._solidity
-    solidity = ethereum._solidity.get_solidity()
+    import ethereum.tools._solidity
+    solidity = ethereum.tools._solidity.get_solidity()
     if solidity is None:
         pytest.xfail("solidity not installed, not tested")
     else:
