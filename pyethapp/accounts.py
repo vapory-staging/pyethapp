@@ -1,6 +1,6 @@
 import json
 import os
-import random
+from random import SystemRandom
 import shutil
 from uuid import UUID
 from devp2p.service import BaseService
@@ -11,6 +11,8 @@ from ethereum.utils import sha3, is_string, decode_hex, remove_0x_head
 log = get_logger('accounts')
 
 DEFAULT_COINBASE = 'de0b295669a9fd93d5f28d9ec85e40f4cb697bae'.decode('hex')
+
+random = SystemRandom()
 
 
 def mk_privkey(seed):
