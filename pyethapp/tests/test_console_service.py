@@ -7,7 +7,7 @@ from ethereum.tools import tester
 from ethereum.pow.ethpow import mine
 import ethereum.tools.keys
 import ethereum.config
-from ethereum.slogging import get_logger
+from ethereum.slogging import get_logger, configure_logging
 from ethereum.state import State
 from pyethapp.accounts import Account, AccountsService, mk_random_privkey
 from pyethapp.app import EthApp
@@ -20,7 +20,7 @@ from pyethapp.console_service import Console
 # reduce key derivation iterations
 ethereum.tools.keys.PBKDF2_CONSTANTS['c'] = 100
 
-
+configure_logging(':trace')
 log = get_logger('test.console_service')
 
 
@@ -194,7 +194,7 @@ def test_console_name_reg_contract(test_app):
         test_app.mine_next_block()
 
         creates = chain.head.transactions[0].creates
-        state_dict = State(chain.head.state_root, chain.env).to_dict()
+        state_dict = chain.state.to_dict()
         code = state_dict[creates.encode('hex')]['code']
         assert len(code) > 2
         assert code != '0x'

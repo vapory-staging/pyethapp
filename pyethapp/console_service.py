@@ -17,6 +17,7 @@ import IPython.core.shellapp
 from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from devp2p.service import BaseService
 from ethereum.exceptions import InvalidTransaction
+from ethereum.pow.consensus import initialize
 from ethereum.slogging import getLogger
 from ethereum.messages import apply_transaction
 from ethereum.state import State
@@ -213,18 +214,25 @@ class Console(BaseService):
                 assert block.prevhash == this.chain.head_hash
                 # rebuild block state before finalization
                 test_state = this.chain.mk_poststate_of_blockhash(block.prevhash)
+                initialize(test_state, block)
                 for tx in block.transactions:
                     success, _ = apply_transaction(test_state, tx)
                     assert success
 
+                # Need this because otherwise the Transaction.network_id
+                # @property returns 0, which causes the tx to fail validation.
+                class MockedTx(Transaction):
+                    network_id = None
+
                 # apply transaction
                 nonce = test_state.get_nonce(sender)
-                tx = Transaction(nonce, gasprice, startgas, to, value, data)
+                tx = MockedTx(nonce, gasprice, startgas, to, value, data)
                 tx.sender = sender
 
                 try:
                     success, output = apply_transaction(test_state, tx)
-                except InvalidTransaction:
+                except InvalidTransaction as e:
+                    log.debug("error applying tx in Eth.call", exc=e)
                     success = False
 
                 assert block.state_root == state_root_before
