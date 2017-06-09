@@ -77,7 +77,7 @@ def test_compile_solidity():
     with open(path.join(path.dirname(__file__), 'contracts', 'multiply.sol')) as handler:
         solidity_code = handler.read()
 
-    solidity = ethereum._solidity.get_solidity()  # pylint: disable=protected-access
+    solidity = ethereum.tools._solidity.get_solidity()  # pylint: disable=protected-access
 
     abi = solidity.mk_full_signature(solidity_code)
     code = data_encoder(solidity.compile(solidity_code))
