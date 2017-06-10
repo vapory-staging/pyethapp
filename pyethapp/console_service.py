@@ -33,43 +33,13 @@ ENTER_CONSOLE_TIMEOUT = 3
 GUI_GEVENT = 'gevent'
 
 
-def inputhook_gevent():
-    while not stdin_ready():
+def inputhook_gevent(context):
+    while not context.input_is_ready():
         gevent.sleep(0.05)
     return 0
 
 
-@inputhook_manager.register('gevent')
-class GeventInputHook(object):
-
-    def __init__(self, manager):
-        self.manager = manager
-
-    def enable(self, app=None):
-        """Enable event loop integration with gevent.
-        Parameters
-        ----------
-        app : ignored
-            Ignored, it's only a placeholder to keep the call signature of all
-            gui activation methods consistent, which simplifies the logic of
-            supporting magics.
-        Notes
-        -----
-        This methods sets the PyOS_InputHook for gevent, which allows
-        gevent greenlets to run in the background while interactively using
-        IPython.
-        """
-        self.manager.set_inputhook(inputhook_gevent)
-        self._current_gui = GUI_GEVENT
-        return app
-
-    def disable(self):
-        """Disable event loop integration with gevent.
-        This merely sets PyOS_InputHook to NULL.
-        """
-        self.manager.clear_inputhook()
-
-
+IPython.terminal.pt_inputhooks.register('gevent', inputhook_gevent)
 # ipython needs to accept "--gui gevent" option
 IPython.core.shellapp.InteractiveShellApp.gui.values += ('gevent',)
 
