@@ -48,10 +48,12 @@ INSTALL_REQUIRES = list(set(INSTALL_REQUIRES))
 
 DEPENDENCY_LINKS = []
 if os.environ.get("USE_PYETHEREUM_DEVELOP"):
-    # Force installation of develop branches of devp2p and pyethereum.
+    # Force installation of specific commits of devp2p and pyethereum.
+    devp2p_ref='525e15a9967da3174ec9e4e367b5adfb76138bb4'
+    pyethereum_ref='0ae64823d1bccba9c8148adb462060cb83c08f06'
     DEPENDENCY_LINKS = [
-        'http://github.com/ethereum/pydevp2p/tarball/develop#egg=devp2p-9.99.9',
-        'http://github.com/ethereum/pyethereum/tarball/develop#egg=ethereum-9.99.9',
+        'http://github.com/ethereum/pydevp2p/tarball/%s#egg=devp2p-9.99.9' % devp2p_ref,
+        'http://github.com/ethereum/pyethereum/tarball/%s#egg=ethereum-9.99.9' % pyethereum_ref,
         ]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
