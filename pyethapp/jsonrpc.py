@@ -853,7 +853,8 @@ class Chain(Subdispatcher):
     @encode_res(quantity_encoder)
     def getBalance(self, address, block_id=None):
         block = self.json_rpc_server.get_block(block_id)
-        return block.get_balance(address)
+        state = State(block.state_root, self.chain.chain.env)
+        return state.get_balance(address)
 
     @public
     @decode_arg('address', address_decoder)
