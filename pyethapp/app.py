@@ -198,7 +198,8 @@ def run(ctx, dev, nodial, fake, console):
             pass
 
     # dump config
-    dump_config(config)
+    if log.is_active('debug'):
+        dump_config(config)
 
     # init and unlock accounts first to check coinbase
     if AccountsService in services:
@@ -253,7 +254,7 @@ def dump_config(config):
     cfg = copy.deepcopy(config)
     alloc = cfg.get('eth', {}).get('block', {}).get('GENESIS_INITIAL_ALLOC', {})
     if len(alloc) > 100:
-        log.info('omitting reporting of %d accounts in genesis' % len(alloc))
+        log.debug('omitting reporting of %d accounts in genesis' % len(alloc))
         del cfg['eth']['block']['GENESIS_INITIAL_ALLOC']
     app_config.dump_config(cfg)
 
