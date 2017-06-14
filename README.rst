@@ -118,7 +118,7 @@ above, then:
     ($ mkvirtualenv pyethapp)
     $ git clone https://github.com/ethereum/pyethapp
     $ cd pyethapp
-    $ python setup.py develop
+    $ USE_PYETHEREUM_DEVELOP=1 python setup.py develop
 
 This has the advantage that inside of Python's
 ``lib/python2.7/site-packages`` there is a direct link to your directory
