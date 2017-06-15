@@ -1,0 +1,15 @@
+With the config in setup.cfg it's possible to use bump2version to generate the
+usual <major>.<minor>.<patch> (e.g. 1.5.0) releases as well as alpha and rc
+ones (e.g. 1.6.0a1, 1.6.0rc2, etc). For the latter, one just has to tell
+bump2version to update either the "release" or "num" parts. For example,
+assuming a current version of 1.5.0:
+
+  $ bump2version minor    # will update the current version to 1.6.0a0
+
+  $ bump2version num      # will update the current version to 1.6.0a1
+
+  $ bump2version release  # will update the current version to 1.6.0rc0
+
+  $ bump2version num      # will update the current version to 1.6.0rc1
+
+  $ bump2version release  # will update the current version to 1.6.0
