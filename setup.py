@@ -56,7 +56,7 @@ if os.environ.get("USE_PYETHEREUM_DEVELOP"):
         'http://github.com/ethereum/pyethereum/tarball/%s#egg=ethereum-9.99.9' % pyethereum_ref,
         ]
 
-# *IMPORTANT*: Don't manually change the version here. Use the 'bumpversion' utility.
+# *IMPORTANT*: Don't manually change the version here. Use the 'bump2version' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
 version = '1.5.0'
 
