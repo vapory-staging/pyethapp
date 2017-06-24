@@ -34,6 +34,7 @@ class SyncTask(object):
     retry_delay = 2.
     blocks_request_timeout = 16.
     blockheaders_request_timeout = 8.
+    block_buffer_size = 4096
 
     def __init__(self, synchronizer, proto, blockhash, chain_difficulty=0, originator_only=False):
         self.synchronizer = synchronizer
@@ -190,6 +191,8 @@ class SyncTask(object):
         num_fetched = 0
         retry = 0
 
+        block_buffer = []
+
         while blockheaders_chain:
             blockhashes_batch = [h.hash for h in blockheaders_chain[:self.max_blocks_per_request]]
             bodies = []
@@ -251,11 +254,16 @@ class SyncTask(object):
                 try:
                     h = blockheaders_chain.pop(0)
                     t_block = TransientBlock(h, body.transactions, body.uncles)
-                    self.chainservice.add_block(t_block, proto)  # this blocks if the queue is full
+                    block_buffer.append(t_block)
                 except IndexError as e:
                     log_st.error('headers and bodies mismatch', error=e)
                     self.exit(success=False)
-            log_st.debug('adding blocks done', took=time.time() - ts)
+            bbs = len(block_buffer)
+            if bbs >= self.block_buffer_size or not blockheaders_chain:
+                for t_block in block_buffer:
+                    self.chainservice.add_block(t_block, proto)  # this blocks if the queue is full
+                log_st.debug('block buffer cleared', size=bbs)
+            log_st.info('adding blocks done', buffer_size=len(block_buffer), took=time.time() - ts)
 
         # done
         last_block = t_block
