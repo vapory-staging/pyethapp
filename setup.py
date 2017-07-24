@@ -90,6 +90,8 @@ setup(
     dependency_links=DEPENDENCY_LINKS,
     tests_require=[
         'ethereum-serpent>=1.8.1',
+        'mock==2.0.0',
+        'pytest-mock==1.6.0',
     ],
     entry_points='''
     [console_scripts]

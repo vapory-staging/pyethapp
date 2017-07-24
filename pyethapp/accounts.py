@@ -480,7 +480,7 @@ class AccountsService(BaseService):
         assert len(address) == 20
         accounts = [account for account in self.accounts if account.address == address]
         if len(accounts) == 0:
-            raise KeyError('account not found by address', address=address.encode('hex'))
+            raise KeyError('account with address {} not found'.format(address.encode('hex')))
         elif len(accounts) > 1:
             log.warning('multiple accounts with same address found', address=address.encode('hex'))
         return accounts[0]
