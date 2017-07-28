@@ -423,7 +423,7 @@ class Synchronizer(object):
             else:
                 log.debug('received status but already syncing, won\'t start new sync task',
                           proto=proto,
-                          blockhash=encode_hex(blockhash),
+                          blockhash=utils.encode_hex(blockhash),
                           chain_difficulty=chain_difficulty)
 
     def receive_newblockhashes(self, proto, newblockhashes):
