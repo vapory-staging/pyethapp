@@ -18,7 +18,6 @@ from devp2p.peermanager import PeerManager
 from devp2p.service import BaseService
 from ethereum import config as eth_config
 from ethereum.block import Block
-from ethereum.utils import decode_hex
 from ethereum.snapshot import create_snapshot, load_snapshot as _load_snapshot
 from gevent.event import Event
 

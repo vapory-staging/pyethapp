@@ -1,6 +1,5 @@
 """ A simple way of interacting to a ethereum node through JSON RPC commands. """
 import logging
-import time
 import warnings
 import json
 

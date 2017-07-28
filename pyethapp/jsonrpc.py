@@ -11,7 +11,6 @@ from ethereum.slogging import LogRecorder
 from ethereum.config import Env
 from ethereum.block import Block
 from ethereum.state import State
-from ethereum.meta import apply_block
 from ethereum.messages import apply_transaction
 from ethereum.transactions import Transaction
 from ethereum.genesis_helpers import mk_genesis_block

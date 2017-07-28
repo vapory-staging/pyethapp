@@ -1,7 +1,6 @@
 from devp2p.peermanager import PeerManager
 from devp2p.discovery import NodeDiscovery
 from devp2p.app import BaseApp
-from py._path.local import LocalPath
 from pyethapp.eth_service import ChainService
 from pyethapp.jsonrpc import JSONRPCServer
 from pyethapp.db_service import DBService

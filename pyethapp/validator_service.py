@@ -3,9 +3,9 @@ import random
 import gevent
 from devp2p.service import BaseService
 from ethereum.slogging import get_logger
-from ethereum.utils import privtoaddr, remove_0x_head, encode_hex, decode_hex, sha3
+from ethereum.utils import privtoaddr, encode_hex, sha3
 from ethereum.casper_utils import generate_validation_code, call_casper, check_skips, \
-                                  get_skips_and_block_making_time, get_timestamp, \
+                                  get_timestamp, \
                                   get_casper_ct, get_dunkle_candidates, sign_block, \
                                   make_withdrawal_signature, RandaoManager
 

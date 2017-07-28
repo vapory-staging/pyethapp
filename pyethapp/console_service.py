@@ -14,7 +14,6 @@ import gevent
 from gevent.event import Event
 import IPython
 import IPython.core.shellapp
-from IPython.lib.inputhook import inputhook_manager, stdin_ready
 from devp2p.service import BaseService
 from ethereum.exceptions import InvalidTransaction
 from ethereum.pow.consensus import initialize

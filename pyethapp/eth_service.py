@@ -21,7 +21,6 @@ from ethereum.pow.consensus import initialize, check_pow
 from ethereum.config import Env
 from ethereum.genesis_helpers import mk_genesis_data
 from ethereum import config as ethereum_config
-from ethereum.state import State
 from ethereum.messages import apply_transaction, validate_transaction
 from ethereum.transaction_queue import TransactionQueue
 from ethereum.experimental.refcount_db import RefcountDB
@@ -29,7 +28,7 @@ from ethereum.slogging import get_logger
 from ethereum.exceptions import InvalidTransaction, InvalidNonce, \
     InsufficientBalance, InsufficientStartGas, VerificationFailed
 from ethereum.transactions import Transaction
-from ethereum.utils import privtoaddr, encode_hex, decode_hex, remove_0x_head, normalize_address
+from ethereum.utils import encode_hex
 
 from synchronizer import Synchronizer
 import eth_protocol
