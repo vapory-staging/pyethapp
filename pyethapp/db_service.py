@@ -1,5 +1,4 @@
 # -*- coding: utf8 -*-
-import sys
 
 from devp2p.service import BaseService
 from ethereum.db import BaseDB
