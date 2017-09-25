@@ -100,7 +100,7 @@ class LoggingDispatcher(RPCDispatcher):
         super(LoggingDispatcher, self).__init__()
         self.logger = log.debug
 
-    def dispatch(self, request):
+    def dispatch(self, request, caller=None):
         try:
             if isinstance(request, Iterable):
                 request_list = request
