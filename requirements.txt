@@ -11,10 +11,11 @@ werkzeug
 ipython>=5.4.0,<6.0.0
 statistics
 requests
-rlp>=0.4.4
+rlp>=0.5.1,<0.6.0
 devp2p>=0.8.0
 ethereum>=1.5.1
 pbkdf2
 scrypt
 pexpect
 pyelliptic==1.5.7
+tinyrpc[gevent,httpclient,jsonext,websocket,wsgi]
