@@ -454,7 +454,7 @@ class ChainService(WiredService):
 
         # check genesis
         if genesis_hash != self.chain.genesis.hash:
-            log.warn("invalid genesis hash", remote_id=proto, genesis=genesis_hash.encode('hex'))
+            log.warn("invalid genesis hash", remote_id=proto, genesis=encode_hex(genesis_hash))
             raise eth_protocol.ETHProtocolError('wrong genesis block')
 
         # initiate DAO challenge
@@ -521,7 +521,7 @@ class ChainService(WiredService):
             except KeyError:
                 origin_hash = b''
         if not origin_hash or self.chain.has_blockhash(origin_hash):
-            log.debug("unknown block")
+            log.debug('unknown block: {}'.format(origin_hash))
             proto.send_blockheaders(*[])
             return
 
@@ -531,7 +531,7 @@ class ChainService(WiredService):
                 break
             try:
                 block_rlp = self.chain.db.get(last)
-                if block_rlp == 'GENESIS':
+                if block_rlp == b'GENESIS':
                     #last = self.chain.genesis.header.prevhash
                     break
                 else:

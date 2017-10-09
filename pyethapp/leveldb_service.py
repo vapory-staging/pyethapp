@@ -95,7 +95,9 @@ class LevelDB(BaseDB):
         if PY3:
             if isinstance(key, str):
                 key = key.encode()
-        o = decompress(self.db.Get(key))
+            o = bytes(self.db.Get(key))
+        else:
+            o = decompress(self.db.Get(key))
         self.uncommitted[key] = o
         return o
 
@@ -134,6 +136,9 @@ class LevelDB(BaseDB):
             return True
         except KeyError:
             return False
+        except Exception as e:
+            log.info('key: {}, type(key):{}'.format(key, type(key)))
+            raise
 
     def __contains__(self, key):
         return self._has_key(key)

@@ -1,5 +1,4 @@
 from builtins import hex
-from builtins import str
 from builtins import object
 import json
 import os
@@ -10,8 +9,11 @@ from devp2p.service import BaseService
 from ethereum.tools import keys
 from ethereum.slogging import get_logger
 from ethereum.utils import privtopub  # this is different  than the one used in devp2p.crypto
-from ethereum.utils import sha3, is_string, encode_hex, remove_0x_head
+from ethereum.utils import sha3, is_string, encode_hex, remove_0x_head, to_string
 from rlp.utils import decode_hex
+
+from pyethapp.utils import MinType
+
 log = get_logger('accounts')
 
 DEFAULT_COINBASE = decode_hex('de0b295669a9fd93d5f28d9ec85e40f4cb697bae')
@@ -65,10 +67,12 @@ class Account(object):
         """
         if key is None:
             key = mk_random_privkey()
-        if isinstance(key, str):
-            key = key.encode()
-        if isinstance(password, str):
-            password = password.encode()
+
+        # [NOTE]: key and password should be bytes
+        if not is_string(key):
+            key = to_string(key)
+        if not is_string(password):
+            password = to_string(password)
 
         keystore = keys.make_keystore_json(key, password)
         keystore['id'] = uuid
@@ -105,7 +109,7 @@ class Account(object):
         if include_address and self.address is not None:
             d['address'] = encode_hex(self.address)
         if include_id and self.uuid is not None:
-            d['id'] = self.uuid
+            d['id'] = str(self.uuid)
         return json.dumps(d)
 
     def unlock(self, password):
@@ -266,7 +270,9 @@ class AccountsService(BaseService):
                 return DEFAULT_COINBASE
             cb = self.accounts_with_address[0].address
         else:
-            if not is_string(cb_hex):
+            # [NOTE]: check it!
+            # if not is_string(cb_hex):
+            if not isinstance(cb_hex, str):
                 raise ValueError('coinbase must be string')
             try:
                 cb = decode_hex(remove_0x_head(cb_hex))
@@ -314,8 +320,9 @@ class AccountsService(BaseService):
                           errno=e.errno)
                 raise
         self.accounts.append(account)
-        self.accounts.sort(key=lambda account: account.path)
-
+        min_value = MinType()
+        self.accounts.sort(key=lambda account: min_value if account.path is None else account.path)
+        
     def update_account(self, account, new_password, include_address=True, include_id=True):
         """Replace the password of an account.
 
@@ -433,7 +440,7 @@ class AccountsService(BaseService):
         except ValueError:
             pass
         else:
-            return self.get_by_id(str(uuid))
+            return self.get_by_id(uuid.hex)
 
         try:
             index = int(identifier, 10)
@@ -469,7 +476,13 @@ class AccountsService(BaseService):
 
         :raises: `KeyError` if no matching account can be found
         """
-        accts = [acct for acct in self.accounts if UUID(acct.uuid) == UUID(id)]
+
+        accts = []
+        for acct in self.accounts:
+            if UUID(acct.uuid) == UUID(id):
+                accts.append(acct)
+
+        # accts = [acct for acct in self.accounts if UUID(acct.uuid) == UUID(id)]
         assert len(accts) <= 1
         if len(accts) == 0:
             raise KeyError('account with id {} unknown'.format(id))
