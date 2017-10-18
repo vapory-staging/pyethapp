@@ -124,6 +124,7 @@ class ChainService(WiredService):
     block_queue_size = 1024
     processed_gas = 0
     processed_elapsed = 0
+    process_time_queue_period = 5
 
     def __init__(self, app):
         self.config = app.config
@@ -195,6 +196,7 @@ class ChainService(WiredService):
         self.broadcast_filter = DuplicatesFilter()
         self.on_new_head_cbs = []
         self.newblock_processing_times = deque(maxlen=1000)
+        gevent.spawn_later(self.process_time_queue_period, self.process_time_queue)
 
     @property
     def is_syncing(self):
@@ -207,6 +209,14 @@ class ChainService(WiredService):
         if 'validator' in self.app.services:
             return self.app.services.validator.active
         return False
+
+    def process_time_queue(self):
+        try:
+            self.chain.process_time_queue()
+        except Exception as e:
+            log.info(str(e))
+        finally:
+            gevent.spawn_later(self.process_time_queue_period, self.process_time_queue)
 
     # TODO: Move to pyethereum
     def get_receipts(self, block):
@@ -521,7 +531,7 @@ class ChainService(WiredService):
             except KeyError:
                 origin_hash = b''
         if not origin_hash or self.chain.has_blockhash(origin_hash):
-            log.debug('unknown block: {}'.format(origin_hash))
+            log.debug('unknown block: {}'.format(encode_hex(origin_hash)))
             proto.send_blockheaders(*[])
             return
 
