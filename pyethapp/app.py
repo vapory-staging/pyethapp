@@ -119,6 +119,9 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config,
     # Store custom genesis to restore if overridden by profile value
     genesis_from_config_file = config.get('eth', {}).get('genesis')
 
+    # Store custom network_id to restore if overridden by profile value
+    network_id_from_config_file = config.get('eth', {}).get('network_id')
+
     # Store custom bootstrap_nodes to restore them overridden by profile value
     bootstrap_nodes_from_config_file = config.get('discovery', {}).get('bootstrap_nodes')
 
@@ -133,6 +136,10 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config,
         # Fixed genesis_hash taken from profile must be deleted as custom genesis loaded
         del config['eth']['genesis_hash']
         config['eth']['genesis'] = genesis_from_config_file
+
+    if network_id_from_config_file:
+        del config['eth']['network_id']
+        config['eth']['network_id'] = network_id_from_config_file
 
     if bootstrap_nodes_from_config_file:
         # Fixed bootstrap_nodes taken from profile must be deleted as custom bootstrap_nodes loaded
