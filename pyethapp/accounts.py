@@ -476,13 +476,7 @@ class AccountsService(BaseService):
 
         :raises: `KeyError` if no matching account can be found
         """
-
-        accts = []
-        for acct in self.accounts:
-            if UUID(acct.uuid) == UUID(id):
-                accts.append(acct)
-
-        # accts = [acct for acct in self.accounts if UUID(acct.uuid) == UUID(id)]
+        accts = [acct for acct in self.accounts if UUID(acct.uuid) == UUID(id)]
         assert len(accts) <= 1
         if len(accts) == 0:
             raise KeyError('account with id {} unknown'.format(id))
