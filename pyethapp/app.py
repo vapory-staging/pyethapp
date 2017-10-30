@@ -1,4 +1,9 @@
 # -*- coding: utf8 -*-
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import zip
+from builtins import next
+from builtins import range
 import copy
 import json
 import os
@@ -19,20 +24,26 @@ from devp2p.service import BaseService
 from ethereum import config as eth_config
 from ethereum.block import Block
 from ethereum.snapshot import create_snapshot, load_snapshot as _load_snapshot
+from ethereum.utils import (
+    encode_hex,
+    decode_hex,
+    to_string,
+)
 from gevent.event import Event
 
-import config as app_config
-import eth_protocol
-import utils
-from accounts import AccountsService, Account
-from console_service import Console
-from db_service import DBService
-from eth_service import ChainService
-from jsonrpc import JSONRPCServer, IPCRPCServer
-from pow_service import PoWService
+from . import config as app_config
+from . import eth_protocol
+from . import utils
+from .accounts import AccountsService, Account
+from .console_service import Console
+from .db_service import DBService
+from .eth_service import ChainService
+from .jsonrpc import JSONRPCServer, IPCRPCServer
+from .pow_service import PoWService
 from pyethapp import __version__
 from pyethapp.profiles import PROFILES, DEFAULT_PROFILE
-from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, enable_greenlet_debugger
+from pyethapp.utils import merge_dict, load_contrib_services, FallbackChoice, \
+                           enable_greenlet_debugger
 
 
 log = slogging.get_logger('app')
@@ -57,7 +68,7 @@ class EthApp(BaseApp):
 # Separators should be underscore!
 @click.group(help='Welcome to {} {}'.format(EthApp.client_name, EthApp.client_version))
 @click.option('--profile', type=FallbackChoice(
-                  PROFILES.keys(),
+                  list(PROFILES.keys()),
                   {'frontier': 'livenet', 'morden': 'testnet'},
                   "PyEthApp's configuration profiles have been renamed to "
                   "'livenet' and 'testnet'. The previous values 'frontier' and "
@@ -83,8 +94,8 @@ class EthApp(BaseApp):
               help='Unlock an account (prompts for password)')
 @click.option('--password', type=click.File(), help='path to a password file')
 @click.pass_context
-def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, bootstrap_node, log_json,
-        mining_pct, unlock, password, log_file):
+def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config,
+        bootstrap_node, log_json, mining_pct, unlock, password, log_file):
     # configure logging
     slogging.configure(log_config, log_json=log_json, log_file=log_file)
 
@@ -108,6 +119,9 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
     # Store custom genesis to restore if overridden by profile value
     genesis_from_config_file = config.get('eth', {}).get('genesis')
 
+    # Store custom network_id to restore if overridden by profile value
+    network_id_from_config_file = config.get('eth', {}).get('network_id')
+
     # Store custom bootstrap_nodes to restore them overridden by profile value
     bootstrap_nodes_from_config_file = config.get('discovery', {}).get('bootstrap_nodes')
 
@@ -122,6 +136,10 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
         # Fixed genesis_hash taken from profile must be deleted as custom genesis loaded
         del config['eth']['genesis_hash']
         config['eth']['genesis'] = genesis_from_config_file
+
+    if network_id_from_config_file:
+        del config['eth']['network_id']
+        config['eth']['network_id'] = network_id_from_config_file
 
     if bootstrap_nodes_from_config_file:
         # Fixed bootstrap_nodes taken from profile must be deleted as custom bootstrap_nodes loaded
@@ -145,9 +163,10 @@ def app(ctx, profile, alt_config, config_values, alt_data_dir, log_config, boots
 
     # Load genesis config
     app_config.update_config_from_genesis_json(config,
-                                           genesis_json_filename_or_dict=config['eth']['genesis'])
+                                               genesis_json_filename_or_dict=config['eth']['genesis'])
     if bootstrap_node:
-        config['discovery']['bootstrap_nodes'] = [bytes(bootstrap_node)]
+        # [NOTE]: check it
+        config['discovery']['bootstrap_nodes'] = [to_string(bootstrap_node)]
     if mining_pct > 0:
         config['pow']['activated'] = True
         config['pow']['cpu_pct'] = int(min(100, mining_pct))
@@ -305,7 +324,7 @@ def blocktest(ctx, file, name):
         log.fatal('Name not found in file')
         ctx.abort()
     try:
-        blocks = utils.load_block_tests(data.values()[0], app.services.chain.chain.db)
+        blocks = utils.load_block_tests(list(data.values())[0], app.services.chain.chain.db)
     except ValueError:
         log.fatal('Invalid blocks encountered')
         ctx.abort()
@@ -357,7 +376,7 @@ def snapshot(ctx, recent, filename):
     s = create_snapshot(app.services.chain.chain, recent)
     with open(filename, 'w') as f:
         json.dump(s, f, sort_keys=False, indent=4, separators=(',', ': '), encoding='ascii')
-        print 'snapshot saved to %s' % filename
+        print('snapshot saved to %s' % filename)
 
 
 @app.command('load_snapshot')
@@ -376,7 +395,7 @@ def load_snapshot(ctx, filename):
     with open(filename, 'r') as f:
         s = json.load(f, encoding='ascii')
         _load_snapshot(app.services.chain.chain, s)
-        print 'snapshot %s loaded.' % filename
+        print('snapshot %s loaded.' % filename)
 
 
 @app.command('export')
@@ -416,7 +435,7 @@ def export_blocks(ctx, from_, to, file):
         sys.exit(1)
 
     log.info('Starting export')
-    for n in xrange(from_, to + 1):
+    for n in range(from_, to + 1):
         log.debug('Exporting block {}'.format(n))
         if (n - from_) % 50000 == 0:
             log.info('Exporting block {} to {}'.format(n, min(n + 50000, to)))
@@ -524,7 +543,7 @@ def new_account(ctx, uuid):
     """
     app = ctx.obj['app']
     if uuid:
-        id_ = str(uuid4())
+        id_ = uuid4()  
     else:
         id_ = None
     password = ctx.obj['password']
@@ -532,7 +551,7 @@ def new_account(ctx, uuid):
         password = click.prompt('Password to encrypt private key', default='', hide_input=True,
                                 confirmation_prompt=True, show_default=False)
     account = Account.new(password, uuid=id_)
-    account.path = os.path.join(app.services.accounts.keystore_dir, account.address.encode('hex'))
+    account.path = os.path.join(app.services.accounts.keystore_dir, encode_hex(account.address))
     try:
         app.services.accounts.add_account(account)
     except IOError:
@@ -541,8 +560,8 @@ def new_account(ctx, uuid):
         sys.exit(1)
     else:
         click.echo('Account creation successful')
-        click.echo('  Address: ' + account.address.encode('hex'))
-        click.echo('       Id: ' + str(account.uuid))
+        click.echo('  Address: {}'.format(encode_hex(account.address)))
+        click.echo('       Id: {}'.format(account.uuid))
 
 
 @account.command('list')
@@ -564,8 +583,8 @@ def list_accounts(ctx):
                                                                  id='Id (if any)',
                                                                  locked='Locked'))
         for i, account in enumerate(accounts):
-            click.echo(fmt.format(i='#' + str(i + 1),
-                                  address=(account.address or '').encode('hex'),
+            click.echo(fmt.format(i='#' + to_string(i + 1),
+                                  address=encode_hex(account.address or ''),
                                   id=account.uuid or '',
                                   locked='yes' if account.locked else 'no'))
 
@@ -586,12 +605,12 @@ def import_account(ctx, f, uuid):
     """
     app = ctx.obj['app']
     if uuid:
-        id_ = str(uuid4())
+        id_ = uuid4()
     else:
         id_ = None
     privkey_hex = f.read()
     try:
-        privkey = privkey_hex.strip().decode('hex')
+        privkey = decode_hex(privkey_hex.strip())
     except TypeError:
         click.echo('Could not decode private key from file (should be hex encoded)')
         sys.exit(1)
@@ -599,8 +618,9 @@ def import_account(ctx, f, uuid):
     if password is None:
         password = click.prompt('Password to encrypt private key', default='', hide_input=True,
                                 confirmation_prompt=True, show_default=False)
+
     account = Account.new(password, privkey, uuid=id_)
-    account.path = os.path.join(app.services.accounts.keystore_dir, account.address.encode('hex'))
+    account.path = os.path.join(app.services.accounts.keystore_dir, encode_hex(account.address))
     try:
         app.services.accounts.add_account(account)
     except IOError:
@@ -609,8 +629,8 @@ def import_account(ctx, f, uuid):
         sys.exit(1)
     else:
         click.echo('Account creation successful')
-        click.echo('  Address: ' + account.address.encode('hex'))
-        click.echo('       Id: ' + str(account.uuid))
+        click.echo('  Address: {}'.format(encode_hex(account.address)))
+        click.echo('       Id: {}'.format(account.uuid))
 
 
 @account.command('update')
@@ -648,7 +668,7 @@ def update_account(ctx, account):
         sys.exit(1)
 
     click.echo('Updating account')
-    click.echo('Address: {}'.format(old_account.address.encode('hex')))
+    click.echo('Address: {}'.format(encode_hex(old_account.address)))
     click.echo('     Id: {}'.format(old_account.uuid))
 
     new_password = click.prompt('New password', default='', hide_input=True,
@@ -699,7 +719,7 @@ def unlock_accounts(account_ids, account_service, max_attempts=3, password=None)
                 sys.exit(1)
         return
 
-    max_attempts_str = str(max_attempts) if max_attempts else 'oo'
+    max_attempts_str = to_string(max_attempts) if max_attempts else 'oo'
     attempt_fmt = '(attempt {{attempt}}/{})'.format(max_attempts_str)
     first_attempt_fmt = 'Password for account {id} ' + attempt_fmt
     further_attempts_fmt = 'Wrong password. Please try again ' + attempt_fmt

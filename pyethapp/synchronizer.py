@@ -1,10 +1,14 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import str
+from builtins import object
 from gevent.event import AsyncResult
 import gevent
 import time
-from eth_protocol import TransientBlockBody, TransientBlock
+from .eth_protocol import TransientBlockBody, TransientBlock
 from ethereum.block import BlockHeader
 from ethereum.slogging import get_logger
-import ethereum.utils as utils
+from ethereum.utils import encode_hex
 import traceback
 
 log = get_logger('eth.sync')
@@ -157,15 +161,15 @@ class SyncTask(object):
                                     child=blockheaders_chain[-1], parent=header)
                         return self.exit(success=False)
                 else:
-                    log_st.debug('found known block header', blockhash=utils.encode_hex(blockhash),
+                    log_st.debug('found known block header', blockhash=encode_hex(blockhash),
                                  is_genesis=bool(blockhash == self.chain.genesis.hash))
                     break
             else:  # if all headers in batch added to blockheaders_chain
                 blockhash = header.prevhash
 
             if len(blockheaders_chain) > 0:
-                start = "#%d %s" % (blockheaders_chain[0].number, utils.encode_hex(blockheaders_chain[0].hash)[:8])
-                end = "#%d %s" % (blockheaders_chain[-1].number, utils.encode_hex(blockheaders_chain[-1].hash)[:8])
+                start = "#%d %s" % (blockheaders_chain[0].number, encode_hex(blockheaders_chain[0].hash)[:8])
+                end = "#%d %s" % (blockheaders_chain[-1].number, encode_hex(blockheaders_chain[-1].hash)[:8])
                 log_st.info('downloaded ' + str(len(blockheaders_chain)) + ' blockheaders', start=start, end=end)
             else:
                 log_st.debug('failed to download blockheaders')
@@ -344,8 +348,8 @@ class Synchronizer(object):
     def protocols(self):
         "return protocols which are not stopped sorted by highest chain_difficulty"
         # filter and cleanup
-        self._protocols = dict((p, cd) for p, cd in self._protocols.items() if not p.is_stopped)
-        return sorted(self._protocols.keys(), key=lambda p: self._protocols[p], reverse=True)
+        self._protocols = dict((p, cd) for p, cd in list(self._protocols.items()) if not p.is_stopped)
+        return sorted(list(self._protocols.keys()), key=lambda p: self._protocols[p], reverse=True)
 
     def receive_newblock(self, proto, t_block, chain_difficulty):
         "called if there's a newblock announced on the network"
@@ -413,7 +417,7 @@ class Synchronizer(object):
 
         if self.force_sync:
             blockhash, chain_difficulty = self.force_sync
-            log.debug('starting forced syctask', blockhash=blockhash.encode('hex'))
+            log.debug('starting forced syctask', blockhash=encode_hex(blockhash))
             self.synctask = SyncTask(self, proto, blockhash, chain_difficulty)
 
         elif chain_difficulty > self.chain.get_score(self.chain.head):
@@ -423,7 +427,7 @@ class Synchronizer(object):
             else:
                 log.debug('received status but already syncing, won\'t start new sync task',
                           proto=proto,
-                          blockhash=utils.encode_hex(blockhash),
+                          blockhash=encode_hex(blockhash),
                           chain_difficulty=chain_difficulty)
 
     def receive_newblockhashes(self, proto, newblockhashes):
@@ -442,7 +446,7 @@ class Synchronizer(object):
             log.warn('supporting only one newblockhash', num=len(newblockhashes))
         if not self.synctask:
             blockhash = newblockhashes[0]
-            log.debug('starting synctask for newblockhashes', blockhash=blockhash.encode('hex'))
+            log.debug('starting synctask for newblockhashes', blockhash=encode_hex(blockhash))
             self.synctask = SyncTask(self, proto, blockhash, 0, originator_only=True)
 
     def receive_blockbodies(self, proto, bodies):

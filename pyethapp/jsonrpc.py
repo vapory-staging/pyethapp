@@ -1,4 +1,12 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import zip
+from builtins import str
+from builtins import map
+from builtins import range
+from builtins import object
 import os
+import sys
 import inspect
 from copy import deepcopy
 from collections import Iterable
@@ -19,12 +27,12 @@ import gevent.queue
 import gevent.wsgi
 import rlp
 from decorator import decorator
-from accounts import Account
+from .accounts import Account
 from devp2p.service import BaseService
 from ethereum.exceptions import InvalidTransaction
 from ethereum.trie import Trie
-from eth_protocol import ETHProtocol
-from ipc_rpc import bind_unix_listener, serve
+from .eth_protocol import ETHProtocol
+from .ipc_rpc import bind_unix_listener, serve
 from tinyrpc.dispatch import public as public_
 from tinyrpc.dispatch import RPCDispatcher
 from tinyrpc.exc import BadRequestError, MethodNotFoundError
@@ -46,6 +54,10 @@ def _fail_on_error_dispatch(self, request):
     result = method(*request.args, **request.kwargs)
     return request.respond(result)
 
+
+def is_json_string(data):
+    return (sys.version_info >= (3,) and isinstance(data, str)) or \
+        (sys.version_info.major == 2 and isinstance(data, unicode))
 
 PROPAGATE_ERRORS = False
 if PROPAGATE_ERRORS:
@@ -87,8 +99,8 @@ def public(f):
             raise JSONRPCInvalidParamsError(t)
         else:
             return f(*args, **kwargs)
-    new_f.func_name = f.func_name
-    new_f.func_doc = f.func_doc
+    new_f.__name__ = f.__name__
+    new_f.__doc__ = f.__doc__
     return public_(new_f)
 
 
@@ -347,7 +359,8 @@ class Subdispatcher(object):
 
 def quantity_decoder(data):
     """Decode `data` representing a quantity."""
-    if not is_string(data):
+    # [NOTE]: decode to `str` for both python2 and python3
+    if not is_json_string(data):
         success = False
     elif not data.startswith('0x'):
         success = False  # must start with 0x prefix
@@ -370,7 +383,7 @@ def quantity_encoder(i):
     """Encode integer quantity `data`."""
     assert is_numeric(i)
     data = int_to_big_endian(i)
-    return '0x' + (encode_hex(data).lstrip('0') or '0')
+    return str('0x' + (encode_hex(data).lstrip('0') or '0'))
 
 
 def data_decoder(data):
@@ -392,14 +405,14 @@ def data_decoder(data):
 def data_encoder(data, length=None):
     """Encode unformatted binary `data`.
 
-    If `length` is given, the result will be padded like this: ``data_encoder('\xff', 3) ==
+    If `length` is given, the result will be padded like this: ``data_encoder('b\xff', 3) ==
     '0x0000ff'``.
     """
     s = encode_hex(data)
     if length is None:
-        return '0x' + s
+        return str('0x' + s)
     else:
-        return '0x' + s.rjust(length * 2, '0')
+        return str('0x' + s.rjust(length * 2, '0'))
 
 
 def address_decoder(data):
@@ -412,8 +425,8 @@ def address_decoder(data):
 
 def address_encoder(address):
     assert len(address) in (20, 0)
-    return '0x' + encode_hex(address)
-
+    result =  str('0x' + encode_hex(address))
+    return result
 
 def block_id_decoder(data):
     """Decode a block identifier as expected from :meth:`JSONRPCServer.get_block`."""
@@ -642,11 +655,11 @@ class Personal(Subdispatcher):
     @encode_res(address_encoder)
     def newAccount(self, passwd):
         account = Account.new(passwd)
-        account.path = os.path.join(self.app.services.accounts.keystore_dir, account.address.encode('hex'))
+        account.path = os.path.join(self.app.services.accounts.keystore_dir, encode_hex(account.address))
         self.app.services.accounts.add_account(account)
         account.lock()
         assert account.locked
-        assert self.app.services.accounts.find(account.address.encode('hex'))
+        assert self.app.services.accounts.find(encode_hex(account.address))
         return account.address
 
 
@@ -722,7 +735,7 @@ class Compilers(Subdispatcher):
 
     @public
     def getCompilers(self):
-        return self.compilers.keys()
+        return list(self.compilers.keys())
 
     @public
     def compileSolidity(self, code):
@@ -839,7 +852,7 @@ class Chain(Subdispatcher):
                 currentBlock=self.chain.chain.head.number,
                 highestBlock=synctask.end_block_number,
             )
-            return {k: quantity_encoder(v) for k, v in result.items()}
+            return {k: quantity_encoder(v) for k, v in list(result.items())}
 
     @public
     @encode_res(quantity_encoder)
@@ -1004,7 +1017,7 @@ class Chain(Subdispatcher):
 
     @public
     def getWork(self):
-        print 'Sending work...'
+        print('Sending work...')
         h = self.chain.head_candidate
         return [
             encode_hex(h.header.mining_hash),
@@ -1014,7 +1027,7 @@ class Chain(Subdispatcher):
 
     @public
     def test(self, nonce):
-        print 80808080808
+        print(80808080808)
         return nonce
 
     @public
@@ -1035,24 +1048,24 @@ class Chain(Subdispatcher):
     @decode_arg('mining_hash', data_decoder)
     @decode_arg('mix_digest', data_decoder)
     def submitWork(self, nonce, mining_hash, mix_digest):
-        print 'submitting work'
+        print('submitting work')
         h = self.chain.head_candidate
-        print 'header: %s' % encode_hex(rlp.encode(h))
+        print('header: %s' % encode_hex(rlp.encode(h)))
         if h.header.mining_hash != mining_hash:
             return False
-        print 'mining hash: %s' % encode_hex(mining_hash)
-        print 'nonce: %s' % encode_hex(nonce)
-        print 'mixhash: %s' % encode_hex(mix_digest)
-        print 'seed: %s' % encode_hex(h.header.seed)
+        print('mining hash: %s' % encode_hex(mining_hash))
+        print('nonce: %s' % encode_hex(nonce))
+        print('mixhash: %s' % encode_hex(mix_digest))
+        print('seed: %s' % encode_hex(h.header.seed))
         h.header.nonce = nonce
         h.header.mixhash = mix_digest
         if not self.chain.check_header(h.header):
-            print 'PoW check false'
+            print('PoW check false')
             return False
-        print 'PoW check true'
+        print('PoW check true')
         self.chain.chain.add_block(h)
         self.chain.broadcast_newblock(h)
-        print 'Added: %d' % h.header.number
+        print('Added: %d' % h.header.number)
         return True
 
     @public
@@ -1173,7 +1186,7 @@ class Chain(Subdispatcher):
         else:
             env = Env(db=block.db)
             test_block = mk_genesis_block(env)
-            original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
+            original = {key: value for key, value in list(snapshot_before.items()) if key != 'txs'}
             original = deepcopy(original)
             original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
             test_block = mk_genesis_block(env)
@@ -1202,7 +1215,7 @@ class Chain(Subdispatcher):
         try:
             sender = address_decoder(data['from'])
         except KeyError:
-            sender = '\x00' * 20
+            sender = b'\x00' * 20
 
         # apply transaction
         nonce = test_block.get_nonce(sender)
@@ -1242,7 +1255,7 @@ class Chain(Subdispatcher):
         else:
             env = Env(db=block.db)
             test_block = mk_genesis_block(env)
-            original = {key: value for key, value in snapshot_before.items() if key != 'txs'}
+            original = {key: value for key, value in list(snapshot_before.items()) if key != 'txs'}
             original = deepcopy(original)
             original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
             test_block = mk_genesis_block(env)
@@ -1271,7 +1284,7 @@ class Chain(Subdispatcher):
         try:
             sender = address_decoder(data['from'])
         except KeyError:
-            sender = '\x00' * 20
+            sender = b'\x00' * 20
 
         # apply transaction
         nonce = test_block.get_nonce(sender)
@@ -1360,7 +1373,7 @@ class LogFilter(object):
 
         # skip blocks that have already been checked
         if self.last_block_checked is not None:
-            print self.last_block_checked
+            print(self.last_block_checked)
             first = max(self.last_block_checked.number + 1, first)
             if first > last:
                 return {}
@@ -1403,21 +1416,21 @@ class LogFilter(object):
                     # In case of the frequent usage of multiple 'or' statements in the filter
                     # the following logic should be optimized so that the fewer amount of blocks gets checked.
                     # It is currently optimal for filters with a single 'or' statement.
-                    _topic_and_bloom = bloom.bloom_from_list(map(int32.serialize, and_topics or []))
+                    _topic_and_bloom = bloom.bloom_from_list(list(map(int32.serialize, and_topics or [])))
                     bloom_passed = False
                     for or_t in or_topics:
-                        or_bl = bloom.bloom_from_list(map(int32.serialize, [or_t]))
+                        or_bl = bloom.bloom_from_list(list(map(int32.serialize, [or_t])))
                         if bloom.bloom_combine(_bloom, _topic_and_bloom, or_bl) == _bloom:
                             bloom_passed = True
                             break
                     if not bloom_passed:
                         continue
                 else:
-                    _topic_bloom = bloom.bloom_from_list(map(int32.serialize, self.topics or []))
+                    _topic_bloom = bloom.bloom_from_list(list(map(int32.serialize, self.topics or [])))
                     if bloom.bloom_combine(_bloom, _topic_bloom) != _bloom:
                         continue
                 block = self.chain.get_block(block)
-                print 'bloom filter passed'
+                print('bloom filter passed')
             logger.debug('-')
             logger.debug('with block', block=block)
             receipts = self.chainservice.get_receipts(block)
@@ -1446,11 +1459,11 @@ class LogFilter(object):
                         continue
                     # still here, so match was successful => add to log list
                     tx = block.transactions[r_idx]
-                    id_ = sha3(''.join((tx.hash, str(l_idx))))
+                    id_ = sha3(''.join((encode_hex(tx.hash), str(l_idx))))
                     pending = block == self.chainservice.head_candidate
                     r = dict(log=log, log_idx=l_idx, block=block, txhash=tx.hash, tx_idx=r_idx,
                              pending=pending)
-                    logger.debug('FOUND LOG', id=id_.encode('hex'))
+                    logger.debug('FOUND LOG', id=encode_hex(id_))
                     new_logs[id_] = r  # (log, i, block)
         # don't check blocks again, that have been checked already and won't change anymore
         self.last_block_checked = blocks_to_check[-1]
@@ -1460,19 +1473,19 @@ class LogFilter(object):
             self.last_block_checked = blocks_to_check[-2] if len(blocks_to_check) >= 2 else None
         if self.last_block_checked and not isinstance(self.last_block_checked, Block):
             self.last_block_checked = self.chain.get_block(self.last_block_checked)
-        actually_new_ids = new_logs.viewkeys() - self.log_dict.viewkeys()
+        actually_new_ids = list(set(new_logs.keys()) - set(self.log_dict.keys()))
         self.log_dict.update(new_logs)
         return {id_: new_logs[id_] for id_ in actually_new_ids}
 
     @property
     def logs(self):
         self.check()
-        return self.log_dict.values()
+        return list(self.log_dict.values())
 
     @property
     def new_logs(self):
         d = self.check()
-        return d.values()
+        return list(d.values())
 
 
 class BlockFilter(object):
@@ -1670,7 +1683,7 @@ class FilterManager(Subdispatcher):
         blk = self.app.services.chain.chain.get(blockhash)
         for i in range(blk.transaction_count):
             tx_lst_serialized, sr, _ = blk.get_transaction(i)
-            txhash_hex = sha3(rlp.encode(tx_lst_serialized)).encode('hex')
+            txhash_hex = encode_hex(sha3(rlp.encode(tx_lst_serialized)))
             txs.append(self.trace_transaction(txhash_hex, exclude))
         return txs
 
@@ -1726,9 +1739,9 @@ if __name__ == '__main__':
 
     def show_methods(dispatcher, prefix=''):
         # https://github.com/micheles/decorator/blob/3.4.1/documentation.rst
-        for name, method in dispatcher.method_map.items():
-            print prefix + name, inspect.formatargspec(public_methods[name])
-        for sub_prefix, subdispatcher_list in dispatcher.subdispatchers.items():
+        for name, method in list(dispatcher.method_map.items()):
+            print(prefix + name, inspect.formatargspec(public_methods[name]))
+        for sub_prefix, subdispatcher_list in list(dispatcher.subdispatchers.items()):
             for sub in subdispatcher_list:
                 show_methods(sub, prefix + sub_prefix)
 

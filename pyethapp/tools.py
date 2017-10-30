@@ -1,3 +1,7 @@
+from __future__ import print_function
+from builtins import zip
+from builtins import str
+from builtins import range
 import os
 import sys
 import time
@@ -10,7 +14,7 @@ from ethereum.casper_utils import RandaoManager, generate_validation_code, make_
 from devp2p.crypto import privtopub
 
 def generate_data_dirs(num_participants, prefix='v'):
-    privkeys = [utils.sha3(str(i)) for i in range(num_participants)]
+    privkeys = [utils.sha3(utils.to_string(i)) for i in range(num_participants)]
     addrs = [utils.privtoaddr(k) for k in privkeys]
     genesis = generate_genesis(None, num_participants)
 
@@ -21,11 +25,11 @@ def generate_data_dirs(num_participants, prefix='v'):
         jsonrpc_port = 4000+i
         deposit_size = 500 + 500*i
 
-        bootstrap_nodes = range(num_participants)
+        bootstrap_nodes = list(range(num_participants))
         bootstrap_nodes.remove(i)
         bootstrap_nodes = ["enode://%s@0.0.0.0:%d" % (utils.encode_hex(privtopub(privkeys[n])), 40000+n) for n in bootstrap_nodes]
 
-        dir = prefix + str(i)
+        dir = prefix + utils.to_string(i)
         try:
             os.stat(dir)
         except:
@@ -63,15 +67,15 @@ def generate_data_dirs(num_participants, prefix='v'):
 
         with open(genesis_path, 'w') as f:
             json.dump(genesis, f, sort_keys=False, indent=4, separators=(',', ': '))
-        print "genesis for validator %d generated" % i
+        print("genesis for validator %d generated" % i)
 
         with open(config_path, 'w') as f:
             yaml.dump(config, f, default_flow_style=False, indent=4)
-        print "config for validator %d generated" % i
+        print("config for validator %d generated" % i)
 
 
 def generate_genesis(path=None, num_participants=1):
-    privkeys = [utils.sha3(str(i)) for i in range(num_participants)]
+    privkeys = [utils.sha3(utils.to_string(i)) for i in range(num_participants)]
     addrs = [utils.privtoaddr(k) for k in privkeys]
     deposit_sizes = [i * 500 + 500 for i in range(num_participants)]
     randaos = [RandaoManager(utils.sha3(k)) for k in privkeys]
@@ -86,9 +90,9 @@ def generate_genesis(path=None, num_participants=1):
                                        to=casper_config['METROPOLIS_BLOCKHASH_STORE'],
                                        data=utils.encode_int32(0))
     genesis_number = call_casper(s, 'getBlockNumber')
-    print 'genesis block hash: %s' % utils.encode_hex(genesis_hash)
-    print 'genesis block number: %d' % genesis_number
-    print '%d validators: %r' % (num_participants, [utils.encode_hex(a) for a in addrs])
+    print('genesis block hash: %s' % utils.encode_hex(genesis_hash))
+    print('genesis block number: %d' % genesis_number)
+    print('%d validators: %r' % (num_participants, [utils.encode_hex(a) for a in addrs]))
 
     snapshot = s.to_snapshot()
     header = s.prev_headers[0]
@@ -107,15 +111,15 @@ def generate_genesis(path=None, num_participants=1):
     if path:
         with open(path, 'w') as f:
             json.dump(genesis, f, sort_keys=False, indent=4, separators=(',', ': '))
-        print 'casper genesis generated'
+        print('casper genesis generated')
     else:
         return genesis
 
 
 def usage():
-    print "usage:"
-    print "python pyethapp/tools.py genesis pyethapp/genesisdata/genesis_metropolis.json 3"
-    print "python pyethapp/tools.py datadir 3"
+    print("usage:")
+    print("python pyethapp/tools.py genesis pyethapp/genesisdata/genesis_metropolis.json 3")
+    print("python pyethapp/tools.py datadir 3")
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
@@ -127,6 +131,6 @@ if __name__ == "__main__":
     elif sys.argv[1] == "datadir":
         generate_data_dirs(int(sys.argv[2]))
     else:
-        print "unknown command: %s" % sys.argv[1]
+        print("unknown command: %s" % sys.argv[1])
         usage()
         sys.exit(1)

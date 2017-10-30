@@ -1,3 +1,6 @@
+from __future__ import division
+from builtins import object
+from past.utils import old_div
 import time
 import gevent
 import gipc
@@ -38,15 +41,15 @@ class Miner(gevent.Greenlet):
                 log_sub.info('nonce found')
                 self.nonce_callback(bin_nonce, mixhash, self.mining_hash)
                 break
-            delay = elapsed * (1 - self.cpu_pct / 100.)
+            delay = elapsed * (1 - old_div(self.cpu_pct, 100.))
             hashrate = int(self.rounds // (elapsed + delay))
             self.hashrate_callback(hashrate)
             log_sub.trace('sleeping', delay=delay, elapsed=elapsed, rounds=self.rounds)
             gevent.sleep(delay + 0.001)
             nonce += self.rounds
             # adjust
-            adjust = elapsed / self.max_elapsed
-            self.rounds = int(self.rounds / adjust)
+            adjust = old_div(elapsed, self.max_elapsed)
+            self.rounds = int(old_div(self.rounds, adjust))
 
         log_sub.debug('mining task finished', is_stopped=self.is_stopped)
 
@@ -147,10 +150,11 @@ class PoWService(BaseService):
         self.hashrate = hashrate
 
     def recv_found_nonce(self, bin_nonce, mixhash, mining_hash):
-        log.info('nonce found', mining_hash=mining_hash.encode('hex'))
+        log.info('nonce found: {}'.format(encode_hex(mining_hash)))
         block = self.chain.head_candidate
         if block.mining_hash != mining_hash:
             log.warn('mining_hash does not match')
+            gevent.spawn_later(0.5, self.mine_head_candidate)
             return False
         block.header.mixhash = mixhash
         block.header.nonce = bin_nonce

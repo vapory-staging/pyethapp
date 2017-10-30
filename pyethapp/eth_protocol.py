@@ -1,7 +1,12 @@
 from devp2p.protocol import BaseProtocol, SubProtocolError
 from ethereum.transactions import Transaction
 from ethereum.block import Block, BlockHeader
-from ethereum.utils import hash32, int_to_big_endian, big_endian_to_int
+from ethereum.utils import (
+    hash32,
+    int_to_big_endian,
+    big_endian_to_int,
+    encode_hex
+)
 import rlp
 import gevent
 import time
@@ -48,7 +53,7 @@ class TransientBlock(rlp.Serializable):
         return self.header.hex_hash
 
     def __repr__(self):
-        return '<TransientBlock(#%d %s)>' % (self.header.number, self.header.hash.encode('hex')[:8])
+        return '<TransientBlock(#%d %s)>' % (self.header.number, encode_hex(self.header.hash)[:8])
 
 
 class ETHProtocolError(SubProtocolError):
@@ -163,7 +168,7 @@ class ETHProtocol(BaseProtocol):
         ]
 
         def create(self, proto, hash_or_number, amount, skip=0, reverse=1):
-            if isinstance(hash_or_number, (int, long)):
+            if isinstance(hash_or_number, int):
                 block = int_to_big_endian(hash_or_number)
             else:
                 block = hash_or_number
@@ -240,7 +245,6 @@ class ETHProtocol(BaseProtocol):
         @classmethod
         def decode_payload(cls, rlp_data):
             # convert to dict
-            # print rlp_data.encode('hex')
             ll = rlp.decode_lazy(rlp_data)
             assert len(ll) == 2
             transient_block = TransientBlock.init_from_rlp(ll[0], time.time())

@@ -1,3 +1,5 @@
+from __future__ import print_function
+from builtins import str
 from devp2p.peermanager import PeerManager
 from devp2p.discovery import NodeDiscovery
 from devp2p.app import BaseApp
@@ -27,8 +29,8 @@ def test_save_load_config():
     # from fn or base path
     config.write_config(conf, path=garbage_conf)
     conf2 = config.load_config(path=garbage_conf)
-    print 'b', conf
-    print 'a', conf2
+    print('b', conf)
+    print('a', conf2)
     assert conf == conf2
 
     path = tempfile.mktemp()

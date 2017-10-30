@@ -4,6 +4,7 @@ from ethereum.db import DB
 from ethereum.config import Env, default_config
 from ethereum.genesis_helpers import mk_genesis_block
 from ethereum.state import State
+from ethereum.utils import encode_hex
 from pyethapp.utils import merge_dict
 from pyethapp.config import update_config_from_genesis_json
 import pyethapp.config as konfig
@@ -28,12 +29,12 @@ def test_genesis_config():
 
     genesis = mk_genesis_block(env)
     state = State(genesis.state_root, env)
-    for address, value_dict in alloc.items():
-        value = value_dict.values()[0]
+    for address, value_dict in list(alloc.items()):
+        value = list(value_dict.values())[0]
         assert state.get_balance(address) == value
 
 
-@pytest.mark.parametrize('profile', PROFILES.keys())
+@pytest.mark.parametrize('profile', list(PROFILES.keys()))
 def test_profile(profile):
     config = dict(eth=dict())
 
@@ -50,4 +51,4 @@ def test_profile(profile):
     env = Env(DB(), bc)
 
     genesis = mk_genesis_block(env)
-    assert genesis.hash.encode('hex') == config['eth']['genesis_hash']
+    assert encode_hex(genesis.hash) == config['eth']['genesis_hash']

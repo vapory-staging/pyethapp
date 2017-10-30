@@ -30,31 +30,17 @@ with codecs.open('HISTORY.rst', encoding='utf8') as history_file:
 
 LONG_DESCRIPTION = README + '\n\n' + HISTORY
 
-INSTALL_REQUIRES_REPLACEMENTS = {
-    'https://github.com/ethereum/ethash/tarball/master#egg=pyethash': 'pyethash',
+# requirements
+install_requires = set(x.strip() for x in open('requirements.txt'))
+install_requires_replacements = {
+    'https://github.com/ethereum/serpent/tarball/develop': 'ethereum-serpent',
 }
+install_requires = [install_requires_replacements.get(r, r) for r in install_requires]
 
-INSTALL_REQUIRES = list()
-with open('requirements.txt') as requirements_file:
-    for requirement in requirements_file:
-        dependency = INSTALL_REQUIRES_REPLACEMENTS.get(
-            requirement.strip(),
-            requirement.strip(),
-        )
-
-        INSTALL_REQUIRES.append(dependency)
-
-INSTALL_REQUIRES = list(set(INSTALL_REQUIRES))
-
-DEPENDENCY_LINKS = []
-if os.environ.get("USE_PYETHEREUM_DEVELOP"):
-    # Force installation of specific commits of devp2p and pyethereum.
-    devp2p_ref='525e15a9967da3174ec9e4e367b5adfb76138bb4'
-    pyethereum_ref='8edc5954fb8b6697cb7c9d7d85ed71e5f6d74e0f'
-    DEPENDENCY_LINKS = [
-        'http://github.com/ethereum/pydevp2p/tarball/%s#egg=devp2p-9.99.9' % devp2p_ref,
-        'http://github.com/ethereum/pyethereum/tarball/%s#egg=ethereum-9.99.9' % pyethereum_ref,
-        ]
+# dependency links
+dependency_links = [
+    'https://github.com/ethereum/serpent/tarball/develop#egg=ethereum-serpent-9.99.9',
+]
 
 # *IMPORTANT*: Don't manually change the version here. Use the 'bump2version' utility.
 # see: https://github.com/ethereum/pyethapp/wiki/Development:-Versions-and-Releases
@@ -84,12 +70,13 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.6',
     ],
     cmdclass={'test': PyTest},
-    install_requires=INSTALL_REQUIRES,
-    dependency_links=DEPENDENCY_LINKS,
+    install_requires=install_requires,
+    dependency_links=dependency_links,
     tests_require=[
-        'ethereum-serpent>=1.8.1',
+        # 'ethereum-serpent>=1.8.1',
         'mock==2.0.0',
         'pytest-mock==1.6.0',
     ],

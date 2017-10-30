@@ -1,7 +1,10 @@
+from __future__ import print_function
+from builtins import input
 import signal
 import warnings
 from collections import Mapping
 import os
+from functools import total_ordering
 
 import click
 import ethereum
@@ -33,7 +36,7 @@ def load_contrib_services(config):  # FIXME
     os.chdir(config_directory)
     for filename in os.listdir(contrib_directory):
         if filename.endswith('.py'):
-            print filename
+            print(filename)
             try:
                 __import__(filename[:-3])
                 library_conflict = True
@@ -46,11 +49,11 @@ def load_contrib_services(config):  # FIXME
             sys.path.pop()
     contrib_services = []
     for module in contrib_modules:
-        print 'm', module, dir(module)
+        print('m', module, dir(module))
         on_start, on_block = None, None
         for variable in dir(module):
             cls = getattr(module, variable)
-            if isinstance(cls, (type, types.ClassType)):
+            if isinstance(cls, type):
                 if issubclass(cls, BaseService) and cls != BaseService:
                     contrib_services.append(cls)
             if variable == 'on_block':
@@ -95,7 +98,7 @@ def load_block_tests(data, db):
     """
     scanners = ethereum.utils.scanners
     initial_alloc = {}
-    for address, acct_state in data['pre'].items():
+    for address, acct_state in list(data['pre'].items()):
         address = ethereum.utils.decode_hex(address)
         balance = scanners['int256b'](acct_state['balance'][2:])
         nonce = scanners['int256b'](acct_state['nonce'][2:])
@@ -116,7 +119,7 @@ def load_block_tests(data, db):
         parent = blocks[ethereum.utils.decode_hex(blk['blockHeader']['parentHash'])]
         block = rlp.decode(rlpdata, Block, parent=parent, env=env)
         blocks[block.hash] = block
-    return sorted(blocks.values(), key=lambda b: b.number)
+    return sorted(list(blocks.values()), key=lambda b: b.number)
 
 
 def merge_dict(dest, source):
@@ -156,7 +159,7 @@ class FallbackChoice(click.Choice):
 def enable_greenlet_debugger():
     def _print_exception(self, context, type_, value, traceback):
         ultratb.VerboseTB(call_pdb=True)(type_, value, traceback)
-        resp = raw_input(
+        resp = input(
             "{c.OKGREEN}Debugger exited. "
             "{c.OKBLUE}Do you want to quit pyethapp?{c.ENDC} [{c.BOLD}Y{c.ENDC}/n] ".format(
                 c=bcolors
@@ -166,3 +169,20 @@ def enable_greenlet_debugger():
             os.kill(os.getpid(), signal.SIGTERM)
 
     gevent.get_hub().__class__.print_exception = _print_exception
+
+
+@total_ordering
+class MinType(object):
+    """ Return Min value for sorting comparison
+ 
+    This class is used for comparing unorderded types. e.g., NoneType
+    """
+    def __le__(self, other):
+        return True
+
+    def __eq__(self, other):
+        return (self is other)
+
+
+def to_comparable_logs(logs):
+    return sorted(set(x) for x in logs)

@@ -1,7 +1,14 @@
 """
 Essential parts borrowed from https://github.com/ipython/ipython/pull/1654
 """
-import cStringIO
+from __future__ import print_function
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import str
+from builtins import range
+from builtins import object
+import io
 import errno
 import os
 import select
@@ -222,7 +229,7 @@ class Console(BaseService):
                 return ABIContract(sender or this.coinbase, abi, address, this.call, this.transact)
 
             def block_from_rlp(this, rlp_data):
-                from eth_protocol import TransientBlock
+                from .eth_protocol import TransientBlock
                 import rlp
                 l = rlp.decode_lazy(rlp_data)
                 return TransientBlock.init_from_rlp(l).to_block()
@@ -242,7 +249,7 @@ class Console(BaseService):
         self.console_locals = dict(eth=Eth(self.app), solidity=solc_wrapper, serpent=serpent,
                                    denoms=denoms, true=True, false=False, Eth=Eth)
 
-        for k, v in self.app.script_globals.items():
+        for k, v in list(self.app.script_globals.items()):
             self.console_locals[k] = v
 
     def _run(self):
@@ -261,8 +268,8 @@ class Console(BaseService):
         if hasattr(self.console_locals['eth'].app, 'apps'):
             print('\n' * 2 + bc.OKGREEN)
             print("Hint:" + bc.OKBLUE)
-            print('\tOther nodes are accessible from {}`eth.app.apps`{}').format(
-                bc.HEADER, bc.OKBLUE)
+            print(('\tOther nodes are accessible from {}`eth.app.apps`{}').format(
+                bc.HEADER, bc.OKBLUE))
             print('\tThey where automatically assigned to:')
             print("\t`{}eth1{}`".format(
                 bc.HEADER, bc.OKBLUE))
@@ -284,7 +291,7 @@ class Console(BaseService):
             if isinstance(handler, StreamHandler) and handler.stream == sys.stderr:
                 root.removeHandler(handler)
 
-        stream = cStringIO.StringIO()
+        stream = io.StringIO()
         handler = StreamHandler(stream=stream)
         handler.formatter = Formatter("%(levelname)s:%(name)s %(message)s")
         root.addHandler(handler)
@@ -298,15 +305,15 @@ class Console(BaseService):
             """
             lines = (stream.getvalue().strip().split('\n') or [])
             if prefix:
-                lines = filter(lambda line: line.split(':')[1].startswith(prefix), lines)
+                lines = [line for line in lines if line.split(':')[1].startswith(prefix)]
             if level:
-                lines = filter(lambda line: line.split(':')[0] == level, lines)
+                lines = [line for line in lines if line.split(':')[0] == level]
             for line in lines[-n:]:
                 print(line)
 
         self.console_locals['lastlog'] = lastlog
 
-        err = cStringIO.StringIO()
+        err = io.StringIO()
         sys.stderr = err
 
         def lasterr(n=1):

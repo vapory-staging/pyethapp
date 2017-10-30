@@ -1,10 +1,16 @@
+from builtins import range
+from builtins import object
 import os
 import pytest
 from ethereum.db import EphemDB
+from ethereum.utils import (
+    decode_hex,
+    encode_hex,
+)
 from pyethapp.config import update_config_with_defaults
 from pyethapp import eth_service
 from pyethapp import leveldb_service
-from pyethapp import codernitydb_service
+# from pyethapp import codernitydb_service
 from pyethapp import eth_protocol
 from ethereum import slogging
 from ethereum.tools import tester
@@ -21,10 +27,10 @@ class AppMock(object):
 
     class Services(dict):
 
-        class accounts:
+        class accounts(object):
             coinbase = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-        class peermanager:
+        class peermanager(object):
 
             @classmethod
             def broadcast(*args, **kwargs):
@@ -94,7 +100,7 @@ def test_receive_newblock():
     app = AppMock()
     eth = eth_service.ChainService(app)
     proto = eth_protocol.ETHProtocol(PeerMock(app), eth)
-    d = eth_protocol.ETHProtocol.newblock.decode_payload(newblk_rlp.decode('hex'))
+    d = eth_protocol.ETHProtocol.newblock.decode_payload(decode_hex(newblk_rlp))
     eth.on_receive_newblock(proto, **d)
 
 
@@ -103,9 +109,9 @@ def receive_blockheaders(rlp_data, leveldb=False, codernitydb=False):
     if leveldb:
         app.db = leveldb_service.LevelDB(
             os.path.join(app.config['app']['dir'], app.config['db']['path']))
-    if codernitydb:
-        app.db = codernitydb_service.CodernityDB(
-            os.path.join(app.config['app']['dir'], app.config['db']['path']))
+    # if codernitydb:
+    #     app.db = codernitydb_service.CodernityDB(
+    #         os.path.join(app.config['app']['dir'], app.config['db']['path']))
 
     eth = eth_service.ChainService(app)
     proto = eth_protocol.ETHProtocol(PeerMock(app), eth)
@@ -114,16 +120,16 @@ def receive_blockheaders(rlp_data, leveldb=False, codernitydb=False):
 
 
 def test_receive_block1():
-    rlp_data = rlp.encode([rlp.decode(block_1.decode('hex'))])
+    rlp_data = rlp.encode([rlp.decode(decode_hex(block_1))])
     receive_blockheaders(rlp_data)
 
 
 def test_receive_blockheaders_256():
-    receive_blockheaders(data256.decode('hex'))
+    receive_blockheaders(decode_hex(data256))
 
 
 def test_receive_blockheaders_256_leveldb():
-    receive_blockheaders(data256.decode('hex'), leveldb=True)
+    receive_blockheaders(decode_hex(data256), leveldb=True)
 
 
 @pytest.fixture
@@ -138,11 +144,11 @@ def test_app(tmpdir):
                 'BLOCK_DIFF_FACTOR': 2,  # greater than difficulty, thus difficulty is constant
                 'GENESIS_GAS_LIMIT': 3141592,
                 'GENESIS_INITIAL_ALLOC': {
-                    tester.accounts[0].encode('hex'): {'balance': 10 ** 24},
-                    tester.accounts[1].encode('hex'): {'balance': 10 ** 24},
-                    tester.accounts[2].encode('hex'): {'balance': 10 ** 24},
-                    tester.accounts[3].encode('hex'): {'balance': 10 ** 24},
-                    tester.accounts[4].encode('hex'): {'balance': 10 ** 24},
+                    encode_hex(tester.accounts[0]): {'balance': 10 ** 24},
+                    encode_hex(tester.accounts[1]): {'balance': 10 ** 24},
+                    encode_hex(tester.accounts[2]): {'balance': 10 ** 24},
+                    encode_hex(tester.accounts[3]): {'balance': 10 ** 24},
+                    encode_hex(tester.accounts[4]): {'balance': 10 ** 24},
                 }
             }
         }
@@ -170,3 +176,72 @@ def make_transaction(key, nonce, value, to):
     tx = Transaction(nonce, gasprice, startgas, to, value, data, v, r, s)
     tx.sign(key)
     return tx
+
+
+def test_query_headers(test_app):
+    test_chain = tester.Chain()
+    test_chain.mine(30)
+
+    chainservice = test_app.chain
+    chainservice.chain = test_chain.chain
+
+    # query_headers(hash_mode, origin_hash, max_hashes, skip, reverse)
+    # case 1-1: hash_mode and reverse
+    headers = chainservice.query_headers(
+        1,
+        5,
+        0,
+        True,
+        origin_hash=test_chain.chain.get_block_by_number(10).hash,
+    )
+    assert len(headers) == 5
+    assert headers[0].number == 10
+    assert headers[-1].number == 6
+
+    # case 1-2: hash_mode and reverse, reach genesis
+    headers = chainservice.query_headers(
+        1,
+        20,
+        0,
+        True,
+        origin_hash=test_chain.chain.get_block_by_number(10).hash,
+    )
+    assert len(headers) == 10
+    assert headers[0].number == 10
+    assert headers[-1].number == 1
+
+    # case 2: hash_mode and not reverse
+    headers = chainservice.query_headers(
+        1,
+        5,
+        0,
+        False,
+        origin_hash=test_chain.chain.get_block_by_number(10).hash,
+    )
+    assert len(headers) == 5
+    assert headers[0].number == 10
+    assert headers[-1].number == 14
+
+    # case 3: number mode and reverse
+    headers = chainservice.query_headers(
+        0,
+        5,
+        0,
+        True,
+        number=10,
+    )
+    assert len(headers) == 5
+    assert headers[0].number == 10
+    assert headers[-1].number == 6
+
+    # case 4: number mode and not reverse
+    headers = chainservice.query_headers(
+        0,
+        5,
+        0,
+        False,
+        number=10,
+    )
+    assert len(headers) == 5
+    assert headers[0].number == 10
+    assert headers[-1].number == 14

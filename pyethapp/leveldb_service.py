@@ -1,14 +1,19 @@
 import os
+import sys
 from devp2p.service import BaseService
 from ethereum.db import BaseDB
 from gevent.event import Event
+from gevent.hub import getcurrent
 import leveldb
 from ethereum import slogging
+from ethereum.utils import encode_hex
+import random
 
 slogging.set_level('db', 'debug')
 log = slogging.get_logger('db')
 
 compress = decompress = lambda x: x
+PY3 = sys.version_info >= (3,)
 
 
 """
@@ -79,29 +84,41 @@ class LevelDB(BaseDB):
         self.db = leveldb.LevelDB(self.dbfile)
 
     def get(self, key):
-        log.trace('getting entry', key=key.encode('hex')[:8])
+        log.trace('getting entry', key=encode_hex(key)[:8])
         if key in self.uncommitted:
             if self.uncommitted[key] is None:
                 raise KeyError("key not in db")
             log.trace('from uncommitted')
             return self.uncommitted[key]
         log.trace('from db')
-        o = decompress(self.db.Get(key))
+
+        if PY3:
+            if isinstance(key, str):
+                key = key.encode()
+            o = bytes(self.db.Get(key))
+        else:
+            o = decompress(self.db.Get(key))
         self.uncommitted[key] = o
         return o
 
     def put(self, key, value):
-        log.trace('putting entry', key=key.encode('hex')[:8], len=len(value))
+        log.trace('putting entry', key=encode_hex(key)[:8], len=len(value))
         self.uncommitted[key] = value
 
     def commit(self):
         log.debug('committing', db=self)
         batch = leveldb.WriteBatch()
-        for k, v in self.uncommitted.items():
+        for k, v in list(self.uncommitted.items()):
             if v is None:
                 batch.Delete(k)
             else:
-                batch.Put(k, compress(v))
+                compress_v = compress(v)
+                if PY3:
+                    if isinstance(k, str):
+                        k = k.encode()
+                    if isinstance(compress_v, str):
+                        compress_v = compress_v.encode()
+                batch.Put(k, compress_v)
         self.db.Write(batch, sync=False)
         self.uncommitted.clear()
         log.debug('committed', db=self, num=len(self.uncommitted))
@@ -119,6 +136,9 @@ class LevelDB(BaseDB):
             return True
         except KeyError:
             return False
+        except Exception as e:
+            log.info('key: {}, type(key):{}'.format(key, type(key)))
+            raise
 
     def __contains__(self, key):
         return self._has_key(key)
@@ -163,6 +183,7 @@ class LevelDBService(LevelDB, BaseService):
         self.stop_event = Event()
         dbfile = os.path.join(self.app.config['data_dir'], 'leveldb')
         LevelDB.__init__(self, dbfile)
+        self.h = random.randrange(10**50)
 
     def _run(self):
         self.stop_event.wait()
@@ -171,3 +192,6 @@ class LevelDBService(LevelDB, BaseService):
         self.stop_event.set()
         # commit?
         log.debug('closing db')
+
+    def __hash__(self):
+        return self.h
