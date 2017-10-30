@@ -168,7 +168,7 @@ class ETHProtocol(BaseProtocol):
         ]
 
         def create(self, proto, hash_or_number, amount, skip=0, reverse=1):
-            if isinstance(hash_or_number, (int, int)):
+            if isinstance(hash_or_number, int):
                 block = int_to_big_endian(hash_or_number)
             else:
                 block = hash_or_number
@@ -245,7 +245,6 @@ class ETHProtocol(BaseProtocol):
         @classmethod
         def decode_payload(cls, rlp_data):
             # convert to dict
-            # print(encode_hex(rlp_data))
             ll = rlp.decode_lazy(rlp_data)
             assert len(ll) == 2
             transient_block = TransientBlock.init_from_rlp(ll[0], time.time())

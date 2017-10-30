@@ -56,7 +56,7 @@ def block_tag_encoder(val):
 
 
 def topic_encoder(topic):
-    assert isinstance(topic, (int, int))
+    assert isinstance(topic, int)
     return data_encoder(int_to_big_endian(topic))
 
 
