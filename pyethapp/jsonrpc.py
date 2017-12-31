@@ -1171,26 +1171,10 @@ class Chain(Subdispatcher):
     @decode_arg('block_id', block_id_decoder)
     @encode_res(data_encoder)
     def call(self, data, block_id='pending'):
-        block = self.json_rpc_server.get_block(block_id)
-        snapshot_before = block.snapshot()
-        tx_root_before = snapshot_before['txs'].root_hash  # trie object in snapshot is mutable
+        if block_id != 'pending':
+            raise Exception("Only pending supported right now")
 
-        # rebuild block state before finalization
-        if block.has_parent():
-            parent = self.chain.get_parent(block)
-            test_block = block.init_from_parent(parent, block.coinbase,
-                                                timestamp=block.timestamp)
-            for tx in block.get_transactions():
-                success, output = apply_transaction(test_block, tx)
-                assert success
-        else:
-            env = Env(db=block.db)
-            test_block = mk_genesis_block(env)
-            original = {key: value for key, value in list(snapshot_before.items()) if key != 'txs'}
-            original = deepcopy(original)
-            original['txs'] = Trie(snapshot_before['txs'].db, snapshot_before['txs'].root_hash)
-            test_block = mk_genesis_block(env)
-            test_block.revert(original)
+        prestate = self.app.services.chain.state.ephemeral_clone()
 
         # validate transaction
         if not isinstance(data, dict):
@@ -1218,18 +1202,14 @@ class Chain(Subdispatcher):
             sender = b'\x00' * 20
 
         # apply transaction
-        nonce = test_block.get_nonce(sender)
+        nonce = prestate.get_nonce(sender)
         tx = Transaction(nonce, gasprice, startgas, to, value, data_)
         tx.sender = sender
 
         try:
-            success, output = apply_transaction(test_block, tx)
+            success, output = apply_transaction(prestate, tx)
         except InvalidTransaction:
             success = False
-        # make sure we didn't change the real state
-        snapshot_after = block.snapshot()
-        assert snapshot_after == snapshot_before
-        assert snapshot_after['txs'].root_hash == tx_root_before
 
         if success:
             return output
