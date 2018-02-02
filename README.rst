@@ -25,7 +25,7 @@ Introduction
 
 pyethapp is the python based client implementing the Ethereum_ cryptoeconomic state machine.
 
-Ethereum as a platform is focussed on enabling people to build new ideas using blockchain technology.
+Ethereum as a platform is focused on enabling people to build new ideas using blockchain technology.
 
 The python implementation aims to provide an easily hackable and extendable codebase.
 
