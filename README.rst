@@ -20,6 +20,15 @@ pyethapp
         :target: https://readthedocs.org/projects/pyethapp/?badge=latest
 
 
+Deprecation notice
+------------
+
+Pyethapp is officially **deprecated**. If you want to run a mainnet node, we recommend using either [Geth](https://github.com/ethereum/go-ethereum/)  or [Parity](https://github.com/paritytech/parity/). If you want to use Python to develop tooling or interact with the Ethereum ecosystem, we recommend
+that you shift you attention to [Trinity](https://github.com/ethereum/trinity) which is based on [py-evm](https://github.com/ethereum/py-evm).
+
+Pyethapp will no longer receive updates. 
+
+
 Introduction
 ------------
 
